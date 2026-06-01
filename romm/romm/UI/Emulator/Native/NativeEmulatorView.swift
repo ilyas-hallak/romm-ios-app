@@ -12,7 +12,8 @@ struct NativeEmulatorView: View {
             rom: rom, gameType: gameType,
             getDownloadedROM: factory.makeGetDownloadedROMUseCase(),
             resolveROMFile: factory.makeResolveROMFileUseCase(),
-            saveStates: factory.makeEmulatorSaveStatesUseCase()
+            saveStates: factory.makeEmulatorSaveStatesUseCase(),
+            factory: factory
         ))
     }
 

@@ -22,6 +22,7 @@ final class NativeEmulatorViewModel {
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let resolveROMFile: PResolveROMFileUseCase
     private let saveStates: PEmulatorSaveStatesUseCase
+    private let factory: PDependencyFactory
     private let logger = Logger.viewModel
 
     init(
@@ -29,13 +30,15 @@ final class NativeEmulatorViewModel {
         gameType: DeltaGameType,
         getDownloadedROM: PGetDownloadedROMUseCase,
         resolveROMFile: PResolveROMFileUseCase,
-        saveStates: PEmulatorSaveStatesUseCase
+        saveStates: PEmulatorSaveStatesUseCase,
+        factory: PDependencyFactory
     ) {
         self.rom = rom
         self.gameType = gameType
         self.getDownloadedROM = getDownloadedROM
         self.resolveROMFile = resolveROMFile
         self.saveStates = saveStates
+        self.factory = factory
     }
 
     func bootstrap() {
@@ -52,9 +55,16 @@ final class NativeEmulatorViewModel {
                 return
             }
             let deltaType = Self.deltaCoreGameType(for: gameType)
+            let batteryFileName = url.deletingPathExtension().lastPathComponent + ".sav"
+            let cloudSync = factory.makeCloudSaveSyncService(
+                romId: rom.id,
+                emulator: "delta-ios",
+                batteryFileName: batteryFileName
+            )
             session = NativeEmulatorSession(
                 gameURL: url, gameType: deltaType,
-                romId: rom.id, saveStates: saveStates
+                romId: rom.id, saveStates: saveStates,
+                cloudSync: cloudSync
             )
             session?.start()
             Task { @MainActor in

@@ -9,6 +9,7 @@ final class LibretroSession: NSObject {
     private let romId: Int
     private let saveStates: PEmulatorSaveStatesUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
+    private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
 
     var onMenuRequested: (() -> Void)?
@@ -20,13 +21,15 @@ final class LibretroSession: NSObject {
         core: LibretroCore,
         romId: Int,
         saveStates: PEmulatorSaveStatesUseCase,
-        aspectRatioPreference: PLibretroAspectRatioPreference
+        aspectRatioPreference: PLibretroAspectRatioPreference,
+        cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
         self.core = core
         self.romId = romId
         self.saveStates = saveStates
         self.aspectRatioPreference = aspectRatioPreference
+        self.cloudSync = cloudSync
         self.viewController = LibretroGameViewController(
             core: core,
             gameURL: gameURL,
@@ -44,6 +47,13 @@ final class LibretroSession: NSObject {
         let videoView = viewController.videoView
         frontend.videoSink = videoView
 
+        Task { [weak self] in
+            await self?.cloudSync?.pullBeforeLaunch()
+            self?.startCore()
+        }
+    }
+
+    private func startCore() {
         do {
             let corePath = try locateCoreDylib()
             let systemDir = libretroSystemDirectory().path
@@ -76,6 +86,17 @@ final class LibretroSession: NSObject {
         // dlclose() any CGImage backed by core memory would crash on render.
         frontend.videoSink = nil
         frontend.stop()
+        flushBatteryFromSaveDir()
+    }
+
+    /// Libretro cores persist their battery saves (.srm) into `saveDir` during
+    /// runtime — we read the file once the core has stopped and push it.
+    private func flushBatteryFromSaveDir() {
+        let stem = gameURL.deletingPathExtension().lastPathComponent
+        let candidate = libretroSaveDirectory().appendingPathComponent("\(stem).srm")
+        guard let data = try? Data(contentsOf: candidate) else { return }
+        try? saveStates.writeBattery(romId: romId, data: data)
+        cloudSync?.pushBattery(data: data)
     }
 
     // MARK: - Save state API (mirrors DeltaCoreSession)
@@ -102,9 +123,11 @@ final class LibretroSession: NSObject {
         }
         try saveStates.backupSlotForUndoSave(romId: romId, slot: slot)
         try saveStates.writeState(romId: romId, slot: slot, data: data)
-        if let thumb = viewController.videoView.snapshot()?.pngData() {
+        let thumb = viewController.videoView.snapshot()?.pngData()
+        if let thumb {
             try saveStates.writeThumbnail(romId: romId, slot: slot, data: thumb)
         }
+        cloudSync?.pushState(slot: slot, data: data, thumbnail: thumb)
     }
 
     func loadState(slot: Int) throws {

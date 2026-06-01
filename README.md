@@ -32,6 +32,22 @@ Join the beta program and help improve the app:
   <img src="screenshots/iphone_3.png" width="200" alt="Screenshot 3" />
 </p>
 
+## Getting Started
+
+This repository uses git submodules for the embedded emulator cores in `Vendor/` (DeltaCore, GBADeltaCore, GBCDeltaCore, NESDeltaCore, SNESDeltaCore, N64DeltaCore, MelonDSDeltaCore, GPGXDeltaCore). Clone with submodules:
+
+```sh
+git clone --recurse-submodules https://github.com/ilyas-hallak/romm-ios-app.git
+```
+
+If you already cloned without submodules, initialize them afterwards:
+
+```sh
+git submodule update --init --recursive
+```
+
+Then open `romm/romm.xcodeproj` in Xcode and build.
+
 ## Contributing
 
 1. Follow the established Clean Architecture patterns

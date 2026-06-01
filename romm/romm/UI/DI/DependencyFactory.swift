@@ -91,6 +91,7 @@ protocol PDependencyFactory {
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
 
     // Emulator Engine
@@ -373,6 +374,8 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
+    lazy var savesRepository: PSavesRepository = SavesRepository()
+    lazy var statesRepository: PStatesRepository = StatesRepository()
     lazy var fileSystemService: PFileSystemService = DefaultFileSystemService()
     lazy var viewModePreferenceRepository: PViewModePreferenceRepository = UserDefaultsViewModePreferenceStore()
 
@@ -392,6 +395,21 @@ class DefaultDependencyFactory: PDependencyFactory {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
 
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService {
+        CloudSaveSyncService(
+            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName),
+            saveStore: saveStore,
+            listSavesUseCase: ListServerSavesUseCase(repository: savesRepository),
+            uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
+            updateSaveUseCase: UpdateSaveUseCase(repository: savesRepository),
+            downloadSaveUseCase: DownloadSaveUseCase(repository: savesRepository),
+            listStatesUseCase: ListServerStatesUseCase(repository: statesRepository),
+            uploadStateUseCase: UploadStateUseCase(repository: statesRepository),
+            updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
+            downloadStateUseCase: DownloadStateUseCase(repository: statesRepository)
+        )
+    }
+
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel {
         LibretroEmulatorViewModel(
             rom: rom,
@@ -400,7 +418,8 @@ class DefaultDependencyFactory: PDependencyFactory {
             resolveROMFile: makeResolveROMFileUseCase(),
             saveStates: makeEmulatorSaveStatesUseCase(),
             biosSync: makeBIOSSyncUseCase(),
-            aspectRatioPreference: libretroAspectRatioPreference
+            aspectRatioPreference: libretroAspectRatioPreference,
+            factory: self
         )
     }
 

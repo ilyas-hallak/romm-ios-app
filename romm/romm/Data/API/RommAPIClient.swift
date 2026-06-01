@@ -85,6 +85,17 @@ protocol PRommAPIClient {
     func getSaves(romId: Int) async throws -> [SaveSchema]
     func getStates(romId: Int) async throws -> [StateSchema]
 
+    // Saves sync
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func downloadSave(id: Int, deviceId: String?) async throws -> Data
+    func deleteSaves(ids: [Int]) async throws
+
+    // States sync
+    func uploadState(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema
+    func updateState(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema
+    func downloadState(id: Int) async throws -> Data
+    func deleteStates(ids: [Int]) async throws
 }
 
 enum APIClientError: LocalizedError {

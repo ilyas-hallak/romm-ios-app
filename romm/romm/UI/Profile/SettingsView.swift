@@ -13,6 +13,7 @@ struct SettingsView: View {
     @EnvironmentObject var appData: AppData
     @State private var profileViewModel = ProfileViewModel()
     @StateObject private var experimentalSettings = ExperimentalFeatureSettings.shared
+    @StateObject private var cloudSyncSettings = CloudSaveSyncSettings.shared
     @State private var showingLogoutAlert = false
     @State private var showingResetAlert = false
     
@@ -171,6 +172,18 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "cpu")
                                 Text("BIOS Files")
+                            }
+                        }
+
+                        Toggle(isOn: $cloudSyncSettings.isEnabled) {
+                            HStack {
+                                Image(systemName: "icloud.and.arrow.up")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Cloud-Sync für Saves")
+                                    Text("Spielstände und Save States mit RomM-Server synchronisieren")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                     }

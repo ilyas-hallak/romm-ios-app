@@ -25,6 +25,13 @@ final class LocalSaveStoreRepository: PSaveStore {
         try data.write(to: SaveStorePaths.batteryURL(root: rootDirectory, romId: romId), options: .atomic)
     }
 
+    func batteryModifiedAt(romId: Int) -> Date? {
+        let url = SaveStorePaths.batteryURL(root: rootDirectory, romId: romId)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+        return attrs?.contentModificationDate
+    }
+
     // MARK: - State
 
     func listStates(romId: Int) throws -> [SaveStateEntry] {

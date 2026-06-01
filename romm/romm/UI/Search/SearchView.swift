@@ -10,7 +10,6 @@ import SwiftUI
 struct SearchView: View {
     @State private var searchViewModel = SearchViewModel()
     @State private var searchText = ""
-    @Environment(\.isSearching) private var isSearching
 
     var body: some View {
         searchContentView
@@ -20,7 +19,7 @@ struct SearchView: View {
                 searchViewModel.search(query: searchText)
             }
             .toolbar {
-                cancelToolbarItem
+                keyboardToolbar
             }
             .alert(
                 "Error",
@@ -144,14 +143,14 @@ struct SearchView: View {
     }
 
     @ToolbarContentBuilder
-    private var cancelToolbarItem: some ToolbarContent {
-        if isSearching || !searchText.isEmpty {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Abbrechen") {
-                    searchText = ""
-                    searchViewModel.clearResults()
-                }
-                .foregroundColor(.blue)
+    private var keyboardToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("Done") {
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil, from: nil, for: nil
+                )
             }
         }
     }

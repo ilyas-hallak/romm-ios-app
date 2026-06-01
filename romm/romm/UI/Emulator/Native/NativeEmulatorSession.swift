@@ -46,6 +46,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private let gameType: GameType
     private let saveStates: PEmulatorSaveStatesUseCase
     private let romId: Int
+    private let cloudSync: CloudSaveSyncService?
 
     var onMenuRequested: (() -> Void)?
 
@@ -61,11 +62,12 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.emulatorCore
     }
 
-    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase) {
+    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, cloudSync: CloudSaveSyncService? = nil) {
         self.gameURL = gameURL
         self.gameType = gameType
         self.romId = romId
         self.saveStates = saveStates
+        self.cloudSync = cloudSync
 
         let vc = RommGameViewController()
         vc.loadViewIfNeeded()
@@ -103,10 +105,13 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     // MARK: - Lifecycle
 
     func start() {
-        loadBatteryIfAvailable()
-        viewController.startEmulation()
-        attachExternalControllers()
-        observeControllerConnections()
+        Task { [weak self] in
+            await self?.cloudSync?.pullBeforeLaunch()
+            self?.loadBatteryIfAvailable()
+            self?.viewController.startEmulation()
+            self?.attachExternalControllers()
+            self?.observeControllerConnections()
+        }
     }
 
     func pause() { viewController.pauseEmulation() }
@@ -195,10 +200,12 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         core.saveSaveState(to: tmp)
         let data = try Data(contentsOf: tmp)
         try saveStates.writeState(romId: romId, slot: slot, data: data)
-        if let thumb = currentThumbnailPNG() {
+        let thumb = currentThumbnailPNG()
+        if let thumb {
             try saveStates.writeThumbnail(romId: romId, slot: slot, data: thumb)
         }
         try? FileManager.default.removeItem(at: tmp)
+        cloudSync?.pushState(slot: slot, data: data, thumbnail: thumb)
     }
 
     func loadState(slot: Int) throws {
@@ -257,6 +264,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
         if let data = try? Data(contentsOf: savURL) {
             try? saveStates.writeBattery(romId: romId, data: data)
+            cloudSync?.pushBattery(data: data)
         }
     }
 }

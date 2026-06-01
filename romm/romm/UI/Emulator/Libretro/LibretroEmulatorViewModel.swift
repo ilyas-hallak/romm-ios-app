@@ -17,6 +17,7 @@ final class LibretroEmulatorViewModel {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let biosSync: PBIOSSyncUseCase
     let aspectRatioPreference: PLibretroAspectRatioPreference
+    private let factory: PDependencyFactory
     private let logger = Logger.viewModel
 
     init(
@@ -26,7 +27,8 @@ final class LibretroEmulatorViewModel {
         resolveROMFile: PResolveROMFileUseCase,
         saveStates: PEmulatorSaveStatesUseCase,
         biosSync: PBIOSSyncUseCase,
-        aspectRatioPreference: PLibretroAspectRatioPreference
+        aspectRatioPreference: PLibretroAspectRatioPreference,
+        factory: PDependencyFactory
     ) {
         self.rom = rom
         self.core = core
@@ -35,6 +37,7 @@ final class LibretroEmulatorViewModel {
         self.saveStates = saveStates
         self.biosSync = biosSync
         self.aspectRatioPreference = aspectRatioPreference
+        self.factory = factory
     }
 
     func bootstrap() {
@@ -66,12 +69,19 @@ final class LibretroEmulatorViewModel {
                 isLoading = false
                 return
             }
+            let batteryFileName = url.deletingPathExtension().lastPathComponent + ".srm"
+            let cloudSync = factory.makeCloudSaveSyncService(
+                romId: rom.id,
+                emulator: "libretro-\(core.dylibName)",
+                batteryFileName: batteryFileName
+            )
             let s = LibretroSession(
                 gameURL: url,
                 core: core,
                 romId: rom.id,
                 saveStates: saveStates,
-                aspectRatioPreference: aspectRatioPreference
+                aspectRatioPreference: aspectRatioPreference,
+                cloudSync: cloudSync
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }
             session = s
