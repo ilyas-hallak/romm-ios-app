@@ -17,27 +17,27 @@ struct MainTabView: View {
     
     var body: some View {
         TabView {
+            Tab("Home", systemImage: "house") {
+                NavigationStack {
+                    HomeView()
+                }
+            }
+
             Tab("Platforms", systemImage: "gamecontroller") {
                 NavigationStack {
                     PlatformsView()
                 }
             }
-            
+
             Tab("Collections", systemImage: "books.vertical") {
                 NavigationStack {
                     CollectionView()
                 }
             }
-            
+
             Tab("Devices", systemImage: "server.rack") {
                 NavigationStack {
                     SFTPDevicesView()
-                }
-            }
-            
-            Tab("Settings", systemImage: "gear") {
-                NavigationStack {
-                    SettingsView()
                 }
             }
 

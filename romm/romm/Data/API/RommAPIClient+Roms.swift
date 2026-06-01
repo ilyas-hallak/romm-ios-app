@@ -46,6 +46,7 @@ extension RommAPIClient {
             ("missing", filters.missing.map(String.init)),
             ("has_ra", filters.hasRa.map(String.init)),
             ("verified", filters.verified.map(String.init)),
+            ("last_played", filters.lastPlayed.map(String.init)),
             ("group_by_meta_id", groupByMetaId ? "true" : "false"),
             ("genres", filters.selectedGenre),
             ("franchises", filters.selectedFranchise),

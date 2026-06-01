@@ -89,7 +89,7 @@ struct BigRomCardView: View {
             }
             
             // Information Section - Fixed height for consistency
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 // Title - Extended to 3 lines
                 VStack(alignment: .leading) {
                     Text(rom.name)
@@ -100,7 +100,9 @@ struct BigRomCardView: View {
                         .foregroundColor(.primary)
                 }
                 .frame(height: 66, alignment: .top)
-                
+
+                Spacer()
+
                 // Compact metadata row
                 HStack(spacing: 8) {
                     // Platform Slug
@@ -111,7 +113,7 @@ struct BigRomCardView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
-                    
+
                     // Release Year
                     if let year = rom.releaseYear {
                         Text(year.description)
@@ -119,9 +121,9 @@ struct BigRomCardView: View {
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     // Rating
                     if let rating = rom.rating {
                         HStack(spacing: 2) {
@@ -135,9 +137,7 @@ struct BigRomCardView: View {
                         }
                     }
                 }
-                
-                Spacer()
-                
+
                 // Bottom Row - Status Icons
                 HStack {
                     RomStatusIcons(rom: rom)

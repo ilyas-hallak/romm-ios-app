@@ -204,7 +204,8 @@ struct RomFilters {
     let missing: Bool?
     let hasRa: Bool?
     let verified: Bool?
-    
+    let lastPlayed: Bool?
+
     // Selection filters
     let selectedGenre: String?
     let selectedFranchise: String?
@@ -223,6 +224,7 @@ struct RomFilters {
         missing: Bool? = nil,
         hasRa: Bool? = nil,
         verified: Bool? = nil,
+        lastPlayed: Bool? = nil,
         selectedGenre: String? = nil,
         selectedFranchise: String? = nil,
         selectedCollection: String? = nil,
@@ -239,6 +241,7 @@ struct RomFilters {
         self.missing = missing
         self.hasRa = hasRa
         self.verified = verified
+        self.lastPlayed = lastPlayed
         self.selectedGenre = selectedGenre
         self.selectedFranchise = selectedFranchise
         self.selectedCollection = selectedCollection
@@ -259,6 +262,7 @@ struct RomFilters {
                missing != nil ||
                hasRa != nil ||
                verified != nil ||
+               lastPlayed != nil ||
                selectedGenre != nil ||
                selectedFranchise != nil ||
                selectedCollection != nil ||
