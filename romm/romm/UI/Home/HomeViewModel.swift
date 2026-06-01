@@ -6,6 +6,13 @@
 import Foundation
 import Observation
 
+enum HomeViewState {
+    case initial
+    case loading
+    case empty
+    case loaded
+}
+
 @Observable
 @MainActor
 class HomeViewModel {
@@ -13,7 +20,7 @@ class HomeViewModel {
     var continuePlaying: [Rom] = []
     var platforms: [Platform] = []
     var collections: [Collection] = []
-    var isLoading: Bool = false
+    var viewState: HomeViewState = .initial
     var errorMessage: String?
 
     private let getRomsWithFiltersUseCase: GetRomsWithFiltersUseCase
@@ -27,7 +34,7 @@ class HomeViewModel {
     }
 
     func load() async {
-        isLoading = true
+        viewState = .loading
         errorMessage = nil
 
         async let recentTask = loadRecentlyAdded()
@@ -42,7 +49,8 @@ class HomeViewModel {
         platforms = plats
         collections = colls
 
-        isLoading = false
+        let hasContent = !recent.isEmpty || !cont.isEmpty || !plats.isEmpty || !colls.isEmpty
+        viewState = hasContent ? .loaded : .empty
     }
 
     private func loadRecentlyAdded() async -> [Rom] {

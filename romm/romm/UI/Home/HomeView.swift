@@ -10,42 +10,15 @@ struct HomeView: View {
     @EnvironmentObject var appData: AppData
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                if !viewModel.continuePlaying.isEmpty {
-                    HomeRomSection(title: "Continue Playing", roms: viewModel.continuePlaying)
-                }
-
-                if !viewModel.recentlyAdded.isEmpty {
-                    HomeRomSection(title: "Recently Added", roms: viewModel.recentlyAdded)
-                }
-
-                if !viewModel.platforms.isEmpty {
-                    HomePlatformSection(platforms: viewModel.platforms)
-                }
-
-                if !viewModel.collections.isEmpty {
-                    HomeCollectionSection(collections: viewModel.collections)
-                }
-
-                if !viewModel.isLoading
-                    && viewModel.continuePlaying.isEmpty
-                    && viewModel.recentlyAdded.isEmpty
-                    && viewModel.platforms.isEmpty
-                    && viewModel.collections.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "house")
-                            .font(.system(size: 60))
-                            .foregroundColor(.secondary)
-                        Text("Nothing here yet")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 80)
-                }
+        Group {
+            switch viewModel.viewState {
+            case .initial, .loading:
+                loadingView
+            case .empty:
+                emptyView
+            case .loaded:
+                contentView
             }
-            .padding(.vertical, 16)
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Home")
@@ -62,13 +35,52 @@ struct HomeView: View {
             await viewModel.load()
         }
         .task {
-            if viewModel.recentlyAdded.isEmpty
-                && viewModel.continuePlaying.isEmpty
-                && viewModel.platforms.isEmpty
-                && viewModel.collections.isEmpty {
+            if case .initial = viewModel.viewState {
                 await viewModel.load()
             }
         }
+    }
+
+    @ViewBuilder
+    private var contentView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                if !viewModel.continuePlaying.isEmpty {
+                    HomeRomSection(title: "Continue Playing", roms: viewModel.continuePlaying)
+                }
+                if !viewModel.recentlyAdded.isEmpty {
+                    HomeRomSection(title: "Recently Added", roms: viewModel.recentlyAdded)
+                }
+                if !viewModel.platforms.isEmpty {
+                    HomePlatformSection(platforms: viewModel.platforms)
+                }
+                if !viewModel.collections.isEmpty {
+                    HomeCollectionSection(collections: viewModel.collections)
+                }
+            }
+            .padding(.vertical, 16)
+        }
+    }
+
+    @ViewBuilder
+    private var loadingView: some View {
+        VStack {
+            ProgressView()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var emptyView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "house")
+                .font(.system(size: 60))
+                .foregroundColor(.secondary)
+            Text("Nothing here yet")
+                .font(.headline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
