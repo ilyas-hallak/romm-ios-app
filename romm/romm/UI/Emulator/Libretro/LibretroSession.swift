@@ -49,7 +49,28 @@ final class LibretroSession: NSObject {
 
         Task { [weak self] in
             await self?.cloudSync?.pullBeforeLaunch()
+            self?.stageBatteryForCore()
             self?.startCore()
+        }
+    }
+
+    /// Copies the canonical battery file out of `PSaveStore` into the libretro
+    /// save directory so the core actually loads it on `retro_load_game`.
+    /// Without this step, freshly pulled cloud saves are written to
+    /// `Saves/<romId>/battery.sav` but the libretro core reads
+    /// `LibretroSaves/<stem>.srm` — two different files, so the save never
+    /// reaches the running game.
+    private func stageBatteryForCore() {
+        guard let data = try? saveStates.readBattery(romId: romId) else { return }
+        let dir = libretroSaveDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stem = gameURL.deletingPathExtension().lastPathComponent
+        let dst = dir.appendingPathComponent("\(stem).srm")
+        do {
+            try data.write(to: dst, options: .atomic)
+            print("[Libretro] staged battery into saveDir (\(data.count) bytes)")
+        } catch {
+            print("[Libretro] failed to stage battery: \(error.localizedDescription)")
         }
     }
 

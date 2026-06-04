@@ -254,9 +254,48 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     // MARK: - Battery
 
     private func loadBatteryIfAvailable() {
-        guard let data = try? saveStates.readBattery(romId: romId) else { return }
+        guard let raw = try? saveStates.readBattery(romId: romId) else { return }
+        let data = adaptBatteryForCore(raw: raw)
         let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
-        try? data.write(to: savURL)
+        try? data.write(to: savURL, options: .atomic)
+    }
+
+    /// VBA-M (`CPUReadBatteryFile`) routes the .sav purely by file size:
+    /// 0x20000 → Flash 128K, 0x10000 → Flash 64K, 0x8000 → SRAM, 0x2000/0x200
+    /// → EEPROM. RomM/RetroArch-Saves are usually padded to 128KB regardless
+    /// of cart type, so a 128KB blob is always loaded into the Flash region —
+    /// which is the wrong memory for SRAM/EEPROM carts. We sniff the ROM for
+    /// the standard "SRAM_", "EEPROM_", "FLASH…_" markers and trim the blob
+    /// down (or pad up) to the size VBA-M will recognize for this cart.
+    private func adaptBatteryForCore(raw: Data) -> Data {
+        guard gameType == .gba else { return raw }
+        guard let expected = expectedGBASaveSize() else { return raw }
+        if raw.count == expected { return raw }
+        if raw.count > expected {
+            return raw.prefix(expected)
+        }
+        var padded = raw
+        padded.append(Data(repeating: 0xFF, count: expected - raw.count))
+        return padded
+    }
+
+    /// Returns the file size VBA-M's `CPUReadBatteryFile` expects for the
+    /// current ROM's cart type, or `nil` if the ROM can't be inspected.
+    private func expectedGBASaveSize() -> Int? {
+        guard let rom = try? Data(contentsOf: gameURL, options: .mappedIfSafe) else { return nil }
+        let markers: [(String, Int)] = [
+            ("FLASH1M_", 0x20000),
+            ("FLASH512_", 0x10000),
+            ("EEPROM_", 0x2000),
+            ("SRAM_", 0x8000),
+            ("FLASH", 0x10000)
+        ]
+        for (needle, size) in markers {
+            if rom.range(of: Data(needle.utf8)) != nil {
+                return size
+            }
+        }
+        return nil
     }
 
     private func flushBattery() {

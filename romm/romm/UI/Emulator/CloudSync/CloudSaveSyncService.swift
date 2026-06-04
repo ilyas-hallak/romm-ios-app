@@ -83,6 +83,9 @@ final class CloudSaveSyncService {
 
             let data = try await downloadSaveUseCase.execute(id: match.id)
             try saveStore.writeBattery(romId: config.romId, data: data)
+            // Preserve server mtime so subsequent local-vs-server compares are
+            // not skewed by device clock drift after the write-to-disk timestamp.
+            try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
             print("[CloudSync] battery pulled (\(data.count) bytes)")
         } catch {
             print("[CloudSync] battery pull failed: \(error.localizedDescription)")
@@ -101,6 +104,7 @@ final class CloudSaveSyncService {
 
                 let data = try await downloadStateUseCase.execute(id: s.id)
                 try saveStore.writeState(romId: config.romId, slot: slot, data: data)
+                try? saveStore.setStateModifiedAt(romId: config.romId, slot: slot, date: s.updatedAt)
                 print("[CloudSync] state slot \(slot) pulled (\(data.count) bytes)")
             }
         } catch {

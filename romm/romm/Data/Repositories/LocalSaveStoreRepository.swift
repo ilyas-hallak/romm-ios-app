@@ -32,6 +32,12 @@ final class LocalSaveStoreRepository: PSaveStore {
         return attrs?.contentModificationDate
     }
 
+    func setBatteryModifiedAt(romId: Int, date: Date) throws {
+        let url = SaveStorePaths.batteryURL(root: rootDirectory, romId: romId)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
+    }
+
     // MARK: - State
 
     func listStates(romId: Int) throws -> [SaveStateEntry] {
@@ -78,6 +84,12 @@ final class LocalSaveStoreRepository: PSaveStore {
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey])
         return attrs?.contentModificationDate
+    }
+
+    func setStateModifiedAt(romId: Int, slot: Int, date: Date) throws {
+        let url = SaveStorePaths.stateURL(root: rootDirectory, romId: romId, slot: slot)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
     }
 
     // MARK: - Thumbnail
