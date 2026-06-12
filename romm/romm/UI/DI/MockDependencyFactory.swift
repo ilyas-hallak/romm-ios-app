@@ -271,9 +271,10 @@ class MockDependencyFactory: PDependencyFactory {
         )
     }
 
-    @MainActor func makeSFTPUploadViewModel(rom: Rom) -> SFTPUploadViewModel {
+    @MainActor func makeSFTPUploadViewModel(rom: Rom, autoStartLocalDownload: Bool = false) -> SFTPUploadViewModel {
         SFTPUploadViewModel(
             rom: rom,
+            autoStartLocalDownload: autoStartLocalDownload,
             factory: self
         )
     }

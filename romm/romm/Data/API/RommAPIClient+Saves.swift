@@ -103,7 +103,7 @@ extension RommAPIClient {
         let path = withQuery("api/saves/\(id)/content", [
             ("device_id", deviceId)
         ])
-        return try await get(path)
+        return try await getBinary(path)
     }
 
     func deleteSaves(ids: [Int]) async throws {

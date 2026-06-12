@@ -15,6 +15,7 @@ struct PlatformMapper {
         return Platform(
             id: apiPlatform.id,
             name: apiPlatform.name,
+            displayName: apiPlatform.displayName,
             slug: apiPlatform.slug,
             igdbId: apiPlatform.igdbId,
             logoPath: apiPlatform.urlLogo,

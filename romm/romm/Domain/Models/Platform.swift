@@ -10,6 +10,7 @@ import Foundation
 struct Platform: Identifiable, Equatable, Hashable {
     let id: Int
     let name: String
+    let displayName: String
     let slug: String
     let igdbId: Int?
     let logoPath: String?
@@ -26,6 +27,7 @@ struct Platform: Identifiable, Equatable, Hashable {
     init(
         id: Int,
         name: String,
+        displayName: String? = nil,
         slug: String,
         igdbId: Int? = nil,
         logoPath: String? = nil,
@@ -35,6 +37,7 @@ struct Platform: Identifiable, Equatable, Hashable {
     ) {
         self.id = id
         self.name = name
+        self.displayName = displayName ?? name
         self.slug = slug
         self.igdbId = igdbId
         self.logoPath = logoPath

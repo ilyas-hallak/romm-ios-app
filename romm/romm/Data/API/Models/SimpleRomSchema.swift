@@ -177,7 +177,7 @@ public struct SimpleRomSchema: Codable, JSONEncodable, Hashable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case missingFromFs = "missing_from_fs"
-        case siblings
+        case siblings = "sibling_roms"
         case romUser = "rom_user"
     }
 

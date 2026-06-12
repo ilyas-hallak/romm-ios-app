@@ -102,7 +102,7 @@ protocol PDependencyFactory {
     // SFTP ViewModels
     @MainActor func makeSFTPDevicesViewModel() -> SFTPDevicesViewModel
     @MainActor func makeSFTPDirectoryBrowserViewModel(connection: SFTPConnection) -> SFTPDirectoryBrowserViewModel
-    @MainActor func makeSFTPUploadViewModel(rom: Rom) -> SFTPUploadViewModel
+    @MainActor func makeSFTPUploadViewModel(rom: Rom, autoStartLocalDownload: Bool) -> SFTPUploadViewModel
     @MainActor func makeAddEditSFTPDeviceViewModel(connection: SFTPConnection?) -> AddEditSFTPDeviceViewModel
 }
 
@@ -432,9 +432,10 @@ class DefaultDependencyFactory: PDependencyFactory {
         )
     }
     
-    @MainActor func makeSFTPUploadViewModel(rom: Rom) -> SFTPUploadViewModel {
+    @MainActor func makeSFTPUploadViewModel(rom: Rom, autoStartLocalDownload: Bool = false) -> SFTPUploadViewModel {
         SFTPUploadViewModel(
             rom: rom,
+            autoStartLocalDownload: autoStartLocalDownload,
             factory: self
         )
     }

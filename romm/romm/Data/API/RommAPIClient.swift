@@ -23,6 +23,7 @@ protocol PRommAPIClient {
     func multipartRequest(path: String, method: HTTPMethod, boundary: String, formData: Data, additionalHeaders: [String: String]?) async throws -> Data
     func get<T: Codable>(_ path: String, responseType: T.Type) async throws -> T
     func get(_ path: String) async throws -> Data
+    func getBinary(_ path: String) async throws -> Data
     func post<RequestBody: Codable, ResponseType: Codable>(_ path: String, body: RequestBody, responseType: ResponseType.Type) async throws -> ResponseType
     func post(_ path: String, body: Data?) async throws -> Data
     func put<RequestBody: Codable, ResponseType: Codable>(_ path: String, body: RequestBody, responseType: ResponseType.Type) async throws -> ResponseType
@@ -472,6 +473,27 @@ class RommAPIClient: PRommAPIClient {
 
     func get(_ path: String) async throws -> Data {
         try await makeRequest(path: path, method: .get)
+    }
+
+    func getBinary(_ path: String) async throws -> Data {
+        let url = try buildURL(path: path)
+        let authHeader = try makeAuthHeader()
+        var request = URLRequest(url: url)
+        request.httpMethod = HTTPMethod.get.rawValue
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 30.0
+        let (data, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIClientError.networkError(URLError(.badServerResponse)) }
+        switch http.statusCode {
+        case 200...299: return data
+        case 401:
+            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            throw APIClientError.authenticationRequired
+        default:
+            let msg = String(data: data.prefix(500), encoding: .utf8) ?? "Error"
+            throw APIClientError.invalidResponse(http.statusCode, msg)
+        }
     }
 
     func post<RequestBody: Codable, ResponseType: Codable>(

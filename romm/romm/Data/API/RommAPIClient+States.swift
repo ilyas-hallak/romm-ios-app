@@ -96,7 +96,7 @@ extension RommAPIClient {
     }
 
     func downloadState(id: Int) async throws -> Data {
-        return try await get("api/states/\(id)/content")
+        return try await getBinary("api/states/\(id)/content")
     }
 
     func deleteStates(ids: [Int]) async throws {

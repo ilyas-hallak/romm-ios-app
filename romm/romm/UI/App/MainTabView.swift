@@ -16,32 +16,32 @@ struct MainTabView: View {
     }
     
     var body: some View {
-        TabView {
-            Tab("Home", systemImage: "house") {
+        TabView(selection: $appData.selectedTab) {
+            Tab("Home", systemImage: "house", value: AppTab.home) {
                 NavigationStack {
                     HomeView()
                 }
             }
 
-            Tab("Platforms", systemImage: "gamecontroller") {
+            Tab("Platforms", systemImage: "gamecontroller", value: AppTab.platforms) {
                 NavigationStack {
                     PlatformsView()
                 }
             }
 
-            Tab("Collections", systemImage: "books.vertical") {
+            Tab("Collections", systemImage: "books.vertical", value: AppTab.collections) {
                 NavigationStack {
                     CollectionView()
                 }
             }
 
-            Tab("Devices", systemImage: "server.rack") {
+            Tab("Downloads", systemImage: "arrow.down.circle", value: AppTab.downloads) {
                 NavigationStack {
-                    SFTPDevicesView()
+                    LocalDeviceDetailView()
                 }
             }
 
-            Tab("Search", systemImage: "magnifyingglass", role: .search) {
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 NavigationStack {
                     SearchView()
                 }

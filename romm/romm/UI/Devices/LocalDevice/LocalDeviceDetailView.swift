@@ -2,6 +2,8 @@ import SwiftUI
 
 struct LocalDeviceDetailView: View {
     @State private var viewModel = LocalDeviceDetailViewModel()
+    @State private var showingDeviceManagement = false
+    @State private var isStorageExpanded = false
 
     private var device: LocalDevice {
         LocalDeviceManager.shared.currentDevice
@@ -15,11 +17,34 @@ struct LocalDeviceDetailView: View {
                 emptyStateView
             }
         }
-        .navigationTitle(device.name)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Downloads")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showingDeviceManagement = true
+                } label: {
+                    Image(systemName: "server.rack")
+                }
+                .accessibilityLabel("Manage Devices")
+            }
+        }
+        .sheet(isPresented: $showingDeviceManagement) {
+            NavigationStack {
+                SFTPDevicesView()
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showingDeviceManagement = false
+                            }
+                        }
+                    }
+            }
+        }
         .task {
             // Load data on first appear
             await viewModel.loadDownloadedROMsAsync()
+            await viewModel.loadPlatformDisplayNames()
         }
         .refreshable {
             await viewModel.loadDownloadedROMsAsync()
@@ -74,10 +99,19 @@ struct LocalDeviceDetailView: View {
                                 }
                             )
                         } label: {
-                            HStack {
+                            HStack(spacing: 12) {
+                                if let slug = roms.first?.platformSlug {
+                                    Image(slug)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 44, height: 44)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
+
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(platformName)
+                                    Text(viewModel.displayName(forPlatformName: platformName))
                                         .font(.headline)
+                                        .lineLimit(2)
 
                                     Text("\(roms.count) ROM\(roms.count == 1 ? "" : "s")")
                                         .font(.caption)
@@ -100,74 +134,78 @@ struct LocalDeviceDetailView: View {
     }
 
     private var storageInfoCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Storage")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-
-                    Text(device.availableStorageFormatted)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(device.hasLowStorage ? .orange : .primary)
-
-                    Text("available")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isStorageExpanded.toggle()
                 }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text("Storage")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("\(Int(device.storageUsagePercentage))%")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(device.hasLowStorage ? .orange : .primary)
+                            Spacer()
+                            Text("\(viewModel.totalDownloadedSizeFormatted) of \(device.totalStorageFormatted)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
 
-                Spacer()
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Color.gray.opacity(0.2))
+                                    .frame(height: 6)
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(device.hasLowStorage ? Color.orange : Color.blue)
+                                    .frame(
+                                        width: max(0, geometry.size.width * CGFloat(device.storageUsagePercentage / 100)),
+                                        height: 6
+                                    )
+                            }
+                        }
+                        .frame(height: 6)
+                    }
 
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Downloaded")
-                        .font(.subheadline)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
                         .foregroundColor(.secondary)
-
-                    Text(viewModel.totalDownloadedSizeFormatted)
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    Text("\(viewModel.downloadedROMs.count) ROMs")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(isStorageExpanded ? 180 : 0))
                 }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
-            // Storage usage bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // Background
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 8)
-
-                    // Usage
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(device.hasLowStorage ? Color.orange : Color.blue)
-                        .frame(
-                            width: geometry.size.width * CGFloat(device.storageUsagePercentage / 100),
-                            height: 8
-                        )
+            if isStorageExpanded {
+                Divider()
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Available")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(device.availableStorageFormatted)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(device.hasLowStorage ? .orange : .primary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Downloaded")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("\(viewModel.totalDownloadedSizeFormatted) · \(viewModel.downloadedROMs.count) ROMs")
+                            .font(.subheadline.weight(.semibold))
+                    }
                 }
-            }
-            .frame(height: 8)
-
-            HStack {
-                Text("\(Int(device.storageUsagePercentage))% used")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Spacer()
-
-                Text(device.totalStorageFormatted + " total")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
         }
-        .padding()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(Color.gray.opacity(0.1))
-        .cornerRadius(12)
+        .cornerRadius(10)
     }
 }
 

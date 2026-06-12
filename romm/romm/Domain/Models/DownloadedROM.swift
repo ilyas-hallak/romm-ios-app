@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a ROM that has been downloaded to the local device
-struct DownloadedROM: Identifiable, Codable, Equatable {
+struct DownloadedROM: Identifiable, Codable, Equatable, Hashable {
     let id: Int  // ROM ID from server
     let name: String
     let platformName: String
@@ -10,6 +10,7 @@ struct DownloadedROM: Identifiable, Codable, Equatable {
     var totalSizeBytes: Int64
     let localDirectory: String  // Path relative to ROMs directory
     var files: [DownloadedROMFile]
+    let urlCover: String?
 
     var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: totalSizeBytes, countStyle: .file)
@@ -30,13 +31,17 @@ struct DownloadedROM: Identifiable, Codable, Equatable {
         return lhs.id == rhs.id
     }
 
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
     /// Convert DownloadedROM to Rom for use with EmulatorView
     func toRom() -> Rom {
         return Rom(
             id: id,
             name: name,
             platformId: 0, // Not available in DownloadedROM
-            urlCover: nil,
+            urlCover: urlCover,
             isFavourite: false,
             hasRetroAchievements: false,
             isPlayable: true,
@@ -82,6 +87,7 @@ struct ROMMetadata: Codable {
     let platformSlug: String
     let downloadedAt: Date
     let files: [ROMFileMetadata]
+    let urlCover: String?
 }
 
 struct ROMFileMetadata: Codable {

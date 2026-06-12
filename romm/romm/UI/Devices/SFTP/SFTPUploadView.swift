@@ -5,10 +5,21 @@ struct SFTPUploadView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingDeviceManagement = false
 
-    init(rom: Rom, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
-        self._viewModel = State(initialValue: factory.makeSFTPUploadViewModel(rom: rom))
+    let onPlayAfterDownload: ((Rom) -> Void)?
+    let onShowInDownloads: (() -> Void)?
+
+    init(
+        rom: Rom,
+        autoStartLocalDownload: Bool = false,
+        onPlayAfterDownload: ((Rom) -> Void)? = nil,
+        onShowInDownloads: (() -> Void)? = nil,
+        factory: PDependencyFactory = DefaultDependencyFactory.shared
+    ) {
+        self._viewModel = State(initialValue: factory.makeSFTPUploadViewModel(rom: rom, autoStartLocalDownload: autoStartLocalDownload))
+        self.onPlayAfterDownload = onPlayAfterDownload
+        self.onShowInDownloads = onShowInDownloads
     }
-    
+
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
@@ -21,7 +32,10 @@ struct SFTPUploadView: View {
                 }
             }
             .padding()
-            .navigationTitle("Send to Device")
+            .task {
+                await viewModel.triggerAutoStartIfNeeded()
+            }
+            .navigationTitle("Download")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -271,98 +285,166 @@ struct SFTPUploadView: View {
     }
     
     private var completedView: some View {
+        if viewModel.isLocalDeviceSelected {
+            return AnyView(localDownloadCompletedView)
+        } else {
+            return AnyView(sftpUploadCompletedView)
+        }
+    }
+
+    private var localDownloadCompletedView: some View {
         VStack(spacing: 24) {
-            // Success Indicator
+            Spacer(minLength: 8)
+
+            // Cover with success badge
+            ZStack(alignment: .bottomTrailing) {
+                CachedKFImage(urlString: viewModel.rom.urlCover) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .overlay(
+                            Image(systemName: "gamecontroller")
+                                .font(.system(size: 48))
+                                .foregroundColor(.white.opacity(0.7))
+                        )
+                }
+                .frame(width: 160, height: 215)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 6)
+
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.green)
+                    .background(Circle().fill(Color(.systemBackground)).frame(width: 38, height: 38))
+                    .offset(x: 8, y: 8)
+            }
+
+            VStack(spacing: 6) {
+                Text("Download Complete")
+                    .font(.title3.bold())
+
+                Text(viewModel.rom.name)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+
+                let formatter = ByteCountFormatter()
+                Text(formatter.string(fromByteCount: viewModel.totalBytes) + " · \(viewModel.totalFiles) file\(viewModel.totalFiles == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 24)
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 10) {
+                Button(action: {
+                    let rom = viewModel.rom
+                    dismiss()
+                    onPlayAfterDownload?(rom)
+                }) {
+                    Label("Play", systemImage: "play.circle.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.green)
+                        )
+                        .foregroundColor(.white)
+                }
+
+                Button(action: {
+                    dismiss()
+                    onShowInDownloads?()
+                }) {
+                    Label("View in Downloads", systemImage: "tray.full")
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.15))
+                        )
+                        .foregroundColor(.accentColor)
+                }
+
+                Button("Back") {
+                    dismiss()
+                }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+        }
+        .padding(.top, 8)
+    }
+
+    private var sftpUploadCompletedView: some View {
+        VStack(spacing: 24) {
             VStack(spacing: 16) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 60))
                     .foregroundColor(.green)
 
-                Text(viewModel.isLocalDeviceSelected ? "Download Complete!" : "Upload Complete!")
+                Text("Upload Complete!")
                     .font(.title2)
                     .fontWeight(.semibold)
 
                 let fileCount = viewModel.totalFiles
-                let actionText = viewModel.isLocalDeviceSelected ? "downloaded to" : "transferred to"
-                Text(fileCount > 1 ? "All \(fileCount) files have been successfully \(actionText) the device." : "Your ROM has been successfully \(actionText) the device.")
+                Text(fileCount > 1 ? "All \(fileCount) files have been successfully transferred to the device." : "Your ROM has been successfully transferred to the device.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
-            
-            // Details
+
             VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("ROM:")
-                            .fontWeight(.medium)
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(viewModel.rom.fileName ?? viewModel.rom.name)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.trailing)
-                            
-                            if let fileName = viewModel.rom.fileName, fileName != viewModel.rom.name {
-                                Text(viewModel.rom.name)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.trailing)
-                            }
-                        }
-                    }
-                    
-                    HStack {
-                        Text("ROM ID:")
-                            .fontWeight(.medium)
-                        Spacer()
-                        Text("\(viewModel.rom.id)")
-                            .foregroundColor(.secondary)
-                    }
+                HStack {
+                    Text("ROM:")
+                        .fontWeight(.medium)
+                    Spacer()
+                    Text(viewModel.rom.fileName ?? viewModel.rom.name)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
-                
                 HStack {
                     Text("Device:")
                         .fontWeight(.medium)
                     Spacer()
-                    Text(viewModel.isLocalDeviceSelected ? UIDevice.current.name : (viewModel.selectedConnection?.name ?? "Unknown"))
+                    Text(viewModel.selectedConnection?.name ?? "Unknown")
                         .foregroundColor(.secondary)
                 }
-
-                if viewModel.isLocalDeviceSelected {
-                    HStack {
-                        Text("Location:")
-                            .fontWeight(.medium)
-                        Spacer()
-                        Text("Documents/ROMs/")
-                            .foregroundColor(.secondary)
-                    }
-                } else {
-                    HStack {
-                        Text("Location:")
-                            .fontWeight(.medium)
-                        Spacer()
-                        Text(viewModel.targetPath ?? "Unknown")
-                            .foregroundColor(.secondary)
-                    }
+                HStack {
+                    Text("Location:")
+                        .fontWeight(.medium)
+                    Spacer()
+                    Text(viewModel.targetPath ?? "Unknown")
+                        .foregroundColor(.secondary)
                 }
             }
             .padding()
             .background(Color(.systemGray6))
             .cornerRadius(12)
-            
+
             HStack(spacing: 16) {
                 Button("Send Another") {
                     viewModel.resetUpload()
                 }
                 .buttonStyle(.bordered)
-                
+
                 Button("Done") {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             }
             .padding(.top)
-            
+
             Spacer()
         }
         .padding()
