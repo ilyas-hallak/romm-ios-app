@@ -396,11 +396,11 @@ struct RomDetailView: View {
                 .accessibility(hint: Text("Play this ROM in the emulator"))
             }
 
-            // Send to Device Button
+            // Download Button
             Button(action: {
                 showingSFTPUpload = true
             }) {
-                Label("Send to Device", systemImage: "paperplane")
+                Label("Download", systemImage: "arrow.down.circle.fill")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(

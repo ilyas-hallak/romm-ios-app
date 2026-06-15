@@ -25,6 +25,7 @@
 		5D93A1762FBF68F400086CE8 /* N64DeltaCore_Video.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A1522FBF67E300086CE8 /* N64DeltaCore_Video.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5D93A8982FC241F000086CE8 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 5D9D918D2E5F8F21009AF769 /* Kingfisher */; };
+		5D2C4E1F2F7B9A43009CF871 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 5D2C4E1E2F7B9A43009CF871 /* SWCompression */; };
 		5DAA110000000007ABCD0007 /* SNESDeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; };
 		5DAA110000000008ABCD0008 /* SNESDeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5DF893F92FB7D26D0083B111 /* DeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF893F82FB7D26D0083B111 /* DeltaCore.framework */; };
@@ -210,6 +211,7 @@
 			files = (
 				5DF893F92FB7D26D0083B111 /* DeltaCore.framework in Frameworks */,
 				5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */,
+				5D2C4E1F2F7B9A43009CF871 /* SWCompression in Frameworks */,
 				5D7501352E97A35300DAE612 /* mft.xcframework in Frameworks */,
 				5D93A1712FBF682D00086CE8 /* MelonDSDeltaCore.framework in Frameworks */,
 				5D93A16F2FBF682500086CE8 /* N64DeltaCore.framework in Frameworks */,
@@ -371,6 +373,7 @@
 			name = romm;
 			packageProductDependencies = (
 				5D9D918D2E5F8F21009AF769 /* Kingfisher */,
+				5D2C4E1E2F7B9A43009CF871 /* SWCompression */,
 			);
 			productName = romm;
 			productReference = 5DA7E4202E43D870003680D9 /* romm.app */;
@@ -456,6 +459,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5DA7E4212E43D870003680D9 /* Products */;
@@ -760,7 +764,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = romm/romm.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = 8J69P655GN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -806,7 +810,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = romm/romm.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = 8J69P655GN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -850,7 +854,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = 8J69P655GN;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -873,7 +877,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = 8J69P655GN;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -895,7 +899,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = 8J69P655GN;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -917,7 +921,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = 8J69P655GN;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -985,6 +989,14 @@
 				minimumVersion = 8.5.0;
 			};
 		};
+		5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tsolomko/SWCompression.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.8.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -992,6 +1004,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
+		};
+		5D2C4E1E2F7B9A43009CF871 /* SWCompression */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */;
+			productName = SWCompression;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

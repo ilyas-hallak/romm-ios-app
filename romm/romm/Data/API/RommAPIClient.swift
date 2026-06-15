@@ -335,12 +335,24 @@ class RommAPIClient: PRommAPIClient {
                         continuation.resume(throwing: APIClientError.networkError(URLError(.cannotCreateFile)))
                         return
                     }
+                    // Move temp file to a persistent location BEFORE the handler returns —
+                    // iOS deletes the URLSession temp file as soon as this handler exits.
+                    let persistentURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(UUID().uuidString)
+                        .appendingPathExtension(tempURL.pathExtension)
+                    do {
+                        try FileManager.default.moveItem(at: tempURL, to: persistentURL)
+                    } catch {
+                        self?.logger.error("Failed to persist download temp file: \(error)")
+                        continuation.resume(throwing: APIClientError.networkError(URLError(.cannotCreateFile)))
+                        return
+                    }
                     let downloadedBytes = downloadTask?.progress.completedUnitCount ?? 0
                     let totalBytes = downloadTask?.progress.totalUnitCount ?? 0
                     let normalizedTotal = totalBytes > 0 ? totalBytes : downloadedBytes
                     progressHandler?(downloadedBytes, normalizedTotal)
                     measurement.end()
-                    continuation.resume(returning: tempURL)
+                    continuation.resume(returning: persistentURL)
 
                 case 401:
                     self?.logger.warning("Authentication failed during download")

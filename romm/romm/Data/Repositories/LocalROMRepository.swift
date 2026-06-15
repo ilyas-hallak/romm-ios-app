@@ -232,8 +232,15 @@ class LocalROMRepository: PLocalROMRepository {
     /// Creates the directory path for a ROM
     /// Returns: Relative path like "Game Boy/Pokemon Red"
     static func createROMDirectoryPath(platformName: String, romName: String) -> String {
-        let sanitizedPlatform = platformName.replacingOccurrences(of: "/", with: "-")
-        let sanitizedROM = romName.replacingOccurrences(of: "/", with: "-")
+        let sanitizedPlatform = sanitizePathComponent(platformName)
+        let sanitizedROM = sanitizePathComponent(romName)
         return "\(sanitizedPlatform)/\(sanitizedROM)"
+    }
+
+    private static func sanitizePathComponent(_ name: String) -> String {
+        // Colon ':' is translated to '/' on Apple HFS+ legacy paths, causing directory creation failures
+        var result = name.replacingOccurrences(of: "/", with: "-")
+        result = result.replacingOccurrences(of: ":", with: "-")
+        return result
     }
 }

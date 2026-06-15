@@ -50,7 +50,8 @@ final class NativeEmulatorViewModel {
             let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? -1
             print("[NativeEmulatorVM] ROM url=\(url.path) exists=\(exists) size=\(size)")
             if !exists {
-                errorMessage = "ROM file not found: \(url.lastPathComponent)"
+                let dirContents = (try? FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path))?.joined(separator: ", ") ?? "dir not found"
+                errorMessage = "ROM file not found: \(url.lastPathComponent)\nExpected path: \(url.deletingLastPathComponent().lastPathComponent)/\nDir contents: \(dirContents)"
                 isLoading = false
                 return
             }
