@@ -97,6 +97,8 @@ class SFTPUploadViewModel {
     }
     
     let rom: Rom
+    let autoStartLocalDownload: Bool
+    private(set) var didAutoStart: Bool = false
     private let getAllConnectionsUseCase: GetAllConnectionsUseCase
     private let manageDefaultConnectionUseCase: ManageDefaultConnectionUseCase
     private let uploadFileUseCase: UploadFileUseCase
@@ -105,8 +107,10 @@ class SFTPUploadViewModel {
 
     init(
         rom: Rom,
+        autoStartLocalDownload: Bool = false,
         factory: PDependencyFactory = DefaultDependencyFactory.shared
     ) {
+        self.autoStartLocalDownload = autoStartLocalDownload
         print("🔍 Debug: SFTPUploadViewModel init with ROM:")
         print("🔍 Debug: ROM ID: \(rom.id)")
         print("🔍 Debug: ROM name: \(rom.name)")
@@ -131,6 +135,23 @@ class SFTPUploadViewModel {
         connections = getAllConnectionsUseCase.execute()
         isLocalDeviceSelected = true
         selectedConnection = nil
+    }
+
+    /// Starts a local download automatically if requested at init and not yet started.
+    /// Waits until at least one file is selected (loadAvailableFiles runs async).
+    func triggerAutoStartIfNeeded() async {
+        guard autoStartLocalDownload, !didAutoStart else { return }
+
+        // Wait briefly for available files to load, then proceed.
+        var waited = 0
+        while availableFiles.isEmpty && waited < 50 {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            waited += 1
+        }
+
+        guard !didAutoStart, autoStartLocalDownload, !selectedFiles.isEmpty else { return }
+        didAutoStart = true
+        await startUpload()
     }
     
     private func loadAvailableFiles() {

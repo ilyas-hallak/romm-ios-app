@@ -128,7 +128,8 @@ class LocalROMRepository: PLocalROMRepository {
                     fileSizeBytes: file.fileSizeBytes,
                     md5Hash: file.md5Hash
                 )
-            }
+            },
+            urlCover: rom.urlCover
         )
 
         // Save metadata to .metadata.json
@@ -225,7 +226,8 @@ class LocalROMRepository: PLocalROMRepository {
             downloadedAt: metadata.downloadedAt,
             totalSizeBytes: totalSize,
             localDirectory: relativePath,
-            files: downloadedFiles
+            files: downloadedFiles,
+            urlCover: metadata.urlCover
         )
     }
 

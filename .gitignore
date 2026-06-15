@@ -1,3 +1,6 @@
+# Claude Code MCP config (contains secrets)
+.mcp.json
+
 # Xcode
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore

@@ -6,6 +6,7 @@ import Observation
 class LocalDeviceDetailViewModel {
     var downloadedROMs: [DownloadedROM] = []
     var romsByPlatform: [String: [DownloadedROM]] = [:]
+    var platformDisplayNamesBySlug: [String: String] = [:]
     var isLoading = false
     var error: String?
     var totalDownloadedSize: Int64 = 0
@@ -13,11 +14,32 @@ class LocalDeviceDetailViewModel {
     var romToDelete: DownloadedROM?
 
     private let repository: PLocalROMRepository
+    private let getPlatformsUseCase: GetPlatformsUseCase
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.repository = factory.localROMRepository
-        // Don't load automatically - prevents UI blocking during navigation
-        // View will trigger loading via .task modifier
+        self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
+    }
+
+    func displayName(forPlatformName platformName: String) -> String {
+        if let rom = romsByPlatform[platformName]?.first,
+           let name = platformDisplayNamesBySlug[rom.platformSlug] {
+            return name
+        }
+        return platformName
+    }
+
+    func loadPlatformDisplayNames() async {
+        do {
+            let platforms = try await getPlatformsUseCase.execute()
+            var map: [String: String] = [:]
+            for p in platforms {
+                map[p.slug] = p.displayName
+            }
+            platformDisplayNamesBySlug = map
+        } catch {
+            // Non-fatal: fall back to stored platformName
+        }
     }
 
     // MARK: - Public Methods

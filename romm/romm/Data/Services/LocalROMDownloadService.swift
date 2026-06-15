@@ -154,7 +154,8 @@ class LocalROMDownloadService: PLocalROMDownloadService {
             downloadedAt: Date(),
             totalSizeBytes: totalDownloadedBytes,
             localDirectory: romDirectoryPath,
-            files: downloadedFiles
+            files: downloadedFiles,
+            urlCover: rom.urlCover
         )
 
         // 6. Save metadata

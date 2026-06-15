@@ -112,7 +112,7 @@ struct PlatformRowView: View {
                     .font(.headline)
                     .foregroundColor(.primary)
                     .lineLimit(2)
-                
+
                 Text("\(platform.romCount) ROMs")
                     .font(.caption)
                     .foregroundColor(.secondary)

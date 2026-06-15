@@ -8,6 +8,14 @@
 import Foundation
 import Combine
 
+enum AppTab: Hashable {
+    case home
+    case platforms
+    case collections
+    case downloads
+    case search
+}
+
 @MainActor
 class AppData: ObservableObject {
     @Published var currentUser: User?
@@ -15,6 +23,7 @@ class AppData: ObservableObject {
     @Published var errorMessage: String?
     @Published var currentConfiguration: AppConfiguration?
     @Published var isLoading: Bool = false
+    @Published var selectedTab: AppTab = .home
 
     init() {}
 
