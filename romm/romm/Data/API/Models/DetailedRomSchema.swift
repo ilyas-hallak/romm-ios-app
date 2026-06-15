@@ -190,14 +190,14 @@ public struct DetailedRomSchema: Codable, JSONEncodable, Hashable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case missingFromFs = "missing_from_fs"
-        case siblings
+        case siblings = "sibling_roms"
         case romUser = "rom_user"
         case mergedRaMetadata = "merged_ra_metadata"
         case mergedScreenshots = "merged_screenshots"
         case userSaves = "user_saves"
         case userStates = "user_states"
         case userScreenshots = "user_screenshots"
-        case userNotes = "user_notes"
+        case userNotes = "all_user_notes"
         case userCollections = "user_collections"
     }
 
