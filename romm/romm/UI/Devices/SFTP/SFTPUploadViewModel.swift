@@ -137,15 +137,12 @@ class SFTPUploadViewModel {
         selectedConnection = nil
     }
 
-    /// Starts a local download automatically if requested at init and not yet started.
-    /// Waits until at least one file is selected (loadAvailableFiles runs async).
     func triggerAutoStartIfNeeded() async {
         guard autoStartLocalDownload, !didAutoStart else { return }
 
-        // Wait briefly for available files to load, then proceed.
         var waited = 0
         while availableFiles.isEmpty && waited < 50 {
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            try? await Task.sleep(nanoseconds: 100_000_000)
             waited += 1
         }
 
