@@ -11,12 +11,10 @@ struct HomeView: View {
 
     var body: some View {
         Group {
-            switch viewModel.viewState {
-            case .initial, .loading:
-                loadingView
-            case .empty:
-                emptyView
-            case .loaded:
+            if !viewModel.hasStartedLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
                 contentView
             }
         }
@@ -35,7 +33,7 @@ struct HomeView: View {
             await viewModel.load()
         }
         .task {
-            if case .initial = viewModel.viewState {
+            if !viewModel.hasStartedLoading {
                 await viewModel.load()
             }
         }
@@ -45,42 +43,55 @@ struct HomeView: View {
     private var contentView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if !viewModel.continuePlaying.isEmpty {
-                    HomeRomSection(title: "Continue Playing", roms: viewModel.continuePlaying)
-                }
-                if !viewModel.recentlyAdded.isEmpty {
-                    HomeRomSection(title: "Recently Added", roms: viewModel.recentlyAdded)
-                }
-                if !viewModel.platforms.isEmpty {
-                    HomePlatformSection(platforms: viewModel.platforms)
-                }
-                if !viewModel.collections.isEmpty {
-                    HomeCollectionSection(collections: viewModel.collections)
-                }
+                HomeRomSection(
+                    title: "Continue Playing",
+                    roms: viewModel.continuePlaying,
+                    isLoading: viewModel.isLoadingContinuePlaying
+                )
+                HomeRomSection(
+                    title: "Recently Added",
+                    roms: viewModel.recentlyAdded,
+                    isLoading: viewModel.isLoadingRecentlyAdded
+                )
+                HomePlatformSection(
+                    platforms: viewModel.platforms,
+                    isLoading: viewModel.isLoadingPlatforms
+                )
+                HomeCollectionSection(
+                    collections: viewModel.collections,
+                    coverURL: { viewModel.coverURL(for: $0) },
+                    isLoading: viewModel.isLoadingCollections
+                )
             }
             .padding(.vertical, 16)
         }
     }
+}
 
-    @ViewBuilder
-    private var loadingView: some View {
-        VStack {
-            ProgressView()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
+// MARK: - Skeleton
 
-    @ViewBuilder
-    private var emptyView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "house")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            Text("Nothing here yet")
-                .font(.headline)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+private struct SkeletonCard: View {
+    let width: CGFloat
+    let height: CGFloat
+    @State private var shimmer = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: shimmer
+                        ? [Color(.systemFill), Color(.secondarySystemFill), Color(.systemFill)]
+                        : [Color(.secondarySystemFill), Color(.systemFill), Color(.secondarySystemFill)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: width, height: height)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    shimmer = true
+                }
+            }
     }
 }
 
@@ -99,22 +110,35 @@ private struct HomeSectionHeader: View {
 private struct HomeRomSection: View {
     let title: String
     let roms: [Rom]
+    let isLoading: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HomeSectionHeader(title: title)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(roms) { rom in
-                        NavigationLink(destination: RomDetailView(rom: rom)) {
-                            BigRomCardView(rom: rom)
-                                .frame(width: 200)
+        if isLoading || !roms.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HomeSectionHeader(title: title)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        if isLoading {
+                            ForEach(0..<5, id: \.self) { _ in
+                                VStack(spacing: 8) {
+                                    SkeletonCard(width: 200, height: 130)
+                                    SkeletonCard(width: 160, height: 14)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        } else {
+                            ForEach(roms) { rom in
+                                NavigationLink(destination: RomDetailView(rom: rom)) {
+                                    BigRomCardView(rom: rom)
+                                        .frame(width: 200)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
             }
         }
     }
@@ -122,20 +146,35 @@ private struct HomeRomSection: View {
 
 private struct HomePlatformSection: View {
     let platforms: [Platform]
+    let isLoading: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HomeSectionHeader(title: "Platforms")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(platforms) { platform in
-                        NavigationLink(destination: PlatformDetailView(platform: platform)) {
-                            HomePlatformCard(platform: platform)
+        if isLoading || !platforms.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HomeSectionHeader(title: "Platforms")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        if isLoading {
+                            ForEach(0..<6, id: \.self) { _ in
+                                VStack(spacing: 8) {
+                                    SkeletonCard(width: 100, height: 100)
+                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    SkeletonCard(width: 80, height: 12)
+                                        .clipShape(Capsule())
+                                }
+                                .frame(width: 124)
+                            }
+                        } else {
+                            ForEach(platforms) { platform in
+                                NavigationLink(destination: PlatformDetailView(platform: platform)) {
+                                    HomePlatformCard(platform: platform)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
             }
         }
     }
@@ -174,20 +213,35 @@ private struct HomePlatformCard: View {
 
 private struct HomeCollectionSection: View {
     let collections: [Collection]
+    let coverURL: (Collection) -> String?
+    let isLoading: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HomeSectionHeader(title: "Collections")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(collections) { collection in
-                        NavigationLink(destination: CollectionDetailView(collection: collection)) {
-                            HomeCollectionCard(collection: collection)
+        if isLoading || !collections.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HomeSectionHeader(title: "Collections")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        if isLoading {
+                            ForEach(0..<4, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    SkeletonCard(width: 140, height: 140)
+                                    SkeletonCard(width: 110, height: 12)
+                                        .clipShape(Capsule())
+                                }
+                                .frame(width: 140, alignment: .leading)
+                            }
+                        } else {
+                            ForEach(collections) { collection in
+                                NavigationLink(destination: CollectionDetailView(collection: collection)) {
+                                    HomeCollectionCard(collection: collection, coverURL: coverURL(collection))
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
             }
         }
     }
@@ -195,10 +249,11 @@ private struct HomeCollectionSection: View {
 
 private struct HomeCollectionCard: View {
     let collection: Collection
+    let coverURL: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            CachedKFImage(urlString: collection.urlCover) { image in
+            CachedKFImage(urlString: coverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)

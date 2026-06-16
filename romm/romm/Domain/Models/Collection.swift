@@ -14,6 +14,7 @@ struct Collection: Identifiable, Hashable {
     let romIds: Set<Int>
     let romCount: Int
     let urlCover: String?
+    let pathCoversSmall: [String]
     let userId: Int
     let userUsername: String
     let isPublic: Bool

@@ -27,6 +27,7 @@ struct CollectionMapper {
             romIds: apiCollection.romIds,
             romCount: apiCollection.romCount,
             urlCover: apiCollection.urlCover,
+            pathCoversSmall: apiCollection.pathCoversSmall,
             userId: apiCollection.userId,
             userUsername: apiCollection.userUsername,
             isPublic: apiCollection.isPublic ?? false,

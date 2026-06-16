@@ -6,13 +6,6 @@
 import Foundation
 import Observation
 
-enum HomeViewState {
-    case initial
-    case loading
-    case empty
-    case loaded
-}
-
 @Observable
 @MainActor
 class HomeViewModel {
@@ -20,40 +13,50 @@ class HomeViewModel {
     var continuePlaying: [Rom] = []
     var platforms: [Platform] = []
     var collections: [Collection] = []
-    var viewState: HomeViewState = .initial
-    var errorMessage: String?
+
+    var isLoadingRecentlyAdded = false
+    var isLoadingContinuePlaying = false
+    var isLoadingPlatforms = false
+    var isLoadingCollections = false
+
+    var hasStartedLoading = false
 
     private let getRomsWithFiltersUseCase: GetRomsWithFiltersUseCase
     private let getPlatformsUseCase: GetPlatformsUseCase
     private let getCollectionsUseCase: GetCollectionsUseCase
+    private let tokenProvider: PTokenProvider
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.getRomsWithFiltersUseCase = factory.makeGetRomsWithFiltersUseCase()
         self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
         self.getCollectionsUseCase = factory.makeGetCollectionsUseCase()
+        self.tokenProvider = TokenProvider()
+    }
+
+    func coverURL(for collection: Collection) -> String? {
+        if let url = collection.urlCover, !url.isEmpty { return url }
+        guard let path = collection.pathCoversSmall.first, !path.isEmpty else { return nil }
+        if path.hasPrefix("http") { return path }
+        let base = tokenProvider.getServerURL()?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+        return "\(base)/\(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
     }
 
     func load() async {
-        viewState = .loading
-        errorMessage = nil
+        hasStartedLoading = true
+        isLoadingRecentlyAdded = true
+        isLoadingContinuePlaying = true
+        isLoadingPlatforms = true
+        isLoadingCollections = true
 
-        async let recentTask = loadRecentlyAdded()
-        async let continueTask = loadContinuePlaying()
-        async let platformsTask = loadPlatforms()
-        async let collectionsTask = loadCollections()
-
-        let (recent, cont, plats, colls) = await (recentTask, continueTask, platformsTask, collectionsTask)
-
-        recentlyAdded = recent
-        continuePlaying = cont
-        platforms = plats
-        collections = colls
-
-        let hasContent = !recent.isEmpty || !cont.isEmpty || !plats.isEmpty || !colls.isEmpty
-        viewState = hasContent ? .loaded : .empty
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.fetchRecentlyAdded() }
+            group.addTask { await self.fetchContinuePlaying() }
+            group.addTask { await self.fetchPlatforms() }
+            group.addTask { await self.fetchCollections() }
+        }
     }
 
-    private func loadRecentlyAdded() async -> [Rom] {
+    private func fetchRecentlyAdded() async {
         do {
             let response = try await getRomsWithFiltersUseCase.execute(
                 limit: 15,
@@ -61,13 +64,14 @@ class HomeViewModel {
                 orderDir: "desc",
                 filters: .empty
             )
-            return response.roms
+            recentlyAdded = response.roms
         } catch {
-            return []
+            recentlyAdded = []
         }
+        isLoadingRecentlyAdded = false
     }
 
-    private func loadContinuePlaying() async -> [Rom] {
+    private func fetchContinuePlaying() async {
         do {
             let response = try await getRomsWithFiltersUseCase.execute(
                 limit: 15,
@@ -75,27 +79,30 @@ class HomeViewModel {
                 orderDir: "desc",
                 filters: RomFilters(lastPlayed: true)
             )
-            return response.roms
+            continuePlaying = response.roms
         } catch {
-            return []
+            continuePlaying = []
         }
+        isLoadingContinuePlaying = false
     }
 
-    private func loadPlatforms() async -> [Platform] {
+    private func fetchPlatforms() async {
         do {
             let all = try await getPlatformsUseCase.execute()
-            return all.filter { $0.romCount > 0 }
+            platforms = all.filter { $0.romCount > 0 }
         } catch {
-            return []
+            platforms = []
         }
+        isLoadingPlatforms = false
     }
 
-    private func loadCollections() async -> [Collection] {
+    private func fetchCollections() async {
         do {
             let all = try await getCollectionsUseCase.execute()
-            return all.filter { !$0.isVirtual }
+            collections = all.filter { !$0.isVirtual }
         } catch {
-            return []
+            collections = []
         }
+        isLoadingCollections = false
     }
 }

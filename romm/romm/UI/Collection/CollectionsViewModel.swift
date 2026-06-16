@@ -46,6 +46,7 @@ class CollectionsViewModel {
     private let getCollectionsUseCase: GetCollectionsUseCase
     private let getVirtualCollectionsUseCase: GetVirtualCollectionsUseCase
     private let deleteCollectionUseCase: DeleteCollectionUseCase
+    private let tokenProvider: PTokenProvider
 
     // Pagination state
     private var currentCollectionOffset = 0
@@ -58,11 +59,20 @@ class CollectionsViewModel {
         self.getCollectionsUseCase = factory.makeGetCollectionsUseCase()
         self.getVirtualCollectionsUseCase = factory.makeGetVirtualCollectionsUseCase()
         self.deleteCollectionUseCase = factory.makeDeleteCollectionUseCase()
+        self.tokenProvider = TokenProvider()
 
         // Don't load automatically - prevents UI blocking during tab switches
         // View will trigger loading via .task or .onAppear modifier
     }
     
+    func coverURL(for collection: Collection) -> String? {
+        if let url = collection.urlCover, !url.isEmpty { return url }
+        guard let path = collection.pathCoversSmall.first, !path.isEmpty else { return nil }
+        if path.hasPrefix("http") { return path }
+        let base = tokenProvider.getServerURL()?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+        return "\(base)/\(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+    }
+
     func loadCollections() async {
         // If we already have data, don't reload
         if hasLoadedOnce && !collections.isEmpty || !virtualCollections.isEmpty {

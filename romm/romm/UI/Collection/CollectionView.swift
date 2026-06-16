@@ -134,7 +134,7 @@ struct CollectionView: View {
                     NavigationLink {
                         CollectionDetailView(collection: collection)
                     } label: {
-                        CollectionRowView(collection: collection)
+                        CollectionRowView(collection: collection, coverURL: collectionsViewModel.coverURL(for: collection))
                     }
                     .onAppear {
                         // Load more when approaching the end
@@ -176,11 +176,17 @@ struct CollectionView: View {
 
 struct CollectionRowView: View {
     let collection: Collection
-    
+    let coverURL: String?
+
+    init(collection: Collection, coverURL: String? = nil) {
+        self.collection = collection
+        self.coverURL = coverURL ?? collection.urlCover
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             // Collection cover
-            CachedKFImage(urlString: collection.urlCover) { image in
+            CachedKFImage(urlString: coverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
