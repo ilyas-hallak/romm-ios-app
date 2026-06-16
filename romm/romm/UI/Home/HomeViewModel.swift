@@ -30,7 +30,7 @@ class HomeViewModel {
         self.getRomsWithFiltersUseCase = factory.makeGetRomsWithFiltersUseCase()
         self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
         self.getCollectionsUseCase = factory.makeGetCollectionsUseCase()
-        self.tokenProvider = TokenProvider()
+        self.tokenProvider = factory.tokenProvider
     }
 
     func coverURL(for collection: Collection) -> String? {

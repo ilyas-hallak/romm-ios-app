@@ -18,9 +18,20 @@ struct PlatformROMsListView: View {
     @State private var romPendingDelete: DownloadedROM?
     @State private var romPendingSync: DownloadedROM?
     @State private var detailRom: DownloadedROM?
-    private let launchUseCase: PLaunchEmulatorUseCase = DefaultDependencyFactory.shared.makeLaunchEmulatorUseCase()
-    private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase = DefaultDependencyFactory.shared.makeUpdateLastPlayedUseCase()
-    private let saveStore: PSaveStore = DefaultDependencyFactory.shared.saveStore
+    private let factory: PDependencyFactory
+    private let launchUseCase: PLaunchEmulatorUseCase
+    private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
+    private let saveStore: PSaveStore
+
+    init(platformName: String, viewModel: LocalDeviceDetailViewModel, onDelete: @escaping (DownloadedROM) -> Void, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.platformName = platformName
+        self.viewModel = viewModel
+        self.onDelete = onDelete
+        self.factory = factory
+        self.launchUseCase = factory.makeLaunchEmulatorUseCase()
+        self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
+        self.saveStore = factory.saveStore
+    }
 
     var body: some View {
         List {
@@ -83,7 +94,7 @@ struct PlatformROMsListView: View {
             Text("This will remove all files (\(rom.formattedSize)).")
         }
         .sheet(item: $romPendingSync) { rom in
-            SyncSaveSheet(rom: rom) { romPendingSync = nil }
+            SyncSaveSheet(viewModel: factory.makeSyncSaveViewModel(rom: rom)) { romPendingSync = nil }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }

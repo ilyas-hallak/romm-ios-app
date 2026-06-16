@@ -27,6 +27,8 @@ protocol PDependencyFactory {
     var sftpConnectionManager: SFTPConnectionManager { get }
     var apiClient: PRommAPIClient { get }
     var fileValidationService: PFileValidationService { get }
+    var tokenProvider: PTokenProvider { get }
+    var saveStore: PSaveStore { get }
     
     // Use Cases
     func makeLogoutUseCase() -> LogoutUseCase
@@ -84,6 +86,19 @@ protocol PDependencyFactory {
     func makeGetGroupRomsUseCase() -> PGetGroupRomsUseCase
     func makeSaveGroupRomsUseCase() -> PSaveGroupRomsUseCase
 
+    // Save/State Sync Use Cases
+    func makeListServerSavesUseCase() -> PListServerSavesUseCase
+    func makeListServerStatesUseCase() -> PListServerStatesUseCase
+    func makeDownloadSaveUseCase() -> PDownloadSaveUseCase
+    func makeDownloadStateUseCase() -> PDownloadStateUseCase
+    func makeUploadSaveUseCase() -> PUploadSaveUseCase
+    func makeUpdateSaveUseCase() -> PUpdateSaveUseCase
+    func makeUploadStateUseCase() -> PUploadStateUseCase
+    func makeUpdateStateUseCase() -> PUpdateStateUseCase
+
+    // Local ROM Use Cases
+    func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
+
     // Emulator Use Cases
     func makeCheckEmulatorSupportUseCase() -> PCheckEmulatorSupportUseCase
     func makeLaunchEmulatorUseCase() -> PLaunchEmulatorUseCase
@@ -104,6 +119,10 @@ protocol PDependencyFactory {
     @MainActor func makeSFTPDirectoryBrowserViewModel(connection: SFTPConnection) -> SFTPDirectoryBrowserViewModel
     @MainActor func makeSFTPUploadViewModel(rom: Rom, autoStartLocalDownload: Bool) -> SFTPUploadViewModel
     @MainActor func makeAddEditSFTPDeviceViewModel(connection: SFTPConnection?) -> AddEditSFTPDeviceViewModel
+
+    // Local ROM ViewModels
+    @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel
+    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel
 }
 
 class DefaultDependencyFactory: PDependencyFactory {
@@ -141,7 +160,8 @@ class DefaultDependencyFactory: PDependencyFactory {
         return manager
     }()
     lazy var apiClient: PRommAPIClient = RommAPIClient.shared
-    
+    lazy var tokenProvider: PTokenProvider = TokenProvider()
+
     private init() {}
     
     // MARK: - Auth Use Cases
@@ -366,7 +386,7 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeLaunchEmulatorUseCase() -> PLaunchEmulatorUseCase {
         LaunchEmulatorUseCase(
-            tokenProvider: TokenProvider(),
+            tokenProvider: tokenProvider,
             checkEmulatorSupport: makeCheckEmulatorSupportUseCase(),
             enginePreference: enginePreference,
             platformSupport: makePlatformEngineSupport()
@@ -408,6 +428,67 @@ class DefaultDependencyFactory: PDependencyFactory {
             updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
             downloadStateUseCase: DownloadStateUseCase(repository: statesRepository)
         )
+    }
+
+    // MARK: - Save/State Sync Use Cases
+
+    func makeListServerSavesUseCase() -> PListServerSavesUseCase {
+        ListServerSavesUseCase(repository: savesRepository)
+    }
+
+    func makeListServerStatesUseCase() -> PListServerStatesUseCase {
+        ListServerStatesUseCase(repository: statesRepository)
+    }
+
+    func makeDownloadSaveUseCase() -> PDownloadSaveUseCase {
+        DownloadSaveUseCase(repository: savesRepository)
+    }
+
+    func makeDownloadStateUseCase() -> PDownloadStateUseCase {
+        DownloadStateUseCase(repository: statesRepository)
+    }
+
+    func makeUploadSaveUseCase() -> PUploadSaveUseCase {
+        UploadSaveUseCase(repository: savesRepository)
+    }
+
+    func makeUpdateSaveUseCase() -> PUpdateSaveUseCase {
+        UpdateSaveUseCase(repository: savesRepository)
+    }
+
+    func makeUploadStateUseCase() -> PUploadStateUseCase {
+        UploadStateUseCase(repository: statesRepository)
+    }
+
+    func makeUpdateStateUseCase() -> PUpdateStateUseCase {
+        UpdateStateUseCase(repository: statesRepository)
+    }
+
+    // MARK: - Local ROM Use Cases
+
+    func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
+        GetROMShareFilesUseCase(localROMRepository: localROMRepository)
+    }
+
+    // MARK: - Local ROM ViewModels
+
+    @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {
+        SyncSaveViewModel(
+            rom: rom,
+            listSavesUseCase: makeListServerSavesUseCase(),
+            listStatesUseCase: makeListServerStatesUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase(),
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            updateSaveUseCase: makeUpdateSaveUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            saveStore: saveStore
+        )
+    }
+
+    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel {
+        ShareROMViewModel(rom: rom, getShareFilesUseCase: makeGetROMShareFilesUseCase())
     }
 
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel {

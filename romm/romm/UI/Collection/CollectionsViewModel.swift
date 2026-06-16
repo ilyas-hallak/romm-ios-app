@@ -59,7 +59,7 @@ class CollectionsViewModel {
         self.getCollectionsUseCase = factory.makeGetCollectionsUseCase()
         self.getVirtualCollectionsUseCase = factory.makeGetVirtualCollectionsUseCase()
         self.deleteCollectionUseCase = factory.makeDeleteCollectionUseCase()
-        self.tokenProvider = TokenProvider()
+        self.tokenProvider = factory.tokenProvider
 
         // Don't load automatically - prevents UI blocking during tab switches
         // View will trigger loading via .task or .onAppear modifier

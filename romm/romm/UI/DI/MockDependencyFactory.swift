@@ -312,7 +312,7 @@ class MockDependencyFactory: PDependencyFactory {
 
     func makeLaunchEmulatorUseCase() -> PLaunchEmulatorUseCase {
         LaunchEmulatorUseCase(
-            tokenProvider: TokenProvider(),
+            tokenProvider: tokenProvider,
             checkEmulatorSupport: makeCheckEmulatorSupportUseCase(),
             enginePreference: enginePreference,
             platformSupport: makePlatformEngineSupport()
@@ -337,6 +337,7 @@ class MockDependencyFactory: PDependencyFactory {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
 
+    lazy var tokenProvider: PTokenProvider = TokenProvider()
     lazy var savesRepository: PSavesRepository = SavesRepository(apiClient: apiClient)
     lazy var statesRepository: PStatesRepository = StatesRepository(apiClient: apiClient)
 
@@ -366,5 +367,39 @@ class MockDependencyFactory: PDependencyFactory {
             aspectRatioPreference: libretroAspectRatioPreference,
             factory: self
         )
+    }
+
+    // MARK: - Save/State Sync Use Cases
+
+    func makeListServerSavesUseCase() -> PListServerSavesUseCase { ListServerSavesUseCase(repository: savesRepository) }
+    func makeListServerStatesUseCase() -> PListServerStatesUseCase { ListServerStatesUseCase(repository: statesRepository) }
+    func makeDownloadSaveUseCase() -> PDownloadSaveUseCase { DownloadSaveUseCase(repository: savesRepository) }
+    func makeDownloadStateUseCase() -> PDownloadStateUseCase { DownloadStateUseCase(repository: statesRepository) }
+    func makeUploadSaveUseCase() -> PUploadSaveUseCase { UploadSaveUseCase(repository: savesRepository) }
+    func makeUpdateSaveUseCase() -> PUpdateSaveUseCase { UpdateSaveUseCase(repository: savesRepository) }
+    func makeUploadStateUseCase() -> PUploadStateUseCase { UploadStateUseCase(repository: statesRepository) }
+    func makeUpdateStateUseCase() -> PUpdateStateUseCase { UpdateStateUseCase(repository: statesRepository) }
+
+    func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
+        GetROMShareFilesUseCase(localROMRepository: localROMRepository)
+    }
+
+    @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {
+        SyncSaveViewModel(
+            rom: rom,
+            listSavesUseCase: makeListServerSavesUseCase(),
+            listStatesUseCase: makeListServerStatesUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase(),
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            updateSaveUseCase: makeUpdateSaveUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            saveStore: saveStore
+        )
+    }
+
+    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel {
+        ShareROMViewModel(rom: rom, getShareFilesUseCase: makeGetROMShareFilesUseCase())
     }
 }

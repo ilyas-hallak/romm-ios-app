@@ -19,27 +19,15 @@ enum PendingUpload: Equatable {
 }
 
 struct SyncSaveSheet: View {
-    let rom: DownloadedROM
+    @State var viewModel: SyncSaveViewModel
     let onDismiss: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var serverStates: [StateSchema] = []
-    @State private var serverSaves: [SaveSchema] = []
-    @State private var localStates: [SaveStateEntry] = []
-    @State private var hasLocalBattery: Bool = false
-    @State private var localBatteryDate: Date? = nil
-    @State private var isLoadingServer: Bool = false
-    @State private var downloadingStateIds: Set<Int> = []
-    @State private var downloadingSaveIds: Set<Int> = []
-    @State private var uploadingStateSlots: Set<Int> = []
-    @State private var isUploadingBattery: Bool = false
-    @State private var errorMessage: String? = nil
-    @State private var pendingUpload: PendingUpload? = nil
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoadingServer {
+                if viewModel.isLoadingServer {
                     ProgressView("Loading cloud data…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -58,173 +46,29 @@ struct SyncSaveSheet: View {
                 }
             }
             .alert("Error", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
             )) {
-                Button("OK") { errorMessage = nil }
+                Button("OK") { viewModel.errorMessage = nil }
             } message: {
-                Text(errorMessage ?? "")
+                Text(viewModel.errorMessage ?? "")
             }
             .confirmationDialog(
                 "Already on Server",
-                isPresented: Binding(get: { pendingUpload?.hasExisting == true }, set: { if !$0 { pendingUpload = nil } }),
+                isPresented: Binding(
+                    get: { viewModel.pendingUpload?.hasExisting == true },
+                    set: { if !$0 { viewModel.cancelPendingUpload() } }
+                ),
                 titleVisibility: .visible
             ) {
-                Button("Update existing") {
-                    if let p = pendingUpload { executeUpload(p, update: true) }
-                    pendingUpload = nil
-                }
-                Button("Add as new") {
-                    if let p = pendingUpload { executeUpload(p, update: false) }
-                    pendingUpload = nil
-                }
-                Button("Cancel", role: .cancel) { pendingUpload = nil }
+                Button("Update existing") { viewModel.confirmUpload(update: true) }
+                Button("Add as new") { viewModel.confirmUpload(update: false) }
+                Button("Cancel", role: .cancel) { viewModel.cancelPendingUpload() }
             } message: {
-                Text("\"\(pendingUpload?.title ?? "")\" already exists on the server. Update it or add as a new entry?")
+                Text("\"\(viewModel.pendingUpload?.title ?? "")\" already exists on the server. Update it or add as a new entry?")
             }
         }
-        .task { await loadAll() }
-    }
-
-    // MARK: - Load
-
-    private func loadAll() async {
-        isLoadingServer = true
-        let api = RommAPIClient.shared
-        do {
-            async let statesTask = api.getStates(romId: rom.id)
-            async let savesTask = api.getSaves(romId: rom.id)
-            let (states, saves) = try await (statesTask, savesTask)
-            serverStates = states
-            serverSaves = saves
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoadingServer = false
-        let store = DefaultDependencyFactory.shared.saveStore
-        localStates = (try? store.listStates(romId: rom.id)) ?? []
-        localBatteryDate = store.batteryModifiedAt(romId: rom.id)
-        hasLocalBattery = localBatteryDate != nil
-    }
-
-    // MARK: - Download
-
-    private func downloadState(_ state: StateSchema) {
-        guard !downloadingStateIds.contains(state.id) else { return }
-        if state.missingFromFs {
-            errorMessage = "File missing on server — upload it again."
-            return
-        }
-        downloadingStateIds.insert(state.id)
-        Task { @MainActor in
-            defer { downloadingStateIds.remove(state.id) }
-            do {
-                let data = try await RommAPIClient.shared.getBinary(state.downloadPath)
-                guard !data.isEmpty else {
-                    errorMessage = "Server returned empty file."
-                    return
-                }
-                let slot = slotFromFileName(state.fileName) ?? 0
-                let store = DefaultDependencyFactory.shared.saveStore
-                try store.writeState(romId: rom.id, slot: slot, data: data)
-                localStates = (try? store.listStates(romId: rom.id)) ?? []
-            } catch {
-                errorMessage = "Download failed: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    private func downloadSave(_ save: SaveSchema) {
-        guard !downloadingSaveIds.contains(save.id) else { return }
-        if save.missingFromFs {
-            errorMessage = "File missing on server — upload it again."
-            return
-        }
-        downloadingSaveIds.insert(save.id)
-        Task { @MainActor in
-            defer { downloadingSaveIds.remove(save.id) }
-            do {
-                let data = try await RommAPIClient.shared.getBinary(save.downloadPath)
-                guard !data.isEmpty else {
-                    errorMessage = "Server returned empty file."
-                    return
-                }
-                let store = DefaultDependencyFactory.shared.saveStore
-                try store.writeBattery(romId: rom.id, data: data)
-                hasLocalBattery = true
-            } catch {
-                errorMessage = "Download failed: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    // MARK: - Upload trigger
-
-    private func uploadLocalState(entry: SaveStateEntry) {
-        let existingId = serverStates.first { slotFromFileName($0.fileName) == entry.slot }?.id
-        let pending = PendingUpload.state(slot: entry.slot, existingId: existingId)
-        if existingId != nil {
-            pendingUpload = pending
-        } else {
-            executeUpload(pending, update: false)
-        }
-    }
-
-    private func uploadLocalBattery() {
-        let existingId = serverSaves.first?.id
-        let pending = PendingUpload.battery(existingId: existingId)
-        if existingId != nil {
-            pendingUpload = pending
-        } else {
-            executeUpload(pending, update: false)
-        }
-    }
-
-    private func executeUpload(_ pending: PendingUpload, update: Bool) {
-        let factory = DefaultDependencyFactory.shared
-        switch pending {
-        case .state(let slot, let existingId):
-            uploadingStateSlots.insert(slot)
-            Task { @MainActor in
-                defer { uploadingStateSlots.remove(slot) }
-                do {
-                    let store = factory.saveStore
-                    guard let data = try store.readState(romId: rom.id, slot: slot) else { return }
-                    let thumbnail = try? store.readThumbnail(romId: rom.id, slot: slot)
-                    let fileName = "slot\(slot).state"
-                    let repo = factory.statesRepository
-                    if update, let existingId {
-                        let updated = try await UpdateStateUseCase(repository: repo).execute(id: existingId, emulator: nil, fileName: fileName, fileData: data, screenshotData: thumbnail)
-                        if let idx = serverStates.firstIndex(where: { $0.id == updated.id }) { serverStates[idx] = updated }
-                    } else {
-                        let uploaded = try await UploadStateUseCase(repository: repo).execute(romId: rom.id, emulator: nil, fileName: fileName, fileData: data, screenshotData: thumbnail)
-                        serverStates.append(uploaded)
-                    }
-                } catch {
-                    errorMessage = "Upload failed: \(error.localizedDescription)"
-                }
-            }
-        case .battery(let existingId):
-            isUploadingBattery = true
-            Task { @MainActor in
-                defer { isUploadingBattery = false }
-                do {
-                    let store = factory.saveStore
-                    guard let data = try store.readBattery(romId: rom.id) else { return }
-                    let fileName = "\(rom.id).sav"
-                    let repo = factory.savesRepository
-                    if update, let existingId {
-                        let updated = try await UpdateSaveUseCase(repository: repo).execute(id: existingId, emulator: nil, fileName: fileName, fileData: data, screenshotData: nil)
-                        if let idx = serverSaves.firstIndex(where: { $0.id == updated.id }) { serverSaves[idx] = updated }
-                    } else {
-                        let uploaded = try await UploadSaveUseCase(repository: repo).execute(romId: rom.id, emulator: nil, slot: nil, fileName: fileName, fileData: data, screenshotData: nil)
-                        serverSaves.append(uploaded)
-                    }
-                } catch {
-                    errorMessage = "Upload failed: \(error.localizedDescription)"
-                }
-            }
-        }
+        .task { await viewModel.loadAll() }
     }
 
     // MARK: - Sections
@@ -232,32 +76,32 @@ struct SyncSaveSheet: View {
     @ViewBuilder
     private var serverSection: some View {
         Section {
-            if serverStates.isEmpty && serverSaves.isEmpty {
+            if viewModel.serverStates.isEmpty && viewModel.serverSaves.isEmpty {
                 Text("No data on server")
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(serverStates) { state in
+                ForEach(viewModel.serverStates) { state in
                     syncRow(
                         icon: "bookmark.fill", tint: .purple,
                         label: state.fileNameNoExt,
                         date: state.updatedAt,
                         sizeBytes: state.fileSizeBytes,
-                        isBusy: downloadingStateIds.contains(state.id),
+                        isBusy: viewModel.downloadingStateIds.contains(state.id),
                         actionIcon: "arrow.down.circle.fill",
-                        action: { downloadState(state) }
+                        action: { viewModel.downloadServerState(state) }
                     )
                 }
-                ForEach(serverSaves) { save in
+                ForEach(viewModel.serverSaves) { save in
                     syncRow(
                         icon: "memorychip", tint: .blue,
                         label: save.fileNameNoExt,
                         date: save.updatedAt,
                         sizeBytes: save.fileSizeBytes,
-                        isBusy: downloadingSaveIds.contains(save.id),
+                        isBusy: viewModel.downloadingSaveIds.contains(save.id),
                         actionIcon: "arrow.down.circle.fill",
-                        action: { downloadSave(save) }
+                        action: { viewModel.downloadServerSave(save) }
                     )
                 }
             }
@@ -269,32 +113,32 @@ struct SyncSaveSheet: View {
     @ViewBuilder
     private var localSection: some View {
         Section {
-            if localStates.isEmpty && !hasLocalBattery {
+            if viewModel.localStates.isEmpty && !viewModel.hasLocalBattery {
                 Text("No local saves or states")
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(localStates) { entry in
+                ForEach(viewModel.localStates) { entry in
                     syncRow(
                         icon: "bookmark.fill", tint: .purple,
                         label: "Slot \(entry.slot)",
                         date: entry.modifiedAt,
                         sizeBytes: nil,
-                        isBusy: uploadingStateSlots.contains(entry.slot),
+                        isBusy: viewModel.uploadingStateSlots.contains(entry.slot),
                         actionIcon: "icloud.and.arrow.up",
-                        action: { uploadLocalState(entry: entry) }
+                        action: { viewModel.uploadLocalState(entry: entry) }
                     )
                 }
-                if hasLocalBattery {
+                if viewModel.hasLocalBattery {
                     syncRow(
                         icon: "memorychip", tint: .blue,
                         label: "Battery save",
-                        date: localBatteryDate,
+                        date: viewModel.localBatteryDate,
                         sizeBytes: nil,
-                        isBusy: isUploadingBattery,
+                        isBusy: viewModel.isUploadingBattery,
                         actionIcon: "icloud.and.arrow.up",
-                        action: { uploadLocalBattery() }
+                        action: { viewModel.uploadLocalBattery() }
                     )
                 }
             }
@@ -338,13 +182,5 @@ struct SyncSaveSheet: View {
             }
         }
         .padding(.vertical, 2)
-    }
-
-    // MARK: - Helpers
-
-    private func slotFromFileName(_ name: String) -> Int? {
-        let stem = (name as NSString).deletingPathExtension
-        guard stem.hasPrefix("slot") else { return nil }
-        return Int(stem.dropFirst("slot".count))
     }
 }
