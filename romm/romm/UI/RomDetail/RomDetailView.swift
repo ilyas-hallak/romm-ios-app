@@ -23,6 +23,7 @@ struct RomDetailView: View {
     @State private var showingSFTPUpload = false
     @State private var showingCollectionPicker = false
     @State private var showingFullScreenPDF = false
+    @State private var showingArticleReader = false
     @State private var selectedGameDataTab: GameDataTabType = .states
     
     enum DetailTab: String, CaseIterable {
@@ -186,6 +187,14 @@ struct RomDetailView: View {
                                 title: "\(rom.name) Manual"
                             )
                         }
+                    }
+                    .fullScreenCover(isPresented: $showingArticleReader) {
+                        ArticleReaderView(
+                            title: rom.name,
+                            subtitle: articleReaderSubtitle,
+                            meta: articleReaderMeta,
+                            text: viewModel.romDetails?.summary ?? rom.summary ?? ""
+                        )
                     }
                     .fullScreenCover(item: $viewModel.launchDecision, onDismiss: {
                         viewModel.emulatorPresentationDidEnd()
@@ -691,17 +700,62 @@ struct RomDetailView: View {
     
     @ViewBuilder
     private func summarySection(_ summary: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Summary")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-            
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Summary")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    showingArticleReader = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "book")
+                            .font(.caption)
+                        Text("Read as Article")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.accentColor)
+                }
+                .accessibilityLabel("Read summary as article")
+            }
+
             Text(summary)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 8)
+    }
+
+    private var articleReaderMeta: [String] {
+        var items: [String] = []
+        if let platform = rom.platform?.name ?? viewModel.romDetails?.platformDisplayName {
+            items.append(platform)
+        }
+        if let year = rom.releaseYear {
+            items.append(String(year))
+        }
+        if let genre = viewModel.romDetails?.genre.first ?? rom.genres.first {
+            items.append(genre)
+        }
+        return items
+    }
+
+    private var articleReaderSubtitle: String? {
+        var parts: [String] = []
+        if let developer = viewModel.romDetails?.developer, !developer.isEmpty {
+            parts.append(developer)
+        } else if let publisher = viewModel.romDetails?.publisher, !publisher.isEmpty {
+            parts.append(publisher)
+        }
+        if let year = rom.releaseYear {
+            parts.append(String(year))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
     
     @ViewBuilder
