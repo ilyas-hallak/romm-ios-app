@@ -46,7 +46,7 @@ final class LibretroEmulatorViewModel {
             let missing = await biosSync.missingMandatory(for: core)
             if !missing.isEmpty {
                 let names = missing.map { $0.fileName }.joined(separator: ", ")
-                errorMessage = "BIOS fehlt für \(core.displayName): \(names). In Einstellungen → BIOS Files herunterladen."
+                errorMessage = String(localized: "Required BIOS files are missing for \(core.displayName): \(names). Download them in Settings → BIOS Files.")
                 isLoading = false
                 return
             }

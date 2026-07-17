@@ -158,15 +158,15 @@ struct LoggingConfigurationView: View {
 
     private func categoryDescription(for category: LogCategory) -> String {
         switch category {
-        case .network: return "Network operations, API calls"
-        case .ui: return "User interface, view updates"
-        case .data: return "Data operations, repository"
-        case .auth: return "Authentication, login"
-        case .performance: return "Performance metrics, timing"
-        case .general: return "General logic, use cases"
-        case .manual: return "PDF manual system"
-        case .viewModel: return "View model layer, state"
-        case .sync: return "Synchronization operations"
+        case .network: return String(localized: "Network operations, API calls")
+        case .ui: return String(localized: "User interface, view updates")
+        case .data: return String(localized: "Data operations, repository")
+        case .auth: return String(localized: "Authentication, login")
+        case .performance: return String(localized: "Performance metrics, timing")
+        case .general: return String(localized: "General logic, use cases")
+        case .manual: return String(localized: "PDF manual system")
+        case .viewModel: return String(localized: "View model layer, state")
+        case .sync: return String(localized: "Synchronization operations")
         }
     }
 
@@ -363,15 +363,15 @@ struct CategoryDetailView: View {
 
     private var categoryDescription: String {
         switch category {
-        case .network: return "Netzwerk-Operationen, API-Aufrufe"
-        case .ui: return "Benutzeroberfläche, View-Updates"
-        case .data: return "Daten-Operationen, Repository"
-        case .auth: return "Authentifizierung, Login"
-        case .performance: return "Leistungs-Metriken, Timing"
-        case .general: return "Allgemeine Logik, Use Cases"
-        case .manual: return "PDF-Manual System"
-        case .viewModel: return "View-Model Layer, State"
-        case .sync: return "Synchronisations-Operationen"
+        case .network: return String(localized: "Network operations and API calls")
+        case .ui: return String(localized: "User interface and view updates")
+        case .data: return String(localized: "Data operations and repositories")
+        case .auth: return String(localized: "Authentication and login")
+        case .performance: return String(localized: "Performance metrics and timing")
+        case .general: return String(localized: "General logic and use cases")
+        case .manual: return String(localized: "PDF manual system")
+        case .viewModel: return String(localized: "View model layer and state")
+        case .sync: return String(localized: "Synchronization operations")
         }
     }
 

@@ -1,0 +1,435 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "© Riley Testut. Licensed under the AGPL-3.0 license." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© Riley Testut. Lizensiert unter AGPL-3.0."
+          }
+        }
+      }
+    },
+    "Authentication and login" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authentifizierung, Login"
+          }
+        }
+      }
+    },
+    "Authentication, login" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authentifizierung, Login"
+          }
+        }
+      }
+    },
+    "BIOS files are downloaded from the RomM server and stored in Documents/LibretroSystem." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIOS-Dateien werden vom ROMM-Server bezogen und unter Documents/LibretroSystem abgelegt."
+          }
+        }
+      }
+    },
+    "Close" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schließen"
+          }
+        }
+      }
+    },
+    "Cloud Save Sync" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud-Sync für Saves"
+          }
+        }
+      }
+    },
+    "Data operations and repositories" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daten-Operationen, Repository"
+          }
+        }
+      }
+    },
+    "Data operations, repository" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daten-Operationen, Repository"
+          }
+        }
+      }
+    },
+    "Download" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden"
+          }
+        }
+      }
+    },
+    "Dynamic library not found: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dylib nicht gefunden: %1$@"
+          }
+        }
+      }
+    },
+    "Emulator Engines" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emulator-Engines"
+          }
+        }
+      }
+    },
+    "General logic and use cases" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allgemeine Logik, Use Cases"
+          }
+        }
+      }
+    },
+    "General logic, use cases" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allgemeine Logik, Use Cases"
+          }
+        }
+      }
+    },
+    "Hash verified" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "verifiziert"
+          }
+        }
+      }
+    },
+    "Libretro Error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Libretro Fehler"
+          }
+        }
+      }
+    },
+    "Libretro symbol not found: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Libretro-Symbol fehlt: %1$@"
+          }
+        }
+      }
+    },
+    "Licenses" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenzen"
+          }
+        }
+      }
+    },
+    "Loading %@…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lade %1$@ …"
+          }
+        }
+      }
+    },
+    "Local %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokal %1$@"
+          }
+        }
+      }
+    },
+    "Missing locally · File unavailable on the server." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fehlt lokal · Server hat diese Datei nicht."
+          }
+        }
+      }
+    },
+    "Missing locally · Platform not found on the RomM server." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fehlt lokal · Plattform nicht im ROMM-Server gefunden."
+          }
+        }
+      }
+    },
+    "Missing locally · Server: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fehlt lokal · Server: %1$@"
+          }
+        }
+      }
+    },
+    "Network operations and API calls" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Netzwerk-Operationen, API-Aufrufe"
+          }
+        }
+      }
+    },
+    "Network operations, API calls" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Netzwerk-Operationen, API-Aufrufe"
+          }
+        }
+      }
+    },
+    "No BIOS requirements configured." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine BIOS-Anforderungen konfiguriert."
+          }
+        }
+      }
+    },
+    "PCSX ReARMed can start when at least one regional variant (SCPH-5500/5501/5502) is available." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PCSX ReARMed startet bereits, wenn mindestens eine Regionalvariante (SCPH-5500/5501/5502) vorliegt."
+          }
+        }
+      }
+    },
+    "PDF manual system" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF-Manual System"
+          }
+        }
+      }
+    },
+    "Performance metrics and timing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leistungs-Metriken, Timing"
+          }
+        }
+      }
+    },
+    "Performance metrics, timing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leistungs-Metriken, Timing"
+          }
+        }
+      }
+    },
+    "Required BIOS files are missing for %@: %@. Download them in Settings → BIOS Files." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIOS fehlt für %1$@: %2$@. In Einstellungen → BIOS Files herunterladen."
+          }
+        }
+      }
+    },
+    "retro_load_game failed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "retro_load_game ist fehlgeschlagen."
+          }
+        }
+      }
+    },
+    "Search failed: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche fehlgeschlagen: %1$@"
+          }
+        }
+      }
+    },
+    "Sync game saves and save states with the RomM server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spielstände und Save States mit RomM-Server synchronisieren"
+          }
+        }
+      }
+    },
+    "Synchronization operations" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisations-Operationen"
+          }
+        }
+      }
+    },
+    "The server does not have %@." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server hat keine Datei für %1$@."
+          }
+        }
+      }
+    },
+    "User interface and view updates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzeroberfläche, View-Updates"
+          }
+        }
+      }
+    },
+    "User interface, view updates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzeroberfläche, View-Updates"
+          }
+        }
+      }
+    },
+    "View model layer and state" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View-Model Layer, State"
+          }
+        }
+      }
+    },
+    "View model layer, state" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View-Model Layer, State"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

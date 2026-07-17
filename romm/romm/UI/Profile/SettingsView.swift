@@ -140,7 +140,7 @@ struct SettingsView: View {
                 NavigationLink(destination: LicensesView()) {
                     HStack {
                         Image(systemName: "doc.text")
-                        Text("Lizenzen")
+                        Text("Licenses")
                     }
                 }
             }
@@ -179,8 +179,8 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "icloud.and.arrow.up")
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Cloud-Sync für Saves")
-                                    Text("Spielstände und Save States mit RomM-Server synchronisieren")
+                                    Text("Cloud Save Sync")
+                                    Text("Sync game saves and save states with the RomM server")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
