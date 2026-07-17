@@ -88,6 +88,9 @@ final class LibretroSession: NSObject {
                 saveDir: saveDir
             )
             frontend.startRunLoop()
+        } catch let error as LibretroFrontend.FrontendError {
+            print("[Libretro] start failed: \(error.diagnosticDescription)")
+            viewController.showError(error.localizedDescription)
         } catch {
             print("[Libretro] start failed: \(error.localizedDescription)")
             viewController.showError(error.localizedDescription)

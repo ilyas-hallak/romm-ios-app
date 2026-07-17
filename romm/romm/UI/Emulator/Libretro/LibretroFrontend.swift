@@ -87,6 +87,14 @@ final class LibretroFrontend {
             case .loadGameFailed: return String(localized: "retro_load_game failed.")
             }
         }
+
+        var diagnosticDescription: String {
+            switch self {
+            case .dylibNotFound(let path): return "Dylib nicht gefunden: \(path)"
+            case .symbolMissing(let name): return "Libretro-Symbol fehlt: \(name)"
+            case .loadGameFailed: return "retro_load_game ist fehlgeschlagen."
+            }
+        }
     }
 
     func load(corePath: String, gamePath: String, systemDir: String, saveDir: String) throws {
