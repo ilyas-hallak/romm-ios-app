@@ -7,7 +7,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "© Riley Testut. Lizensiert unter AGPL-3.0."
+            "value" : "© Riley Testut. Lizenziert unter der AGPL-3.0-Lizenz."
           }
         }
       }
@@ -18,7 +18,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Authentifizierung, Login"
+            "value" : "Authentifizierung und Anmeldung"
           }
         }
       }
@@ -29,7 +29,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Authentifizierung, Login"
+            "value" : "Authentifizierung, Anmeldung"
           }
         }
       }
@@ -40,7 +40,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "BIOS-Dateien werden vom ROMM-Server bezogen und unter Documents/LibretroSystem abgelegt."
+            "value" : "BIOS-Dateien werden vom RomM-Server heruntergeladen und unter Documents/LibretroSystem gespeichert."
           }
         }
       }
@@ -73,7 +73,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Daten-Operationen, Repository"
+            "value" : "Datenoperationen und Repositories"
           }
         }
       }
@@ -84,7 +84,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Daten-Operationen, Repository"
+            "value" : "Datenoperationen, Repository"
           }
         }
       }
@@ -95,7 +95,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Laden"
+            "value" : "Herunterladen"
           }
         }
       }
@@ -106,7 +106,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dylib nicht gefunden: %1$@"
+            "value" : "Dynamische Bibliothek nicht gefunden: %1$@"
           }
         }
       }
@@ -128,7 +128,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allgemeine Logik, Use Cases"
+            "value" : "Allgemeine Logik und Anwendungsfälle"
           }
         }
       }
@@ -139,7 +139,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allgemeine Logik, Use Cases"
+            "value" : "Allgemeine Logik, Anwendungsfälle"
           }
         }
       }
@@ -150,7 +150,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "verifiziert"
+            "value" : "Hash verifiziert"
           }
         }
       }
@@ -161,7 +161,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Libretro Fehler"
+            "value" : "Libretro-Fehler"
           }
         }
       }
@@ -216,7 +216,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fehlt lokal · Server hat diese Datei nicht."
+            "value" : "Lokal nicht vorhanden · Datei auf dem Server nicht verfügbar."
           }
         }
       }
@@ -227,7 +227,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fehlt lokal · Plattform nicht im ROMM-Server gefunden."
+            "value" : "Lokal nicht vorhanden · Plattform auf dem RomM-Server nicht gefunden."
           }
         }
       }
@@ -238,7 +238,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fehlt lokal · Server: %1$@"
+            "value" : "Lokal nicht vorhanden · Server: %1$@"
           }
         }
       }
@@ -249,7 +249,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Netzwerk-Operationen, API-Aufrufe"
+            "value" : "Netzwerkoperationen und API-Aufrufe"
           }
         }
       }
@@ -260,7 +260,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Netzwerk-Operationen, API-Aufrufe"
+            "value" : "Netzwerkoperationen, API-Aufrufe"
           }
         }
       }
@@ -293,7 +293,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "PDF-Manual System"
+            "value" : "PDF-Handbuchsystem"
           }
         }
       }
@@ -304,7 +304,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Leistungs-Metriken, Timing"
+            "value" : "Leistungsmetriken und Zeitmessung"
           }
         }
       }
@@ -315,7 +315,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Leistungs-Metriken, Timing"
+            "value" : "Leistungsmetriken, Zeitmessung"
           }
         }
       }
@@ -326,7 +326,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "BIOS fehlt für %1$@: %2$@. In Einstellungen → BIOS Files herunterladen."
+            "value" : "Erforderliche BIOS-Dateien fehlen für %1$@: %2$@. Unter Einstellungen → BIOS-Dateien herunterladen."
           }
         }
       }
@@ -359,7 +359,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Spielstände und Save States mit RomM-Server synchronisieren"
+            "value" : "Spielstände und Speicherzustände mit dem RomM-Server synchronisieren"
           }
         }
       }
@@ -370,7 +370,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Synchronisations-Operationen"
+            "value" : "Synchronisierungsvorgänge"
           }
         }
       }
@@ -392,7 +392,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Benutzeroberfläche, View-Updates"
+            "value" : "Benutzeroberfläche und Ansichtsaktualisierungen"
           }
         }
       }
@@ -403,7 +403,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Benutzeroberfläche, View-Updates"
+            "value" : "Benutzeroberfläche, Ansichtsaktualisierungen"
           }
         }
       }
@@ -414,7 +414,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "View-Model Layer, State"
+            "value" : "ViewModel-Schicht und Zustand"
           }
         }
       }
@@ -425,7 +425,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "View-Model Layer, State"
+            "value" : "ViewModel-Schicht, Zustand"
           }
         }
       }
