@@ -314,21 +314,30 @@ final class LibretroGameViewController: UIViewController {
             .forEach { view.removeConstraint($0) }
 
         let widthLimit = videoView.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor)
-        let heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor)
         let widthFill = videoView.widthAnchor.constraint(equalTo: view.widthAnchor)
         widthFill.priority = .defaultHigh
-        let heightFill = videoView.heightAnchor.constraint(equalTo: view.heightAnchor)
-        heightFill.priority = .defaultHigh
 
-        // Vertical placement follows the user's screen-position preference:
-        // `.top` pins the video to the safe-area top (useful for physical
-        // gamepad cases); `.center` keeps it vertically centered (default).
+        // Vertical placement + height follow the user's screen-position
+        // preference. `.top` pins to the safe-area top and limits the video to
+        // a user-chosen fraction of the safe-area height (leaving the rest free
+        // for a physical gamepad case). `.center` (aka "Default") fills the
+        // whole view and centers, as before — the height fraction is ignored.
         let verticalConstraint: NSLayoutConstraint
+        let heightLimit: NSLayoutConstraint
+        let heightFill: NSLayoutConstraint
         switch screenPositionPreference.position {
         case .top:
-            verticalConstraint = videoView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+            let fraction = CGFloat(min(1.0, max(0.3, screenPositionPreference.heightFraction)))
+            let guide = view.safeAreaLayoutGuide
+            verticalConstraint = videoView.topAnchor.constraint(equalTo: guide.topAnchor)
+            heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: guide.heightAnchor, multiplier: fraction)
+            heightFill = videoView.heightAnchor.constraint(equalTo: guide.heightAnchor, multiplier: fraction)
+            heightFill.priority = .defaultHigh
         case .center:
             verticalConstraint = videoView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor)
+            heightFill = videoView.heightAnchor.constraint(equalTo: view.heightAnchor)
+            heightFill.priority = .defaultHigh
         }
 
         NSLayoutConstraint.activate([
