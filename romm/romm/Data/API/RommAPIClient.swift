@@ -338,9 +338,20 @@ class RommAPIClient: PRommAPIClient {
                     }
                     // Move temp file to a persistent location BEFORE the handler returns —
                     // iOS deletes the URLSession temp file as soon as this handler exits.
-                    let persistentURL = FileManager.default.temporaryDirectory
+                    // The URLSession temp file carries no meaningful extension, so derive it
+                    // from the Content-Disposition filename (falling back to the requested
+                    // path, then the temp file) to preserve e.g. `.zip` for archive ROMs.
+                    let contentDisposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition")
+                    let fileExtension = Self.downloadFileExtension(
+                        contentDisposition: contentDisposition,
+                        requestedPath: path,
+                        tempURL: tempURL
+                    )
+                    var persistentURL = FileManager.default.temporaryDirectory
                         .appendingPathComponent(UUID().uuidString)
-                        .appendingPathExtension(tempURL.pathExtension)
+                    if !fileExtension.isEmpty {
+                        persistentURL.appendPathExtension(fileExtension)
+                    }
                     do {
                         try FileManager.default.moveItem(at: tempURL, to: persistentURL)
                     } catch {
@@ -623,6 +634,56 @@ class RommAPIClient: PRommAPIClient {
         }
 
         return isCloudflare
+    }
+
+    // MARK: - Download filename helpers
+
+    /// Resolves the file extension to use for a persisted download.
+    /// Prefers the `Content-Disposition` filename (the only reliable source of the real
+    /// server filename), then the requested path, then the URLSession temp file — which
+    /// normally has no meaningful extension. Returns an empty string when none is found.
+    static func downloadFileExtension(
+        contentDisposition: String?,
+        requestedPath: String,
+        tempURL: URL
+    ) -> String {
+        if let filename = filename(fromContentDisposition: contentDisposition) {
+            let ext = (filename as NSString).pathExtension
+            if !ext.isEmpty { return ext }
+        }
+
+        let requestedExtension = (requestedPath as NSString).pathExtension
+        if !requestedExtension.isEmpty { return requestedExtension }
+
+        return tempURL.pathExtension
+    }
+
+    /// Parses a filename from a `Content-Disposition` header value, handling both the
+    /// RFC 5987 `filename*=` form (optionally with a charset'lang'' prefix) and the plain
+    /// `filename=` form, with or without surrounding quotes.
+    static func filename(fromContentDisposition value: String?) -> String? {
+        guard let value else { return nil }
+
+        let parameters = value.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+
+        // RFC 5987 extended form takes precedence: filename*=UTF-8''name.zip
+        if let param = parameters.first(where: { $0.lowercased().hasPrefix("filename*=") }) {
+            var raw = String(param.dropFirst("filename*=".count))
+            if let lastQuote = raw.range(of: "''", options: .backwards) {
+                raw = String(raw[lastQuote.upperBound...])
+            }
+            let decoded = raw.removingPercentEncoding ?? raw
+            let unquoted = decoded.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            if !unquoted.isEmpty { return unquoted }
+        }
+
+        if let param = parameters.first(where: { $0.lowercased().hasPrefix("filename=") }) {
+            let raw = String(param.dropFirst("filename=".count))
+            let unquoted = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            if !unquoted.isEmpty { return unquoted }
+        }
+
+        return nil
     }
 
 }
