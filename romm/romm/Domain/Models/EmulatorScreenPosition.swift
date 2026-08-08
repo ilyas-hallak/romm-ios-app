@@ -11,7 +11,7 @@ enum EmulatorScreenPosition: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .center: return "Center"
+        case .center: return "Default"
         case .top:    return "Top"
         }
     }
