@@ -116,12 +116,20 @@ final class CloudSaveSyncService {
             let ordered = unnamed.sorted {
                 $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt < $1.updatedAt
             }
+            // Cap at the highest slot the UI can display (slots 0…20 = 21 total,
+            // see EmulatorMenuSheet). Anything beyond that has no visible slot.
+            let maxSlot = 20
             var syntheticSlotByStateId: [Int: Int] = [:]
             var nextSlot = 0
+            var overflow = 0
             for s in ordered {
                 while realSlots.contains(nextSlot) { nextSlot += 1 }
+                guard nextSlot <= maxSlot else { overflow += 1; continue }
                 syntheticSlotByStateId[s.id] = nextSlot
                 realSlots.insert(nextSlot)
+            }
+            if overflow > 0 {
+                print("[CloudSync] \(overflow) server state(s) skipped: no free slot (max \(maxSlot + 1))")
             }
 
             for s in states {
