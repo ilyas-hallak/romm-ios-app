@@ -95,8 +95,37 @@ final class CloudSaveSyncService {
     private func pullStates() async {
         do {
             let states = try await listStatesUseCase.execute(romId: config.romId)
+
+            // First pass: map states with a recognizable `slotN.state` name to
+            // their real slot. States with any other server-side name (e.g.
+            // "Chrono Trigger (USA) [2026-05-06 ...].state") are collected so we
+            // can assign them synthetic slots that never collide with real ones.
+            var realSlots = Set<Int>()
+            var unnamed: [StateSchema] = []
             for s in states {
-                guard let slot = Self.slotFromFileName(s.fileName) else { continue }
+                if let slot = Self.slotFromFileName(s.fileName) {
+                    realSlots.insert(slot)
+                } else {
+                    unnamed.append(s)
+                }
+            }
+
+            // Deterministically order the unnamed states (by updatedAt, then id)
+            // so the same server state maps to the same synthetic slot across
+            // launches, then hand each the next free slot index.
+            let ordered = unnamed.sorted {
+                $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt < $1.updatedAt
+            }
+            var syntheticSlotByStateId: [Int: Int] = [:]
+            var nextSlot = 0
+            for s in ordered {
+                while realSlots.contains(nextSlot) { nextSlot += 1 }
+                syntheticSlotByStateId[s.id] = nextSlot
+                realSlots.insert(nextSlot)
+            }
+
+            for s in states {
+                guard let slot = Self.slotFromFileName(s.fileName) ?? syntheticSlotByStateId[s.id] else { continue }
                 serverStateIdBySlot[slot] = s.id
 
                 let localMTime = saveStore.stateModifiedAt(romId: config.romId, slot: slot)
