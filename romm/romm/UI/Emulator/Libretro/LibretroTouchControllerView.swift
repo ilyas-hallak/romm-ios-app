@@ -165,6 +165,8 @@ final class LibretroTouchControllerView: UIView {
     private let hitSlop: CGFloat = 28
     private let dpadSlop: CGFloat = 32
     private let haptic = UIImpactFeedbackGenerator(style: .medium)
+    /// Slightly softer tick fired when a finger lifts off a button (like Ignited).
+    private let releaseHaptic = UIImpactFeedbackGenerator(style: .light)
 
     // MARK: - Init
 
@@ -174,6 +176,13 @@ final class LibretroTouchControllerView: UIView {
         backgroundColor = .clear
         buildLayout()
         haptic.prepare()
+        releaseHaptic.prepare()
+    }
+
+    /// Fires the release haptic if the user hasn't disabled it.
+    private func fireReleaseHaptic() {
+        guard HapticsPreferences.onRelease else { return }
+        releaseHaptic.impactOccurred(intensity: 0.7)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -381,6 +390,7 @@ final class LibretroTouchControllerView: UIView {
                 if !stillHeld {
                     prev.isPressed = false
                     LibretroFrontend.shared.setButton(prev.button, pressed: false)
+                    fireReleaseHaptic()
                 }
             }
             if let hit {
@@ -409,9 +419,13 @@ final class LibretroTouchControllerView: UIView {
             LibretroFrontend.shared.setButton(b, pressed: true)
         }
         currentDpadButtons = target
-        // Leichter Tick bei Richtungswechsel — nicht bei Release auf .none.
-        if direction != previous, direction != .none {
-            haptic.impactOccurred(intensity: 0.85)
+        // Leichter Tick bei Richtungswechsel; weicher Release-Tick beim Loslassen.
+        if direction != previous {
+            if direction == .none {
+                if previous != .none { fireReleaseHaptic() }
+            } else {
+                haptic.impactOccurred(intensity: 0.85)
+            }
         }
     }
 }
