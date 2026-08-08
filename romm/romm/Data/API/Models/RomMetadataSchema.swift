@@ -57,6 +57,22 @@ public struct RomMetadataSchema: Codable, JSONEncodable, Hashable {
         averageRating = try container.decodeIfPresent(Double.self, forKey: .averageRating)
     }
 
+    /// Fallback used when the server omits or nulls the `metadatum` object entirely
+    /// (observed on some RomM 5.x detail responses for sparsely-identified ROMs).
+    static func empty(romId: Int) -> RomMetadataSchema {
+        RomMetadataSchema(
+            romId: romId,
+            genres: [],
+            franchises: [],
+            collections: [],
+            companies: [],
+            gameModes: [],
+            ageRatings: [],
+            firstReleaseDate: nil,
+            averageRating: nil
+        )
+    }
+
     // Encodable protocol methods
 
     public func encode(to encoder: Encoder) throws {

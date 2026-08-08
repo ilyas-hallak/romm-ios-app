@@ -94,6 +94,31 @@ public struct RomUserSchema: Codable, JSONEncodable, Hashable {
         userUsername = container.decodeFlexibleString(forKey: .userUsername, default: "")
     }
 
+    /// Fallback used when the server omits or nulls the `rom_user` object entirely
+    /// (observed on some RomM 5.x detail responses). Keeps detail decoding from
+    /// failing outright, which would otherwise surface as a generic network error.
+    static func empty(romId: Int) -> RomUserSchema {
+        RomUserSchema(
+            id: 0,
+            userId: 0,
+            romId: romId,
+            createdAt: .distantPast,
+            updatedAt: .distantPast,
+            lastPlayed: nil,
+            noteRawMarkdown: nil,
+            noteIsPublic: nil,
+            isMainSibling: nil,
+            backlogged: false,
+            nowPlaying: false,
+            hidden: false,
+            rating: 0,
+            difficulty: 0,
+            completion: 0,
+            status: nil,
+            userUsername: ""
+        )
+    }
+
     // Encodable protocol methods
 
     public func encode(to encoder: Encoder) throws {
