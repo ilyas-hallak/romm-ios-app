@@ -185,15 +185,30 @@ class LocalROMDownloadService: PLocalROMDownloadService {
         progressHandler: @escaping (Int64) -> Void
     ) async throws {
         let encodedFileName = encodePathComponent(fileName)
-        let path = "api/roms/\(romId)/content/\(encodedFileName)"
+        // RomM 5.1 requires the filename in the path; RomM 5.0 used the bare
+        // /content endpoint. Try the new format first and fall back to the
+        // legacy one on 404 so downloads work against both server versions.
+        let newPath = "api/roms/\(romId)/content/\(encodedFileName)"
+        let legacyPath = "api/roms/\(romId)/content"
 
         let tempFileURL: URL
         do {
-            tempFileURL = try await apiClient.downloadFile(path: path) { downloadedBytes, _ in
+            tempFileURL = try await apiClient.downloadFile(path: newPath) { downloadedBytes, _ in
                 progressHandler(downloadedBytes)
             }
-        } catch {
-            throw LocalROMDownloadError.downloadFailed(error.localizedDescription)
+        } catch let error {
+            if case APIClientError.invalidResponse(404, _) = error {
+                print("📥 /content/{filename} returned 404 — falling back to legacy /content (RomM 5.0)")
+                do {
+                    tempFileURL = try await apiClient.downloadFile(path: legacyPath) { downloadedBytes, _ in
+                        progressHandler(downloadedBytes)
+                    }
+                } catch {
+                    throw LocalROMDownloadError.downloadFailed(error.localizedDescription)
+                }
+            } else {
+                throw LocalROMDownloadError.downloadFailed(error.localizedDescription)
+            }
         }
 
         // Move file to destination
