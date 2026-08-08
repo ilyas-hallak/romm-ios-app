@@ -33,6 +33,7 @@ class MockDependencyFactory: PDependencyFactory {
     // Emulator engine
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = InMemoryLibretroAspectRatioPreference()
+    lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = InMemoryEmulatorScreenPositionPreference()
     
     init(
         authRepository: PAuthRepository? = nil,
@@ -365,6 +366,7 @@ class MockDependencyFactory: PDependencyFactory {
             saveStates: makeEmulatorSaveStatesUseCase(),
             biosSync: makeBIOSSyncUseCase(),
             aspectRatioPreference: libretroAspectRatioPreference,
+            screenPositionPreference: emulatorScreenPositionPreference,
             factory: self
         )
     }
