@@ -71,6 +71,9 @@ struct BigRomCardView: View {
                 }
                 .frame(height: 180)
                 .frame(maxWidth: .infinity)
+                // Clip wide covers to the card bounds so a `.fill` cover can't
+                // overflow its frame and bleed into neighbouring grid cards.
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 
                 // Favorite badge - top right
@@ -157,10 +160,12 @@ struct BigRomCardView: View {
                     radius: 8, x: 0, y: 4
                 )
         )
+        // Subtle border so each card reads as a distinct frame and wide
+        // covers stay visually contained within their own card.
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(.separator).opacity(0.3), lineWidth: 0.8)
+                .stroke(Color(.separator).opacity(0.6), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
