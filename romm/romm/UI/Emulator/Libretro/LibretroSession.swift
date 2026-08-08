@@ -9,6 +9,7 @@ final class LibretroSession: NSObject {
     private let romId: Int
     private let saveStates: PEmulatorSaveStatesUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
+    private let screenPositionPreference: PEmulatorScreenPositionPreference
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
 
@@ -22,6 +23,7 @@ final class LibretroSession: NSObject {
         romId: Int,
         saveStates: PEmulatorSaveStatesUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
+        screenPositionPreference: PEmulatorScreenPositionPreference,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -29,11 +31,13 @@ final class LibretroSession: NSObject {
         self.romId = romId
         self.saveStates = saveStates
         self.aspectRatioPreference = aspectRatioPreference
+        self.screenPositionPreference = screenPositionPreference
         self.cloudSync = cloudSync
         self.viewController = LibretroGameViewController(
             core: core,
             gameURL: gameURL,
-            aspectRatioPreference: aspectRatioPreference
+            aspectRatioPreference: aspectRatioPreference,
+            screenPositionPreference: screenPositionPreference
         )
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in
@@ -221,6 +225,7 @@ final class LibretroGameViewController: UIViewController {
     private let core: LibretroCore
     private let gameURL: URL
     private let aspectRatioPreference: PLibretroAspectRatioPreference
+    private let screenPositionPreference: PEmulatorScreenPositionPreference
     let videoView = LibretroVideoView()
     let controllerView = LibretroTouchControllerView()
     private let errorLabel = UILabel()
@@ -229,11 +234,13 @@ final class LibretroGameViewController: UIViewController {
     init(
         core: LibretroCore,
         gameURL: URL,
-        aspectRatioPreference: PLibretroAspectRatioPreference
+        aspectRatioPreference: PLibretroAspectRatioPreference,
+        screenPositionPreference: PEmulatorScreenPositionPreference
     ) {
         self.core = core
         self.gameURL = gameURL
         self.aspectRatioPreference = aspectRatioPreference
+        self.screenPositionPreference = screenPositionPreference
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -313,9 +320,20 @@ final class LibretroGameViewController: UIViewController {
         let heightFill = videoView.heightAnchor.constraint(equalTo: view.heightAnchor)
         heightFill.priority = .defaultHigh
 
+        // Vertical placement follows the user's screen-position preference:
+        // `.top` pins the video to the safe-area top (useful for physical
+        // gamepad cases); `.center` keeps it vertically centered (default).
+        let verticalConstraint: NSLayoutConstraint
+        switch screenPositionPreference.position {
+        case .top:
+            verticalConstraint = videoView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+        case .center:
+            verticalConstraint = videoView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        }
+
         NSLayoutConstraint.activate([
             videoView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            videoView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            verticalConstraint,
             widthLimit, heightLimit, widthFill, heightFill
         ])
 
