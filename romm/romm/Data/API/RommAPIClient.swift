@@ -338,9 +338,20 @@ class RommAPIClient: PRommAPIClient {
                     }
                     // Move temp file to a persistent location BEFORE the handler returns —
                     // iOS deletes the URLSession temp file as soon as this handler exits.
-                    let persistentURL = FileManager.default.temporaryDirectory
+                    // The URLSession temp file carries no meaningful extension, so derive it
+                    // from the Content-Disposition filename (falling back to the requested
+                    // path, then the temp file) to preserve e.g. `.zip` for archive ROMs.
+                    let contentDisposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition")
+                    let fileExtension = DownloadFilename.fileExtension(
+                        contentDisposition: contentDisposition,
+                        requestedPath: path,
+                        tempURL: tempURL
+                    )
+                    var persistentURL = FileManager.default.temporaryDirectory
                         .appendingPathComponent(UUID().uuidString)
-                        .appendingPathExtension(tempURL.pathExtension)
+                    if !fileExtension.isEmpty {
+                        persistentURL.appendPathExtension(fileExtension)
+                    }
                     do {
                         try FileManager.default.moveItem(at: tempURL, to: persistentURL)
                     } catch {
