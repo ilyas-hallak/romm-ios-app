@@ -63,7 +63,7 @@ final class BIOSSyncUseCase: PBIOSSyncUseCase {
     func download(status: BIOSFileStatus, into systemDir: URL) async throws {
         guard case .available(let id, _, _, _) = status.server else {
             throw NSError(domain: "BIOSSync", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Server has no file for \(status.requirement.fileName)."
+                NSLocalizedDescriptionKey: String(localized: "The server does not have \(status.requirement.fileName).")
             ])
         }
         let data = try await apiClient.downloadFirmwareContent(id: id, fileName: status.requirement.fileName)

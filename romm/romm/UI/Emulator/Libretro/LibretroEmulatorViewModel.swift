@@ -17,6 +17,7 @@ final class LibretroEmulatorViewModel {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let biosSync: PBIOSSyncUseCase
     let aspectRatioPreference: PLibretroAspectRatioPreference
+    let screenPositionPreference: PEmulatorScreenPositionPreference
     private let factory: PDependencyFactory
     private let logger = Logger.viewModel
 
@@ -28,6 +29,7 @@ final class LibretroEmulatorViewModel {
         saveStates: PEmulatorSaveStatesUseCase,
         biosSync: PBIOSSyncUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
+        screenPositionPreference: PEmulatorScreenPositionPreference,
         factory: PDependencyFactory
     ) {
         self.rom = rom
@@ -37,6 +39,7 @@ final class LibretroEmulatorViewModel {
         self.saveStates = saveStates
         self.biosSync = biosSync
         self.aspectRatioPreference = aspectRatioPreference
+        self.screenPositionPreference = screenPositionPreference
         self.factory = factory
     }
 
@@ -46,7 +49,7 @@ final class LibretroEmulatorViewModel {
             let missing = await biosSync.missingMandatory(for: core)
             if !missing.isEmpty {
                 let names = missing.map { $0.fileName }.joined(separator: ", ")
-                errorMessage = "BIOS missing for \(core.displayName): \(names). Download it in Settings → BIOS Files."
+                errorMessage = String(localized: "Required BIOS files are missing for \(core.displayName): \(names). Download them in Settings → BIOS Files.")
                 isLoading = false
                 return
             }
@@ -81,6 +84,7 @@ final class LibretroEmulatorViewModel {
                 romId: rom.id,
                 saveStates: saveStates,
                 aspectRatioPreference: aspectRatioPreference,
+                screenPositionPreference: screenPositionPreference,
                 cloudSync: cloudSync
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }

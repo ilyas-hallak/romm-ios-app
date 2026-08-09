@@ -47,16 +47,16 @@ struct BIOSRow: View {
             case .available(_, let size, _, _):
                 Text("Missing locally · Server: \(formatBytes(size))").font(.caption2).foregroundStyle(.secondary)
             case .missing:
-                Text("Missing locally · Server does not have this file.").font(.caption2).foregroundStyle(.secondary)
+                Text("Missing locally · File unavailable on the server.").font(.caption2).foregroundStyle(.secondary)
             case .unknown:
-                Text("Missing locally · Platform not found on the ROMM server.").font(.caption2).foregroundStyle(.secondary)
+                Text("Missing locally · Platform not found on the RomM server.").font(.caption2).foregroundStyle(.secondary)
             }
         case .present(let md5, let size):
             HStack(spacing: 8) {
                 Text("Local \(formatBytes(size))")
                 Text("MD5 \(md5.prefix(8))…")
                 if status.localHashLooksValid {
-                    Text("verified").foregroundStyle(.green)
+                    Text("Hash verified").foregroundStyle(.green)
                 } else {
                     Text("Hash unverified").foregroundStyle(.orange)
                 }

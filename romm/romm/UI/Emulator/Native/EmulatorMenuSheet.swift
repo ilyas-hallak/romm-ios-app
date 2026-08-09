@@ -10,7 +10,9 @@ struct EmulatorMenuSheet: View {
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var showQuitConfirmation = false
 
-    private let slots = Array(1...20)
+    // Slots are 0-based to match the save-state storage / cloud-sync layer
+    // (files are `slot0.state`…`slot20.state`). Slot 0 is a real, usable slot.
+    private let slots = Array(0...20)
 
     var body: some View {
         NavigationStack {

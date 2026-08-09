@@ -13,7 +13,7 @@ class HeartbeatRepository: PHeartbeatRepository {
     // MARK: - Constants
 
     let minSupportedServerVersion = "4.1.0"
-    let maxSupportedServerVersion = "5.0.0"
+    let maxSupportedServerVersion = "5.1.0"
     let versionCheckThrottleSeconds: TimeInterval = 30
 
     // MARK: - UserDefaults Keys
@@ -148,7 +148,7 @@ class HeartbeatRepository: PHeartbeatRepository {
                 )
             }
 
-            if isAboveMaximum(serverVersion) {
+            if compareVersions(serverVersion, maxSupportedServerVersion) > 0 {
                 logger.warning(
                     "Server version \(serverVersion) is above maximum \(maxSupportedServerVersion)")
                 throw HeartbeatError.serverVersionTooHigh(
@@ -201,25 +201,8 @@ class HeartbeatRepository: PHeartbeatRepository {
 
     func isVersionCompatible(_ version: String) -> Bool {
         let aboveMin = compareVersions(version, minSupportedServerVersion) >= 0
-        let belowMax = !isAboveMaximum(version)
+        let belowMax = compareVersions(version, maxSupportedServerVersion) <= 0
         return aboveMin && belowMax
-    }
-
-    /// Whether the version exceeds the supported maximum. Only `major.minor` is
-    /// compared, so patch releases within a supported minor line (e.g. 5.0.x)
-    /// are accepted — patch releases don't introduce breaking changes.
-    private func isAboveMaximum(_ version: String) -> Bool {
-        compareVersions(majorMinor(version), majorMinor(maxSupportedServerVersion)) > 0
-    }
-
-    /// Returns the `major.minor` portion of a version string (e.g. "5.0.7" → "5.0").
-    /// Non-numeric versions such as "development" are returned unchanged so
-    /// `compareVersions` can apply its special handling.
-    private func majorMinor(_ version: String) -> String {
-        let base = version.split(separator: "-").first.map(String.init) ?? version
-        let parts = base.split(separator: ".")
-        guard parts.count >= 2 else { return version }
-        return parts.prefix(2).joined(separator: ".")
     }
 
     private func compareVersions(_ version1: String, _ version2: String) -> Int {

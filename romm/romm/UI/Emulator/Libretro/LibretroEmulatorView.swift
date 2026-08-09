@@ -22,7 +22,7 @@ struct LibretroEmulatorView: View {
                     .transition(.opacity)
             }
             if viewModel.isLoading {
-                ProgressView("Loading \(viewModel.rom.name) …")
+                ProgressView("Loading \(viewModel.rom.name)…")
                     .foregroundStyle(.white)
             }
             if let error = viewModel.errorMessage {
@@ -90,6 +90,7 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
+    @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
 
     init(
         session: LibretroSession?,
@@ -221,6 +222,17 @@ private struct LibretroMenuSheet: View {
                     aspectRatioPreference.psx = newValue
                     session?.reloadAspectRatio()
                 }
+            }
+            HStack {
+                Text("Release Haptics")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+                Spacer()
+                Toggle("", isOn: $hapticsOnRelease)
+                    .labelsHidden()
+                    .onChange(of: hapticsOnRelease) { _, newValue in
+                        HapticsPreferences.onRelease = newValue
+                    }
             }
         }
     }

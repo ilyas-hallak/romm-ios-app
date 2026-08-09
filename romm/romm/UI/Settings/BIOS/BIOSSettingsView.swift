@@ -15,7 +15,7 @@ struct BIOSSettingsView: View {
             ForEach(viewModel.sections) { section in
                 SwiftUI.Section(header: Text(section.core.displayName)) {
                     if section.statuses.isEmpty {
-                        Text("Keine BIOS-Anforderungen konfiguriert.")
+                        Text("No BIOS requirements configured.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -41,8 +41,8 @@ struct BIOSSettingsView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("BIOS files are fetched from the ROMM server and stored under Documents/LibretroSystem.")
-            Text("PCSX ReARMed already starts once at least one regional variant (SCPH-5500/5501/5502) is present.")
+            Text("BIOS files are downloaded from the RomM server and stored in Documents/LibretroSystem.")
+            Text("PCSX ReARMed can start when at least one regional variant (SCPH-5500/5501/5502) is available.")
         }
         .font(.caption)
     }
