@@ -9,6 +9,7 @@ final class LibretroSession: NSObject {
     private let romId: Int
     private let saveStates: PEmulatorSaveStatesUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
+    private let screenPositionPreference: PEmulatorScreenPositionPreference
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
 
@@ -22,6 +23,7 @@ final class LibretroSession: NSObject {
         romId: Int,
         saveStates: PEmulatorSaveStatesUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
+        screenPositionPreference: PEmulatorScreenPositionPreference,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -29,11 +31,13 @@ final class LibretroSession: NSObject {
         self.romId = romId
         self.saveStates = saveStates
         self.aspectRatioPreference = aspectRatioPreference
+        self.screenPositionPreference = screenPositionPreference
         self.cloudSync = cloudSync
         self.viewController = LibretroGameViewController(
             core: core,
             gameURL: gameURL,
-            aspectRatioPreference: aspectRatioPreference
+            aspectRatioPreference: aspectRatioPreference,
+            screenPositionPreference: screenPositionPreference
         )
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in
@@ -221,6 +225,7 @@ final class LibretroGameViewController: UIViewController {
     private let core: LibretroCore
     private let gameURL: URL
     private let aspectRatioPreference: PLibretroAspectRatioPreference
+    private let screenPositionPreference: PEmulatorScreenPositionPreference
     let videoView = LibretroVideoView()
     let controllerView = LibretroTouchControllerView()
     private let errorLabel = UILabel()
@@ -229,11 +234,13 @@ final class LibretroGameViewController: UIViewController {
     init(
         core: LibretroCore,
         gameURL: URL,
-        aspectRatioPreference: PLibretroAspectRatioPreference
+        aspectRatioPreference: PLibretroAspectRatioPreference,
+        screenPositionPreference: PEmulatorScreenPositionPreference
     ) {
         self.core = core
         self.gameURL = gameURL
         self.aspectRatioPreference = aspectRatioPreference
+        self.screenPositionPreference = screenPositionPreference
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -307,15 +314,35 @@ final class LibretroGameViewController: UIViewController {
             .forEach { view.removeConstraint($0) }
 
         let widthLimit = videoView.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor)
-        let heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor)
         let widthFill = videoView.widthAnchor.constraint(equalTo: view.widthAnchor)
         widthFill.priority = .defaultHigh
-        let heightFill = videoView.heightAnchor.constraint(equalTo: view.heightAnchor)
-        heightFill.priority = .defaultHigh
+
+        // Vertical placement + height follow the user's screen-position
+        // preference. `.top` pins to the safe-area top and limits the video to
+        // a user-chosen fraction of the safe-area height (leaving the rest free
+        // for a physical gamepad case). `.center` (aka "Default") fills the
+        // whole view and centers, as before — the height fraction is ignored.
+        let verticalConstraint: NSLayoutConstraint
+        let heightLimit: NSLayoutConstraint
+        let heightFill: NSLayoutConstraint
+        switch screenPositionPreference.position {
+        case .top:
+            let fraction = CGFloat(min(1.0, max(0.3, screenPositionPreference.heightFraction)))
+            let guide = view.safeAreaLayoutGuide
+            verticalConstraint = videoView.topAnchor.constraint(equalTo: guide.topAnchor)
+            heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: guide.heightAnchor, multiplier: fraction)
+            heightFill = videoView.heightAnchor.constraint(equalTo: guide.heightAnchor, multiplier: fraction)
+            heightFill.priority = .defaultHigh
+        case .center:
+            verticalConstraint = videoView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor)
+            heightFill = videoView.heightAnchor.constraint(equalTo: view.heightAnchor)
+            heightFill.priority = .defaultHigh
+        }
 
         NSLayoutConstraint.activate([
             videoView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            videoView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            verticalConstraint,
             widthLimit, heightLimit, widthFill, heightFill
         ])
 
