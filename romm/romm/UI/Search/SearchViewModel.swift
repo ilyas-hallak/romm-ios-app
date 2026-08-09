@@ -93,7 +93,7 @@ class SearchViewModel {
                 return
             } catch let legacyError {
                 guard !Task.isCancelled else { return }
-                errorMessage = "Suche fehlgeschlagen: \(legacyError.localizedDescription)"
+                errorMessage = String(localized: "Search failed: \(legacyError.localizedDescription)")
                 searchResults = []
             }
         }

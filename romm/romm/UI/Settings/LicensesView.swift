@@ -10,11 +10,11 @@ import SwiftUI
 struct LicensesView: View {
     var body: some View {
         List {
-            Section(header: Text("Emulator-Engines")) {
+            Section(header: Text("Emulator Engines")) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("DeltaCore & GBADeltaCore")
                         .font(.headline)
-                    Text("© Riley Testut. Lizensiert unter AGPL-3.0.")
+                    Text("© Riley Testut. Licensed under the AGPL-3.0 license.")
                         .font(.footnote)
                     Text("https://github.com/rileytestut/DeltaCore")
                         .font(.footnote)
@@ -23,7 +23,7 @@ struct LicensesView: View {
                 .padding(.vertical, 4)
             }
         }
-        .navigationTitle("Lizenzen")
+        .navigationTitle("Licenses")
     }
 }
 

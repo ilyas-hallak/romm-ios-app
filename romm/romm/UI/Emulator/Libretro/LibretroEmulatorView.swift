@@ -22,14 +22,14 @@ struct LibretroEmulatorView: View {
                     .transition(.opacity)
             }
             if viewModel.isLoading {
-                ProgressView("Lade \(viewModel.rom.name) …")
+                ProgressView("Loading \(viewModel.rom.name)…")
                     .foregroundStyle(.white)
             }
             if let error = viewModel.errorMessage {
                 VStack(spacing: 12) {
-                    Text("Libretro Fehler").font(.headline).foregroundStyle(.white)
+                    Text("Libretro Error").font(.headline).foregroundStyle(.white)
                     Text(error).font(.caption).foregroundStyle(.white.opacity(0.7))
-                    Button("Schließen") { dismiss() }
+                    Button("Close") { dismiss() }
                         .buttonStyle(.borderedProminent)
                 }
                 .padding()
