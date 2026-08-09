@@ -42,7 +42,7 @@ class RomDetailViewModel {
     private let checkRomFavoriteStatusUseCase: CheckRomFavoriteStatusUseCase
     private let loadManualUseCase: LoadManualUseCase
     private let getCollectionsUseCase: GetCollectionsUseCase
-    private let checkEmulatorSupportUseCase: PCheckEmulatorSupportUseCase
+    private let platformEngineSupport: PPlatformEngineSupport
     private let launchEmulatorUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
 
@@ -54,7 +54,7 @@ class RomDetailViewModel {
         self.checkRomFavoriteStatusUseCase = factory.makeCheckRomFavoriteStatusUseCase()
         self.loadManualUseCase = factory.makeLoadManualUseCase()
         self.getCollectionsUseCase = factory.makeGetCollectionsUseCase()
-        self.checkEmulatorSupportUseCase = factory.makeCheckEmulatorSupportUseCase()
+        self.platformEngineSupport = factory.makePlatformEngineSupport()
         self.launchEmulatorUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
     }
@@ -296,7 +296,7 @@ class RomDetailViewModel {
             return
         }
 
-        canPlayEmulator = checkEmulatorSupportUseCase.execute(platformSlug: platformSlug)
+        canPlayEmulator = platformEngineSupport.isEmulationAvailable(for: platformSlug)
         logger.debug("Emulator support for '\(platformSlug)': \(canPlayEmulator)")
     }
 

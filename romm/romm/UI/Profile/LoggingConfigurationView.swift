@@ -363,15 +363,15 @@ struct CategoryDetailView: View {
 
     private var categoryDescription: String {
         switch category {
-        case .network: return "Netzwerk-Operationen, API-Aufrufe"
-        case .ui: return "Benutzeroberfläche, View-Updates"
-        case .data: return "Daten-Operationen, Repository"
-        case .auth: return "Authentifizierung, Login"
-        case .performance: return "Leistungs-Metriken, Timing"
-        case .general: return "Allgemeine Logik, Use Cases"
-        case .manual: return "PDF-Manual System"
-        case .viewModel: return "View-Model Layer, State"
-        case .sync: return "Synchronisations-Operationen"
+        case .network: return "Network operations, API calls"
+        case .ui: return "User interface, view updates"
+        case .data: return "Data operations, repository"
+        case .auth: return "Authentication, login"
+        case .performance: return "Performance metrics, timing"
+        case .general: return "General logic, use cases"
+        case .manual: return "PDF manual system"
+        case .viewModel: return "View model layer, state"
+        case .sync: return "Synchronization operations"
         }
     }
 

@@ -7,11 +7,18 @@
 
 import SwiftUI
 
+// MARK: - Focus State
+
+enum SetupField: Hashable {
+    case url, username, password, token
+}
+
 struct SetupView: View {
     let appViewModel: AppViewModel
     @State private var serverURL = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var showPassword = false
     @State private var showConnectionDetails = false
 
     // Connection validation states
@@ -21,8 +28,12 @@ struct SetupView: View {
     @State private var connectionError: String?
     @State private var connectionErrorDetails: String?
     @State private var isErrorExpanded = false
-    @State private var isVersionWarning = false  // true if error is just a warning (incompatible but can proceed)
+    @State private var isVersionWarning = false
     @State private var didAcceptIncompatibleVersion = false
+
+    // Version warning detail text
+    @State private var versionWarningTitle: String?
+    @State private var versionWarningDetails: String?
 
     // Auth capability detection
     @State private var detectedAuthCapability: HeartbeatRepository.AuthCapabilities?
@@ -34,78 +45,85 @@ struct SetupView: View {
     @State private var clientTokenError: String?
     @State private var showQRScanner = false
 
+    // Focus
+    @FocusState private var focusedField: SetupField?
+
     private var connectionLogger: ConnectionLogger { ConnectionLogger.shared }
     private let launchArguments = ProcessInfo.processInfo.arguments
     private var shouldShowLoginForUITests: Bool { launchArguments.contains("-ui_testing_show_login") }
 
+    // MARK: - Computed helpers
+
+    private var isBusy: Bool {
+        appViewModel.appData.isLoading || isExchangingToken || isConnecting
+    }
+
+    private var canSubmit: Bool {
+        guard !isBusy && !serverURL.isEmpty else { return false }
+        switch selectedAuthMethod {
+        case .classic:
+            return !username.isEmpty && !password.isEmpty
+        case .clientToken:
+            return !clientTokenInput.isEmpty
+        }
+    }
+
+    private var hasLoginError: Bool {
+        appViewModel.appData.errorMessage != nil
+    }
+
+    // MARK: - Body
+
     var body: some View {
-        NavigationView {
+        ZStack {
+            SetupBackground()
+
             ScrollView {
-                VStack(spacing: 30) {
-                    // Logo and Title
-                    VStack(spacing: 16) {
+                VStack(spacing: 0) {
+                    // Small "Setup" label at top
+                    Text("Setup")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .kerning(0.8)
+                        .padding(.top, 56)
+                        .padding(.bottom, 28)
+
+                    // Header: logo + title + subtitle
+                    VStack(spacing: 14) {
                         Image("romm_logo")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 100, height: 100)
+                            .frame(width: 86, height: 86)
 
-                        Text("RomM Setup")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
+                        Text("RomM")
+                            .font(.system(size: 30, weight: .bold))
+                            .foregroundStyle(.white)
 
-                        Text("Configure your ROM Management System")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+                        Text("ROM Management System")
+                            .font(.system(size: 13.5, weight: .medium))
+                            .foregroundStyle(SetupTheme.subtitle)
                     }
-                    .padding(.top, 40)
+                    .padding(.bottom, 32)
 
-                    Spacer()
+                    // Glass card
+                    glassCard
+                        .padding(.horizontal, 20)
 
-                    // Setup Form
-                    VStack(spacing: 20) {
-                        // MARK: - Step 1: Server URL
-                        serverURLSection
-
-                        // MARK: - Step 2: Login (only shown after server validation)
-                        if serverValidated {
-                            loginSection
-                                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
-
-                    }
-                    .padding(.horizontal, 24)
-                    .animation(.easeInOut(duration: 0.3), value: serverValidated)
-
-                    // Error Message from AppViewModel
-                    if let errorMessage = appViewModel.appData.errorMessage {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-
-                    // Login Button (only when server validated)
-                    if serverValidated {
-                        loginButton
-                            .transition(.opacity)
-                    }
-
-                    // Info Text
-                    if serverValidated {
-                        VStack(spacing: 8) {
+                    // Footer
+                    VStack(spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.shield")
+                                .font(.caption)
                             Text("Your credentials will be stored securely")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("Password will not be stored locally")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
                         }
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
+                        Text("Password will not be stored locally")
+                            .font(.caption)
                     }
+                    .foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 20)
+                    .padding(.horizontal, 24)
 
                     // Connection Debug Panel
                     if !connectionLogger.logs.isEmpty || connectionLogger.isConnecting {
@@ -113,298 +131,36 @@ struct SetupView: View {
                             logs: connectionLogger.logs,
                             isExpanded: $showConnectionDetails
                         )
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
                     }
 
-                    Spacer()
+                    Spacer().frame(height: 40)
                 }
-                .padding(.bottom, 20)
-            }
-            .navigationTitle("Setup")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                seedUITestLoginStateIfNeeded()
-            }
-            .onTapGesture {
-                hideKeyboard()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .clientTokenPairingCode)) { notification in
-                if let code = notification.userInfo?["code"] as? String {
-                    Task {
-                        await performClientTokenPairing(code: code)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Server URL Section
-
-    private var serverURLSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Server URL")
-                    .font(.headline)
-
-                Spacer()
-
-                // Status indicator
-                if serverValidated {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        if let version = detectedServerVersion {
-                            Text("v\(version)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-            }
-
-            HStack(spacing: 8) {
-                TextField("",
-                          text: $serverURL,
-                          prompt: Text(verbatim: "https://romm.example.com")
-                    .foregroundColor(.secondary))
-                    .textFieldStyle(.roundedBorder)
-                    .keyboardType(.URL)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                    .disabled(serverValidated)
-                    .opacity(serverValidated ? 0.7 : 1.0)
-                    .onChange(of: serverURL) { _, _ in
-                        // Reset validation when URL changes
-                        if serverValidated {
-                            resetServerValidation()
-                        }
-                    }
-
-                // Connect/Change button
-                Button {
-                    if serverValidated {
-                        resetServerValidation()
-                    } else {
-                        Task {
-                            await validateServer()
-                        }
-                    }
-                } label: {
-                    if isConnecting {
-                        ProgressView()
-                            .frame(width: 24, height: 24)
-                    } else if serverValidated {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.body.weight(.medium))
-                    } else {
-                        Text("Connect")
-                            .font(.subheadline.weight(.medium))
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(serverURL.isEmpty || isConnecting)
-            }
-
-            // Quick input chips
-            if !serverValidated {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        QuickInputChip(text: "192.168.", action: { insertText("192.168.") })
-                        QuickInputChip(text: "http://", action: { insertText("http://") })
-                        QuickInputChip(text: "https://", action: { insertText("https://") })
-                        QuickInputChip(text: ":8080", action: { insertText(":8080") })
-                        QuickInputChip(text: ".com", action: { insertText(".com") })
-                        QuickInputChip(text: ".de", action: { insertText(".de") })
-                    }
-                }
-            }
-
-            // Connection error/warning message
-            if let error = connectionError {
-                VStack(alignment: .leading, spacing: 4) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isErrorExpanded.toggle()
-                        }
-                    } label: {
-                        HStack(alignment: .top, spacing: 6) {
-                            Image(systemName: isVersionWarning ? "exclamationmark.triangle.fill" : "xmark.circle.fill")
-                                .foregroundColor(isVersionWarning ? .orange : .red)
-                                .font(.caption)
-
-                            Text(error)
-                                .font(.caption)
-                                .foregroundColor(isVersionWarning ? .orange : .red)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .multilineTextAlignment(.leading)
-
-                            Spacer()
-
-                            if connectionErrorDetails != nil {
-                                Image(systemName: isErrorExpanded ? "chevron.up" : "chevron.down")
-                                    .foregroundColor(.secondary)
-                                    .font(.caption)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    // Expandable details
-                    if isErrorExpanded, let details = connectionErrorDetails {
-                        Text(details)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .padding(.leading, 20)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    // Show "Continue anyway" button for version warnings
-                    if isVersionWarning, detectedServerVersion != nil {
-                        Button("Continue anyway") {
-                            serverValidated = true
-                            connectionError = nil
-                            connectionErrorDetails = nil
-                            isVersionWarning = false
-                            isErrorExpanded = false
-                            didAcceptIncompatibleVersion = true
-                        }
-                        .font(.caption.weight(.medium))
-                        .foregroundColor(.orange)
-                        .padding(.leading, 20)
-                    }
-                }
-                .padding(.top, 4)
-            }
-
-            if !serverValidated && connectionError == nil {
-                Text(verbatim: "e.g. http://192.168.1.100 or https://romm.example.com")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-
-    // MARK: - Login Section
-
-    private var loginSection: some View {
-        VStack(spacing: 16) {
-            // Auth Method Selection (if server supports multiple methods)
-            if let capability = detectedAuthCapability {
-                let methods = AuthMethod.availableMethods(for: capability)
-                if methods.count > 1 {
-                    authMethodPicker
-                }
-            }
-
-            // Classic Auth Fields (Username/Password)
-            if selectedAuthMethod == .classic {
-                classicAuthFields
-            }
-
-            // Client Token Auth (if client token selected)
-            if selectedAuthMethod == .clientToken {
-                clientTokenAuthSection
-            }
-        }
-    }
-
-    // MARK: - Auth Method Picker
-
-    private var authMethodPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Authentication Method")
-                .font(.headline)
-
-            Picker("Auth Method", selection: $selectedAuthMethod) {
-                ForEach(AuthMethod.allCases, id: \.self) { method in
-                    Label(method.displayName, systemImage: method.iconName)
-                        .tag(method)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Text(selectedAuthMethod.description)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-    }
-
-    // MARK: - Classic Auth Fields
-
-    private var classicAuthFields: some View {
-        VStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Username")
-                    .font(.headline)
-                TextField("Username", text: $username)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.username)
-                    .autocapitalization(.none)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Password")
-                    .font(.headline)
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
-            }
-        }
-    }
-
-    // MARK: - Client Token Auth Section
-
-    private var clientTokenAuthSection: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: "key.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.orange)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("API Token")
-                        .font(.headline)
-                    Text("Connect using a token from your RomM server settings")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-
-            Button {
-                showQRScanner = true
-            } label: {
-                HStack {
-                    Image(systemName: "qrcode.viewfinder")
-                    Text("Scan QR Code")
-                }
+                .frame(maxWidth: 460)
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-
-            HStack {
-                Rectangle().frame(height: 1).foregroundColor(.secondary.opacity(0.3))
-                Text("or").font(.caption).foregroundColor(.secondary)
-                Rectangle().frame(height: 1).foregroundColor(.secondary.opacity(0.3))
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .preferredColorScheme(.dark)
+        .tint(SetupTheme.coralLight)
+        .onAppear {
+            seedUITestLoginStateIfNeeded()
+        }
+        .onTapGesture {
+            hideKeyboard()
+        }
+        .onChange(of: focusedField) { _, newValue in
+            // Auto-validate when URL field loses focus
+            if newValue != .url && !serverURL.isEmpty && !serverValidated && !isConnecting {
+                Task { await validateServer() }
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Paste Token")
-                    .font(.headline)
-                TextField("rmm_...", text: $clientTokenInput)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-                    .font(.system(.body, design: .monospaced))
-            }
-
-            if let error = clientTokenError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .clientTokenPairingCode)) { notification in
+            if let code = notification.userInfo?["code"] as? String {
+                Task {
+                    await performClientTokenPairing(code: code)
+                }
             }
         }
         .sheet(isPresented: $showQRScanner) {
@@ -417,46 +173,509 @@ struct SetupView: View {
         }
     }
 
+    // MARK: - Glass Card
+
+    private var glassCard: some View {
+        VStack(spacing: 16) {
+            // Server URL field
+            urlFieldSection
+
+            // Auth method picker (only when multiple methods available)
+            if let capability = detectedAuthCapability {
+                let methods = AuthMethod.availableMethods(for: capability)
+                if methods.count > 1 {
+                    authMethodPicker
+                }
+            }
+
+            // Auth fields — always visible
+            if selectedAuthMethod == .classic {
+                classicAuthFields
+            } else {
+                clientTokenAuthSection
+            }
+
+            // Version warning banner
+            if isVersionWarning, let title = versionWarningTitle {
+                versionWarningBanner(title: title, details: versionWarningDetails)
+            }
+
+            // Login button
+            loginButton
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 20)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color.white.opacity(0.055))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24)
+                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 24, x: 0, y: 8)
+    }
+
+    // MARK: - URL Field Section
+
+    private var urlFieldSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SetupFieldLabel(text: "Server URL")
+
+            // Field row
+            let urlState: SetupFieldState = connectionError != nil ? .error : (focusedField == .url ? .focused : .normal)
+
+            HStack(spacing: 10) {
+                Image(systemName: "link")
+                    .font(.system(size: 15))
+                    .foregroundStyle(serverValidated ? .white.opacity(0.55) : .white.opacity(0.4))
+                    .frame(width: 20)
+
+                TextField("", text: $serverURL, prompt: Text(verbatim: "https://romm.example.com")
+                    .foregroundColor(.white.opacity(0.3)))
+                    .font(.system(size: 14.5))
+                    .foregroundStyle(.white)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .focused($focusedField, equals: .url)
+                    .onSubmit {
+                        Task {
+                            await validateServer()
+                            focusedField = .username
+                        }
+                    }
+                    .onChange(of: serverURL) { _, _ in
+                        if serverValidated || isVersionWarning || connectionError != nil {
+                            resetServerValidation()
+                        }
+                    }
+
+                // Version badge (shown when validated or version warning)
+                if (serverValidated || isVersionWarning), let version = detectedServerVersion {
+                    versionBadge(version: version)
+                }
+
+                // Spinner while connecting
+                if isConnecting {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                        .tint(.white.opacity(0.6))
+                }
+            }
+            .setupField(urlState)
+
+            // Quick input chips — only when not validated and no error/warning
+            if !serverValidated && connectionError == nil && !isVersionWarning {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        QuickInputChip(text: "192.168.", action: { insertText("192.168.") })
+                        QuickInputChip(text: "http://", action: { insertText("http://") })
+                        QuickInputChip(text: "https://", action: { insertText("https://") })
+                        QuickInputChip(text: ":8080", action: { insertText(":8080") })
+                        QuickInputChip(text: ".com", action: { insertText(".com") })
+                        QuickInputChip(text: ".de", action: { insertText(".de") })
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
+            // Connection error banner (hard error only — not version warning)
+            if connectionError != nil && !isVersionWarning {
+                connectionErrorBanner
+            }
+        }
+    }
+
+    // MARK: - Version Badge
+
+    private func versionBadge(version: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: isVersionWarning ? "exclamationmark.triangle.fill" : "checkmark")
+                .font(.system(size: 9, weight: .bold))
+            Text("v\(version)")
+                .font(.system(size: 10.5, weight: .semibold))
+        }
+        .foregroundStyle(isVersionWarning ? SetupTheme.amber : SetupTheme.greenText)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(isVersionWarning ? SetupTheme.amber.opacity(0.15) : SetupTheme.green.opacity(0.15))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(isVersionWarning ? SetupTheme.amber.opacity(0.4) : SetupTheme.green.opacity(0.4), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Connection Error Banner
+
+    private var connectionErrorBanner: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isErrorExpanded.toggle()
+                }
+            } label: {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(SetupTheme.errorIcon)
+                        .font(.system(size: 13))
+
+                    Text(connectionError ?? "")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(SetupTheme.errorText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+
+                    Spacer()
+
+                    if connectionErrorDetails != nil {
+                        Image(systemName: isErrorExpanded ? "chevron.up" : "chevron.down")
+                            .foregroundStyle(.white.opacity(0.4))
+                            .font(.caption)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isErrorExpanded, let details = connectionErrorDetails {
+                Text(details)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.leading, 21)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(SetupTheme.errorBorder.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(SetupTheme.errorBorder.opacity(0.4), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Version Warning Banner
+
+    private func versionWarningBanner(title: String, details: String?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(SetupTheme.amber)
+                    .font(.system(size: 13))
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+            }
+            if let details {
+                Text(details)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.75))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(SetupTheme.amber.opacity(0.18))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(SetupTheme.amber.opacity(0.45), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Auth Method Picker
+
+    private var authMethodPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SetupFieldLabel(text: "Authentication Method")
+
+            Picker("Auth Method", selection: $selectedAuthMethod) {
+                ForEach(AuthMethod.allCases, id: \.self) { method in
+                    Label(method.displayName, systemImage: method.iconName)
+                        .tag(method)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(selectedAuthMethod.description)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
+        }
+    }
+
+    // MARK: - Classic Auth Fields
+
+    private var classicAuthFields: some View {
+        VStack(spacing: 16) {
+            // Username
+            VStack(alignment: .leading, spacing: 8) {
+                SetupFieldLabel(text: "Username")
+
+                HStack(spacing: 10) {
+                    Image(systemName: "person")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(width: 20)
+
+                    TextField("", text: $username, prompt: Text("Username")
+                        .foregroundColor(.white.opacity(0.3)))
+                        .font(.system(size: 14.5))
+                        .foregroundStyle(.white)
+                        .textContentType(.username)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .focused($focusedField, equals: .username)
+                        .onSubmit { focusedField = .password }
+                }
+                .setupField(focusedField == .username ? .focused : .normal)
+            }
+
+            // Password
+            VStack(alignment: .leading, spacing: 8) {
+                SetupFieldLabel(text: "Password")
+
+                let pwState: SetupFieldState = hasLoginError ? .error : (focusedField == .password ? .focused : .normal)
+
+                HStack(spacing: 10) {
+                    Image(systemName: "lock")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(width: 20)
+
+                    Group {
+                        if showPassword {
+                            TextField("", text: $password, prompt: Text("Password")
+                                .foregroundColor(.white.opacity(0.3)))
+                        } else {
+                            SecureField("", text: $password, prompt: Text("Password")
+                                .foregroundColor(.white.opacity(0.3)))
+                        }
+                    }
+                    .font(.system(size: 14.5))
+                    .foregroundStyle(.white)
+                    .textContentType(.password)
+                    .focused($focusedField, equals: .password)
+                    .onSubmit {
+                        Task { await handlePrimaryAction() }
+                    }
+
+                    Button {
+                        showPassword.toggle()
+                    } label: {
+                        Image(systemName: showPassword ? "eye.slash" : "eye")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .setupField(pwState)
+
+                // Login error hint
+                if hasLoginError, let errorMessage = appViewModel.appData.errorMessage {
+                    HStack(spacing: 5) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(SetupTheme.errorIcon)
+                        Text(errorMessage)
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(SetupTheme.errorText)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Client Token Auth Section
+
+    private var clientTokenAuthSection: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 36))
+                    .foregroundStyle(SetupTheme.amber)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("API Token")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text("Connect using a token from your RomM server settings")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+            )
+
+            Button {
+                showQRScanner = true
+            } label: {
+                HStack {
+                    Image(systemName: "qrcode.viewfinder")
+                    Text("Scan QR Code")
+                }
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.85))
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.white.opacity(0.07))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            HStack {
+                Rectangle().frame(height: 1).foregroundStyle(.white.opacity(0.12))
+                Text("or").font(.caption).foregroundStyle(.white.opacity(0.4))
+                Rectangle().frame(height: 1).foregroundStyle(.white.opacity(0.12))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                SetupFieldLabel(text: "Paste Token")
+
+                HStack(spacing: 10) {
+                    Image(systemName: "key")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(width: 20)
+
+                    TextField("", text: $clientTokenInput, prompt: Text("rmm_...")
+                        .foregroundColor(.white.opacity(0.3)))
+                        .font(.system(size: 13.5, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                        .focused($focusedField, equals: .token)
+                }
+                .setupField(focusedField == .token ? .focused : .normal)
+            }
+
+            if let error = clientTokenError {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(SetupTheme.errorIcon)
+                    Text(error)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(SetupTheme.errorText)
+                        .multilineTextAlignment(.leading)
+                }
+            }
+        }
+    }
+
     // MARK: - Login Button
 
     private var loginButton: some View {
         Button {
-            Task {
-                if selectedAuthMethod == .clientToken {
-                    await performClientTokenLogin()
-                } else {
-                    await performClassicLogin()
-                }
-            }
+            Task { await handlePrimaryAction() }
         } label: {
-            if appViewModel.appData.isLoading || isExchangingToken {
-                HStack {
-                    ProgressView()
-                        .frame(width: 20, height: 20)
-                    Text(isExchangingToken ? "Connecting..." : "Logging in...")
-                }
-            } else {
-                HStack {
-                    Image(systemName: selectedAuthMethod.iconName)
-                    Text(selectedAuthMethod == .clientToken ? "Connect with Token" : "Login")
+            ZStack {
+                if isBusy {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(SetupTheme.onAccent)
+                            .frame(width: 18, height: 18)
+                        Text(isExchangingToken ? "Connecting…" : "Logging in…")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(SetupTheme.onAccent)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: buttonIcon)
+                            .font(.system(size: 15, weight: .semibold))
+                        Text(buttonLabel)
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .foregroundStyle(canSubmit ? SetupTheme.onAccent : .white.opacity(0.4))
                 }
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background(buttonBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: canSubmit && !isBusy ? buttonShadowColor.opacity(0.4) : .clear, radius: 10, x: 0, y: 4)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(!canProceedWithLogin)
-        .padding(.horizontal, 24)
+        .buttonStyle(.plain)
+        .disabled(!canSubmit)
+        .animation(.easeInOut(duration: 0.2), value: canSubmit)
+        .animation(.easeInOut(duration: 0.2), value: isBusy)
+        .animation(.easeInOut(duration: 0.2), value: isVersionWarning)
     }
 
-    private var canProceedWithLogin: Bool {
-        if appViewModel.appData.isLoading || isExchangingToken {
-            return false
+    private var buttonIcon: String {
+        if isVersionWarning { return "arrow.right" }
+        if selectedAuthMethod == .clientToken { return "key.fill" }
+        return "rectangle.portrait.and.arrow.right"
+    }
+
+    private var buttonLabel: String {
+        if hasLoginError { return "Try Again" }
+        if isVersionWarning { return "Login Anyway" }
+        if selectedAuthMethod == .clientToken { return "Connect with Token" }
+        return "Login"
+    }
+
+    private var buttonShadowColor: Color {
+        isVersionWarning ? SetupTheme.amber : SetupTheme.coralLight
+    }
+
+    @ViewBuilder
+    private var buttonBackground: some View {
+        if canSubmit && !isBusy {
+            if isVersionWarning {
+                SetupTheme.amberGradient
+            } else {
+                SetupTheme.coralGradient
+            }
+        } else {
+            Color.white.opacity(0.06)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                )
         }
-        switch selectedAuthMethod {
-        case .classic:
-            return !username.isEmpty && !password.isEmpty
-        case .clientToken:
-            return !clientTokenInput.isEmpty
+    }
+
+    // MARK: - Primary Action Handler
+
+    private func handlePrimaryAction() async {
+        if !serverValidated {
+            await validateServer()
+        }
+        // Only proceed to login when server is validated, no hard error, and no unaccepted warning
+        guard serverValidated && connectionError == nil else { return }
+        // If version warning: accept incompatible version and remember it so the
+        // foreground version check doesn't immediately warn about the same version.
+        if isVersionWarning {
+            didAcceptIncompatibleVersion = true
+            if let version = detectedServerVersion {
+                appViewModel.acknowledgeServerVersion(version)
+            }
+        }
+        if selectedAuthMethod == .clientToken {
+            await performClientTokenLogin()
+        } else {
+            await performClassicLogin()
         }
     }
 
@@ -469,6 +688,8 @@ struct SetupView: View {
         connectionErrorDetails = nil
         isErrorExpanded = false
         isVersionWarning = false
+        versionWarningTitle = nil
+        versionWarningDetails = nil
         didAcceptIncompatibleVersion = false
         detectedAuthCapability = nil
 
@@ -477,27 +698,25 @@ struct SetupView: View {
             detectedServerVersion = version
 
             if appViewModel.isVersionCompatible(version) {
-                // Compatible - proceed with auth detection
                 serverValidated = true
                 connectionError = nil
                 didAcceptIncompatibleVersion = false
-
-                // Detect authentication capabilities
                 await detectAuthenticationMethod()
             } else if version == "development" {
-                // Development build - warn but allow to proceed
-                connectionError = "Development build detected"
-                connectionErrorDetails = "This server is running a development version of RomM. Compatibility is not guaranteed."
+                versionWarningTitle = "Development Build"
+                versionWarningDetails = "This server is running a development version of RomM. Compatibility is not guaranteed."
                 isVersionWarning = true
+                serverValidated = true
+                await detectAuthenticationMethod()
             } else {
-                // Incompatible - show warning but allow to proceed
-                connectionError = "Server version \(version) is not compatible"
-                connectionErrorDetails = "Supported range: \(appViewModel.minSupportedServerVersion) - \(appViewModel.maxSupportedServerVersion). Some features may not work correctly."
+                versionWarningTitle = "Incompatible Server Version"
+                versionWarningDetails = "Server v\(version) is outside the supported range (\(appViewModel.minSupportedServerVersion) – \(appViewModel.maxSupportedServerVersion)). Some features may not work correctly."
                 isVersionWarning = true
+                serverValidated = true
+                await detectAuthenticationMethod()
             }
         } catch let error as APIClientError {
             if case .cloudflareProtection = error {
-                // Cloudflare blocks everything — can't authenticate
                 connectionError = "Server is protected by Cloudflare"
                 connectionErrorDetails = "This server is behind Cloudflare protection and cannot be accessed directly."
                 isVersionWarning = false
@@ -507,11 +726,12 @@ struct SetupView: View {
                 connectionErrorDetails = details
                 isVersionWarning = false
             }
+            serverValidated = false
             didAcceptIncompatibleVersion = false
         } catch let error as HeartbeatError {
             switch error {
             case .decodingError:
-                connectionError = "Invalid response"
+                connectionError = "Invalid Response"
                 connectionErrorDetails = "The server did not return a valid RomM response. Is this a RomM server?"
             default:
                 let (message, details) = parseConnectionError(error)
@@ -519,12 +739,14 @@ struct SetupView: View {
                 connectionErrorDetails = details
             }
             isVersionWarning = false
+            serverValidated = false
             didAcceptIncompatibleVersion = false
         } catch {
             let (message, details) = parseConnectionError(error)
             connectionError = message
             connectionErrorDetails = details
             isVersionWarning = false
+            serverValidated = false
             didAcceptIncompatibleVersion = false
         }
 
@@ -555,7 +777,6 @@ struct SetupView: View {
             return
         }
         serverValidated = true
-        // Default: prefer classic, then client token
         if capabilities.classic {
             selectedAuthMethod = .classic
         } else if capabilities.clientTokens {
@@ -564,7 +785,6 @@ struct SetupView: View {
     }
 
     private func parseConnectionError(_ error: Error) -> (message: String, details: String?) {
-        // Handle APIClientError specifically
         if let apiError = error as? APIClientError {
             switch apiError {
             case .cloudflareProtection:
@@ -585,44 +805,30 @@ struct SetupView: View {
                 return parseGeneralConnectionError(underlyingError)
             }
         }
-
         return parseGeneralConnectionError(error)
     }
 
     private func parseGeneralConnectionError(_ error: Error) -> (message: String, details: String?) {
         let errorString = error.localizedDescription
 
-        // Certificate errors
         if errorString.contains("certificate") || errorString.contains("SSL") || errorString.contains("TLS") {
             return ("SSL/TLS certificate error", "Check if the server has a valid certificate or use http:// instead of https://")
         }
-
-        // Connection refused
         if errorString.contains("Could not connect") || errorString.contains("Connection refused") {
             return ("Connection failed", "Check if the server is running and the URL is correct.")
         }
-
-        // Timeout
         if errorString.contains("timed out") || errorString.contains("timeout") {
             return ("Connection timed out", "The server did not respond in time. Check if the server is reachable.")
         }
-
-        // Host not found
         if errorString.contains("host") || errorString.contains("DNS") || errorString.contains("resolve") {
             return ("Server not found", "DNS resolution failed. Check the server URL.")
         }
-
-        // Network unreachable
         if errorString.contains("network") || errorString.contains("internet") {
             return ("Network error", "Check your internet connection.")
         }
-
-        // Invalid response (not a RomM server)
         if errorString.contains("decode") || errorString.contains("JSON") || errorString.contains("invalid") {
             return ("Invalid response", "The server did not return a valid RomM response. Is this a RomM server?")
         }
-
-        // Generic error
         return ("Connection error", errorString)
     }
 
@@ -633,13 +839,13 @@ struct SetupView: View {
         connectionErrorDetails = nil
         isErrorExpanded = false
         isVersionWarning = false
+        versionWarningTitle = nil
+        versionWarningDetails = nil
         didAcceptIncompatibleVersion = false
-        username = ""
-        password = ""
+        // NOTE: username/password are intentionally NOT cleared here
     }
 
     private func performClassicLogin() async {
-        // Store the server version for foreground checks
         if let version = detectedServerVersion {
             appViewModel.saveServerVersion(version)
         }
@@ -673,7 +879,6 @@ struct SetupView: View {
             Logger.auth.info("Client token login complete")
             appViewModel.appData.isLoading = false
             appViewModel.appData.errorMessage = nil
-            // Trigger app state transition to authenticated
             await appViewModel.checkInitialState()
         } catch {
             Logger.auth.error("Client token login failed: \(error)")
@@ -703,7 +908,6 @@ struct SetupView: View {
             Logger.auth.info("Client token pairing complete")
             appViewModel.appData.isLoading = false
             appViewModel.appData.errorMessage = nil
-            // Trigger app state transition to authenticated
             await appViewModel.checkInitialState()
         } catch {
             Logger.auth.error("Client token pairing failed: \(error)")
@@ -721,31 +925,23 @@ struct SetupView: View {
     }
 
     private func seedUITestLoginStateIfNeeded() {
-        guard shouldShowLoginForUITests else {
-            return
-        }
+        guard shouldShowLoginForUITests else { return }
 
-        if serverURL.isEmpty {
-            serverURL = "https://demo.romm.app"
-        }
-
-        if username.isEmpty {
-            username = "snapshot-user"
-        }
-
-        if password.isEmpty {
-            password = "snapshot-password"
-        }
+        if serverURL.isEmpty { serverURL = "https://demo.romm.app" }
+        if username.isEmpty { username = "snapshot-user" }
+        if password.isEmpty { password = "snapshot-password" }
 
         detectedServerVersion = "3.0.0"
         serverValidated = true
         connectionError = nil
         connectionErrorDetails = nil
         isVersionWarning = false
+        versionWarningTitle = nil
     }
 }
 
 // MARK: - QuickInputChip Component
+
 struct QuickInputChip: View {
     let text: String
     let action: () -> Void
@@ -757,15 +953,20 @@ struct QuickInputChip: View {
                 .fontWeight(.medium)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color(.systemGray5))
-                .foregroundColor(.secondary)
+                .background(Color.white.opacity(0.07))
+                .foregroundStyle(Color.white.opacity(0.6))
                 .clipShape(Capsule())
-                .cornerRadius(12)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Color.white.opacity(0.11), lineWidth: 1)
+                )
         }
+        .buttonStyle(.plain)
     }
 }
 
 // MARK: - Connection Debug Panel
+
 struct ConnectionDebugPanel: View {
     let logs: [ConnectionLogEntry]
     @Binding var isExpanded: Bool
@@ -794,13 +995,13 @@ struct ConnectionDebugPanel: View {
             } label: {
                 HStack {
                     Image(systemName: "ant.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.white.opacity(0.5))
                     Text("Connection Details")
                         .font(.subheadline)
-                        .foregroundColor(.primary)
+                        .foregroundStyle(.white.opacity(0.75))
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.white.opacity(0.4))
                         .font(.caption)
                 }
                 .contentShape(Rectangle())
@@ -818,7 +1019,7 @@ struct ConnectionDebugPanel: View {
                         }
                     }
                     .frame(maxHeight: 150)
-                    .background(Color(.systemGray6))
+                    .background(Color.white.opacity(0.05))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .onChange(of: logs.count) { _, _ in
                         if let lastLog = logs.last {
@@ -843,7 +1044,7 @@ struct ConnectionDebugPanel: View {
                         Text(copied ? "Copied ✓" : "Copy log")
                             .font(.caption)
                     }
-                    .foregroundColor(copied ? .green : .secondary)
+                    .foregroundStyle(copied ? SetupTheme.green : .white.opacity(0.45))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
                 }
@@ -851,12 +1052,17 @@ struct ConnectionDebugPanel: View {
             }
         }
         .padding(12)
-        .background(Color(.systemGray6).opacity(0.5))
+        .background(Color.white.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
 // MARK: - Connection Log Row
+
 struct ConnectionLogRow: View {
     let entry: ConnectionLogEntry
 
@@ -870,21 +1076,21 @@ struct ConnectionLogRow: View {
         HStack(alignment: .top, spacing: 8) {
             Text(timeString)
                 .font(.caption2.monospaced())
-                .foregroundColor(.secondary)
+                .foregroundStyle(.white.opacity(0.4))
 
             Image(systemName: entry.type.icon)
                 .font(.caption)
-                .foregroundColor(entry.type.color)
+                .foregroundStyle(entry.type.color)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.message)
                     .font(.caption.monospaced())
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.white.opacity(0.85))
 
                 if let details = entry.details {
                     Text(details)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.white.opacity(0.45))
                 }
             }
 

@@ -109,7 +109,12 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             if let core = PlatformSlugToLibretroCore.map(platformSlug) {
                 return .success(.libretro(rom: rom, core: core))
             }
-            return .success(.web(rom: rom))
+            // No native core for this platform. Only fall back to web when the
+            // web engine is actually available in this build.
+            if AppFeatures.webEmulatorEnabled {
+                return .success(.web(rom: rom))
+            }
+            return .failure(.unsupportedPlatform(platformSlug))
         case .auto:
             return .success(.web(rom: rom))
         }

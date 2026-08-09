@@ -41,8 +41,8 @@ struct BIOSSettingsView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("BIOS-Dateien werden vom ROMM-Server bezogen und unter Documents/LibretroSystem abgelegt.")
-            Text("PCSX ReARMed startet bereits, wenn mindestens eine Regionalvariante (SCPH-5500/5501/5502) vorliegt.")
+            Text("BIOS files are fetched from the ROMM server and stored under Documents/LibretroSystem.")
+            Text("PCSX ReARMed already starts once at least one regional variant (SCPH-5500/5501/5502) is present.")
         }
         .font(.caption)
     }

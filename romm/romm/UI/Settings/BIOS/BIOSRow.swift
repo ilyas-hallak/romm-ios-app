@@ -17,7 +17,7 @@ struct BIOSRow: View {
                 }
                 Spacer()
                 if !status.existsLocally && status.canDownload {
-                    Button("Laden", action: onDownload)
+                    Button("Download", action: onDownload)
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                 }
@@ -45,18 +45,18 @@ struct BIOSRow: View {
         case .missing:
             switch status.server {
             case .available(_, let size, _, _):
-                Text("Fehlt lokal · Server: \(formatBytes(size))").font(.caption2).foregroundStyle(.secondary)
+                Text("Missing locally · Server: \(formatBytes(size))").font(.caption2).foregroundStyle(.secondary)
             case .missing:
-                Text("Fehlt lokal · Server hat diese Datei nicht.").font(.caption2).foregroundStyle(.secondary)
+                Text("Missing locally · Server does not have this file.").font(.caption2).foregroundStyle(.secondary)
             case .unknown:
-                Text("Fehlt lokal · Plattform nicht im ROMM-Server gefunden.").font(.caption2).foregroundStyle(.secondary)
+                Text("Missing locally · Platform not found on the ROMM server.").font(.caption2).foregroundStyle(.secondary)
             }
         case .present(let md5, let size):
             HStack(spacing: 8) {
-                Text("Lokal \(formatBytes(size))")
+                Text("Local \(formatBytes(size))")
                 Text("MD5 \(md5.prefix(8))…")
                 if status.localHashLooksValid {
-                    Text("verifiziert").foregroundStyle(.green)
+                    Text("verified").foregroundStyle(.green)
                 } else {
                     Text("Hash unverified").foregroundStyle(.orange)
                 }

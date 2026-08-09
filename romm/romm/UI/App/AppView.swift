@@ -66,6 +66,25 @@ struct AppView: View {
                 }
             }
         }
+        .alert(
+            appViewModel.serverVersionAlert?.title ?? "Server Version Changed",
+            isPresented: Binding(
+                get: { appViewModel.serverVersionAlert != nil },
+                set: { if !$0 { appViewModel.serverVersionAlert = nil } }
+            ),
+            presenting: appViewModel.serverVersionAlert
+        ) { _ in
+            Button("Continue") {
+                appViewModel.continueWithServerVersionChange()
+            }
+            .keyboardShortcut(.defaultAction)
+
+            Button("Logout", role: .destructive) {
+                appViewModel.logoutFromServerVersionAlert()
+            }
+        } message: { alert in
+            Text(alert.message)
+        }
     }
 }
 
