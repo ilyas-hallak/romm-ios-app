@@ -10,11 +10,17 @@ final class UserDefaultsEmulatorEnginePreferenceStore: PEmulatorEnginePreference
 
     var current: EmulatorEngine {
         get {
-            guard let raw = userDefaults.string(forKey: key) else { return .web }
-            if let engine = EmulatorEngine(rawValue: raw) { return engine }
+            // When the web engine is disabled (distributed builds), native is the
+            // only usable default and any previously stored `.web` is coerced.
+            let fallback: EmulatorEngine = AppFeatures.webEmulatorEnabled ? .web : .native
+            guard let raw = userDefaults.string(forKey: key) else { return fallback }
+            if let engine = EmulatorEngine(rawValue: raw) {
+                if engine == .web && !AppFeatures.webEmulatorEnabled { return .native }
+                return engine
+            }
             // Legacy: "deltaCore" used to be the raw value before rename to "native".
             if raw == "deltaCore" { return .native }
-            return .web
+            return fallback
         }
         set {
             userDefaults.set(newValue.rawValue, forKey: key)

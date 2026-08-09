@@ -17,10 +17,24 @@ enum AppState {
     case authenticationFailed
 }
 
+/// Describes a server-version change detected while the user is logged in.
+/// Presented as an alert so the user can choose to continue or log out,
+/// instead of being logged out automatically.
+struct ServerVersionAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    /// The version reported by the server, persisted when the user chooses to continue.
+    let newVersion: String?
+}
+
 @Observable
 @MainActor
 class AppViewModel {
     var appState: AppState = .loading
+
+    /// Non-nil while a server-version change alert should be shown to the user.
+    var serverVersionAlert: ServerVersionAlert?
 
     private let logger = Logger.viewModel
     private let launchArguments = ProcessInfo.processInfo.arguments
@@ -107,6 +121,8 @@ class AppViewModel {
                 logger.info("Authentication state: \(appData.isAuthenticated) (method: \(authMethod.displayName))")
                 updateAppConfig(config)
                 appState = .authenticated
+                // Verify the server version right after launch, not only on foreground.
+                await checkServerVersionOnForeground()
             } else {
                 logger.info("Setup not complete, showing setup")
                 appState = .setup
@@ -160,6 +176,7 @@ class AppViewModel {
             try clearSetupConfigurationUseCase.execute()
             resetAuthenticationState()
             clearServerVersionUseCase.execute()
+            acknowledgedServerVersion = nil
             appData.updateConfiguration(nil)
             appState = .loading
         } catch {
@@ -210,6 +227,7 @@ class AppViewModel {
             try clearSetupConfigurationUseCase.execute()
             resetAuthenticationState()
             clearServerVersionUseCase.execute()
+            acknowledgedServerVersion = nil
             appData.updateConfiguration(nil)
             appData.updateError("Your session has expired. Please login again.")
             appState = .setup
@@ -243,43 +261,113 @@ class AppViewModel {
 
         logger.info("Checking server version on foreground...")
 
-        // Get current configuration to check allowIncompatibleVersionLogin flag
-        let config = try? getSetupConfigurationUseCase.execute()
-        let allowIncompatibleVersion = config?.allowIncompatibleVersionLogin ?? false
-
         do {
-            _ = try await checkServerVersionUseCase.execute(allowIncompatibleVersion: allowIncompatibleVersion)
+            // Always check the real compatibility. Whether we warn is decided in
+            // handleHeartbeatError based on what the user already acknowledged.
+            _ = try await checkServerVersionUseCase.execute(allowIncompatibleVersion: false)
             logger.info("Server version check passed")
         } catch let error as HeartbeatError {
-            handleHeartbeatError(error, allowIncompatibleVersion: allowIncompatibleVersion)
+            handleHeartbeatError(error)
         } catch {
-            // Network errors should not trigger logout
+            // Network errors should not trigger anything
             logger.warning("Version check failed (network error): \(error.localizedDescription)")
         }
     }
 
-    /// Handle HeartbeatError by logging out and showing appropriate message
-    private func handleHeartbeatError(_ error: HeartbeatError, allowIncompatibleVersion: Bool) {
+    /// Handle a HeartbeatError. Version-related issues no longer log the user
+    /// out automatically — instead an alert is presented so the user can decide.
+    /// A version the user already acknowledged is not re-reported.
+    private func handleHeartbeatError(_ error: HeartbeatError) {
         logger.warning("Heartbeat error: \(error.localizedDescription)")
 
-        // If user allowed incompatible versions and error is serverVersionTooHigh, don't log out
-        if allowIncompatibleVersion, case .serverVersionTooHigh = error {
-            logger.info("User allowed incompatible version login - not logging out for serverVersionTooHigh")
+        let affectedVersion: String?
+        switch error {
+        case .serverVersionChanged(_, let to):
+            affectedVersion = to
+        case .serverVersionTooHigh(let serverVersion, _):
+            affectedVersion = serverVersion
+        case .serverVersionTooLow(let serverVersion, _):
+            affectedVersion = serverVersion
+        case .decodingError, .networkError:
+            // Transient errors should not disturb the user or log them out.
+            logger.warning("Ignoring transient heartbeat error: \(error.localizedDescription)")
             return
         }
 
+        // Don't keep nagging about a version the user already accepted.
+        if let affectedVersion, affectedVersion == acknowledgedServerVersion {
+            logger.info("Server version \(affectedVersion) already acknowledged - not alerting")
+            return
+        }
+
+        presentServerVersionAlert(message: error.errorDescription, newVersion: affectedVersion)
+    }
+
+    private func presentServerVersionAlert(message: String?, newVersion: String?) {
+        guard appState == .authenticated, serverVersionAlert == nil else { return }
+        serverVersionAlert = ServerVersionAlert(
+            title: "Server Version Changed",
+            message: message ?? "The server version has changed. Some features may not work correctly.",
+            newVersion: newVersion
+        )
+    }
+
+    /// User chose to keep using the app despite the server-version change.
+    func continueWithServerVersionChange() {
+        if let newVersion = serverVersionAlert?.newVersion {
+            // Remember this exact version so we don't warn about it again,
+            // and treat it as the last known version going forward.
+            acknowledgedServerVersion = newVersion
+            saveServerVersion(newVersion)
+        }
+        serverVersionAlert = nil
+    }
+
+    /// User chose to log out in response to the server-version change.
+    func logoutFromServerVersionAlert() {
+        let message = serverVersionAlert?.message
+        serverVersionAlert = nil
+        performVersionLogout(message: message)
+    }
+
+    private func performVersionLogout(message: String?) {
         do {
             try clearSetupConfigurationUseCase.execute()
             resetAuthenticationState()
             clearServerVersionUseCase.execute()
+            acknowledgedServerVersion = nil
             appData.updateConfiguration(nil)
-            appData.updateError(error.localizedDescription)
+            if let message {
+                appData.updateError(message)
+            }
             appState = .setup
-            logger.info("User logged out due to heartbeat error")
+            logger.info("User logged out due to server-version change")
         } catch {
-            logger.error("Failed to handle heartbeat error: \(error)")
+            logger.error("Failed to log out after server-version change: \(error)")
             appData.updateError("Error - please restart the app")
         }
+    }
+
+    // MARK: - Acknowledged Server Version
+
+    private let acknowledgedServerVersionKey = "heartbeat.acknowledgedServerVersion"
+
+    /// The server version the user explicitly accepted despite it being outside
+    /// the supported range. Persisted so we don't warn about the same version twice.
+    private var acknowledgedServerVersion: String? {
+        get { UserDefaults.standard.string(forKey: acknowledgedServerVersionKey) }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue, forKey: acknowledgedServerVersionKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: acknowledgedServerVersionKey)
+            }
+        }
+    }
+
+    /// Remember that the user accepted this (incompatible) version during setup.
+    func acknowledgeServerVersion(_ version: String) {
+        acknowledgedServerVersion = version
     }
 
     // MARK: - Version Check Helpers (for SetupView)

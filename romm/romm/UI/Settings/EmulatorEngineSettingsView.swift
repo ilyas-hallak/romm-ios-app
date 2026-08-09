@@ -17,15 +17,24 @@ struct EmulatorEngineSettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("Engine")) {
-                Picker("Engine", selection: $selection) {
-                    Text("Web (EmulatorJS)").tag(EmulatorEngine.web)
-                    Text("Native (DeltaCore, etc.)").tag(EmulatorEngine.native)
+            if AppFeatures.webEmulatorEnabled {
+                Section(header: Text("Engine")) {
+                    Picker("Engine", selection: $selection) {
+                        Text("Web (EmulatorJS)").tag(EmulatorEngine.web)
+                        Text("Native (DeltaCore, etc.)").tag(EmulatorEngine.native)
+                    }
+                    .pickerStyle(.inline)
                 }
-                .pickerStyle(.inline)
+                Section(footer: Text("Native runs emulation on-device via embedded cores (DeltaCore for Game Boy / Color, GBA, NES, SNES, N64, Nintendo DS, Sega Genesis; libretro for PlayStation). Other platforms fall back to Web automatically.")) { EmptyView() }
+            } else {
+                Section(footer: Text("Emulation runs on-device via embedded native cores: DeltaCore for Game Boy / Color, GBA, NES, SNES, N64, Nintendo DS, Sega Genesis; libretro for PlayStation. Other platforms are not supported.")) {
+                    HStack {
+                        Text("Engine")
+                        Spacer()
+                        Text("Native").foregroundStyle(.secondary)
+                    }
+                }
             }
-            Section(footer: Text("Native runs emulation on-device via embedded cores (DeltaCore for Game Boy / Color, GBA, NES, SNES, N64, Nintendo DS, Sega Genesis; libretro for PlayStation). Other platforms fall back to Web automatically.")) { EmptyView() }
-
             // Screen Position only affects the native (libretro) renderer — hide
             // it entirely for the Web (EmulatorJS) engine, where it does nothing.
             if selection == .native {

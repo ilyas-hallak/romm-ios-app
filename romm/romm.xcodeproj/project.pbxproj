@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5D2C4E1F2F7B9A43009CF871 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 5D2C4E1E2F7B9A43009CF871 /* SWCompression */; };
 		5D7501352E97A35300DAE612 /* mft.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D2B9D032E5BA8C200F5233E /* mft.xcframework */; };
 		5D7501362E97A35300DAE612 /* mft.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D2B9D032E5BA8C200F5233E /* mft.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5D93A1302FBF55D300086CE8 /* GPGXDeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A12D2FBF55AE00086CE8 /* GPGXDeltaCore.framework */; };
@@ -25,7 +26,6 @@
 		5D93A1762FBF68F400086CE8 /* N64DeltaCore_Video.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A1522FBF67E300086CE8 /* N64DeltaCore_Video.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5D93A8982FC241F000086CE8 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 5D9D918D2E5F8F21009AF769 /* Kingfisher */; };
-		5D2C4E1F2F7B9A43009CF871 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 5D2C4E1E2F7B9A43009CF871 /* SWCompression */; };
 		5DAA110000000007ABCD0007 /* SNESDeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; };
 		5DAA110000000008ABCD0008 /* SNESDeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5DF893F92FB7D26D0083B111 /* DeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF893F82FB7D26D0083B111 /* DeltaCore.framework */; };
@@ -982,14 +982,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 8.5.0;
-			};
-		};
 		5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/tsolomko/SWCompression.git";
@@ -998,18 +990,26 @@
 				minimumVersion = 4.8.0;
 			};
 		};
+		5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.5.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		5D9D918D2E5F8F21009AF769 /* Kingfisher */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */;
-			productName = Kingfisher;
-		};
 		5D2C4E1E2F7B9A43009CF871 /* SWCompression */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */;
 			productName = SWCompression;
+		};
+		5D9D918D2E5F8F21009AF769 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
