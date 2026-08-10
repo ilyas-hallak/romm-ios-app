@@ -37,6 +37,9 @@ class CheckEmulatorSupportUseCase: PCheckEmulatorSupportUseCase {
         "psx", "ps1", "playstation", "playstation 1",
         "psp", "playstation portable",
 
+        // NEC
+        "pc engine", "pc-engine", "pce", "turbografx", "tg16", "supergrafx",
+
         // Other
         "arcade"
     ]
