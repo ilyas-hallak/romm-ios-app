@@ -19,7 +19,6 @@ struct RomDetailView: View {
     @State private var dominantColor: Color? = nil
     @State private var isHashesExpanded: Bool = false
     @State private var showingActionSheet = false
-    @State private var showingShareSheet = false
     @State private var showingSFTPUpload = false
     @State private var showingCollectionPicker = false
     @State private var showingFullScreenPDF = false
@@ -73,7 +72,11 @@ struct RomDetailView: View {
             platformSlug: rom.platformSlug // Keep original platform slug
         )
     }
-    
+
+    private var downloadPercentText: String {
+        "\(Int((viewModel.downloadProgress * 100).rounded()))%"
+    }
+
     var body: some View {
         ScrollView {
                 VStack(spacing: 0) {
@@ -161,8 +164,13 @@ struct RomDetailView: View {
                     .confirmationDialog("Actions", isPresented: $showingActionSheet, titleVisibility: .visible) {
                         actionSheetButtons
                     }
-                    .sheet(isPresented: $showingShareSheet) {
-                        ShareSheet(activityItems: ["Check out this ROM: \(rom.name)"])
+                    .sheet(item: Binding(
+                        get: { viewModel.shareItem },
+                        set: { viewModel.shareItem = $0 }
+                    ), onDismiss: {
+                        viewModel.cleanupShareTemp()
+                    }) { item in
+                        ShareSheet(activityItems: item.urls)
                     }
                     .sheet(isPresented: $showingSFTPUpload) {
                         SFTPUploadView(rom: currentSelectedRom)
@@ -187,11 +195,6 @@ struct RomDetailView: View {
                             )
                         }
                     }
-                    .fullScreenCover(item: $viewModel.launchDecision, onDismiss: {
-                        viewModel.emulatorPresentationDidEnd()
-                    }) { decision in
-                        EmulatorRouterView(decision: decision)
-                    }
                     .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                         Button("OK") {
                             viewModel.clearError()
@@ -199,10 +202,13 @@ struct RomDetailView: View {
                     } message: {
                         Text(viewModel.errorMessage ?? "")
                     }
-                    .alert("Experimental Feature", isPresented: $viewModel.showingEmulatorFeatureHint) {
+                    .alert("Download Failed", isPresented: Binding(
+                        get: { viewModel.downloadError != nil },
+                        set: { if !$0 { viewModel.downloadError = nil } }
+                    )) {
                         Button("OK", role: .cancel) { }
                     } message: {
-                        Text("The in-app emulator is an experimental feature. Enable it under Settings → Experimental Features.")
+                        Text(viewModel.downloadError ?? "")
                     }
                 }
             }
@@ -237,6 +243,7 @@ struct RomDetailView: View {
                 Task {
                     await viewModel.loadRomDetails(romId: rom.id)
                 }
+                viewModel.refreshDownloadState(romId: rom.id)
             }
     }
     
@@ -362,55 +369,73 @@ struct RomDetailView: View {
                 .accessibility(hint: Text(viewModel.romCollectionsCount > 0 ? "Manage ROM collections" : "Add this ROM to a collection"))
             }
             
-            // Play Button (TestFlight & Debug only)
-            if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
-                Button(action: {
-                    guard !viewModel.isLaunchingEmulator else { return }
-                    Task {
-                        await viewModel.launchEmulator(rom: currentSelectedRom)
-                    }
-                }) {
-                    HStack(spacing: 8) {
-                        if viewModel.isLaunchingEmulator {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .tint(.white)
-                            Text("Starting…")
-                                .font(.headline)
-                        } else {
-                            Label("Play", systemImage: "play.circle.fill")
-                                .font(.headline)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.green)
-                    )
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                }
-                .opacity(viewModel.canPlayEmulator ? 1.0 : 0.6)
-                .disabled(!viewModel.canPlayEmulator || viewModel.isLaunchingEmulator)
-                .accessibility(hint: Text("Play this ROM in the emulator"))
-            }
-
-            // Download Button
+            // Primary action: download to this device.
+            // Playing happens in the Downloads tab (ROMCardRow), not here.
             Button(action: {
-                showingSFTPUpload = true
+                guard !viewModel.isDownloadingROM, !viewModel.isDownloaded else { return }
+                Task {
+                    await viewModel.downloadROM(rom: currentSelectedRom)
+                }
             }) {
-                Label("Download", systemImage: "arrow.down.circle.fill")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.accentColor)
-                    )
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                HStack(spacing: 8) {
+                    if viewModel.isDownloadingROM {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                        Text("Downloading… \(downloadPercentText)")
+                            .font(.headline)
+                    } else if viewModel.isDownloaded {
+                        Label("Downloaded", systemImage: "checkmark.circle.fill")
+                            .font(.headline)
+                    } else {
+                        Label("Download", systemImage: "arrow.down.circle.fill")
+                            .font(.headline)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(viewModel.isDownloaded ? Color.green : Color.accentColor)
+                )
+                .foregroundColor(.white)
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
             }
-            .accessibility(hint: Text("Upload this ROM to an SFTP device"))
+            .disabled(viewModel.isDownloadingROM || viewModel.isDownloaded)
+            .accessibility(hint: Text(viewModel.isDownloaded ? "Already downloaded to this device" : "Download this ROM to this device"))
+
+            // Secondary actions: open the downloaded file in another app, or send it to a device.
+            HStack(spacing: 12) {
+                if viewModel.isDownloaded {
+                    Button(action: {
+                        viewModel.prepareOpenIn(romId: rom.id)
+                    }) {
+                        Label("Open In…", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color(.systemGray6).opacity(0.3))
+                            )
+                            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                    }
+                    .accessibility(hint: Text("Open this ROM in another app such as RetroArch or Delta"))
+                }
+
+                Button(action: {
+                    showingSFTPUpload = true
+                }) {
+                    Label("Send to Device", systemImage: "arrow.up.forward.app")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(.systemGray6).opacity(0.3))
+                        )
+                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                }
+                .accessibility(hint: Text("Send this ROM to another device over SFTP"))
+            }
         }
         .padding(.bottom, 24)
     }

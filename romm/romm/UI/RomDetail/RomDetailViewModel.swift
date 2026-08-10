@@ -8,6 +8,13 @@
 import Foundation
 import Observation
 
+/// Wrapper so the "Open In…" share sheet can be presented via `.sheet(item:)`.
+struct ShareURLsItem: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+    let tempDirectory: URL?
+}
+
 @Observable
 @MainActor
 class RomDetailViewModel {
@@ -34,6 +41,13 @@ class RomDetailViewModel {
     var launchDecision: LaunchDecision? = nil
     var isLaunchingEmulator: Bool = false
 
+    // Local download (playing happens in the Downloads tab)
+    var isDownloaded: Bool = false
+    var isDownloadingROM: Bool = false
+    var downloadProgress: Double = 0 // 0...1
+    var downloadError: String? = nil
+    var shareItem: ShareURLsItem? = nil
+
     private let logger = Logger.viewModel
 
     private let apiClient: PRommAPIClient
@@ -45,6 +59,8 @@ class RomDetailViewModel {
     private let platformEngineSupport: PPlatformEngineSupport
     private let launchEmulatorUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
+    private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
+    private let getROMShareFilesUseCase: PGetROMShareFilesUseCase
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared,
          apiClient: PRommAPIClient = RommAPIClient.shared) {
@@ -57,6 +73,8 @@ class RomDetailViewModel {
         self.platformEngineSupport = factory.makePlatformEngineSupport()
         self.launchEmulatorUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
+        self.getDownloadedROMUseCase = factory.makeGetDownloadedROMUseCase()
+        self.getROMShareFilesUseCase = factory.makeGetROMShareFilesUseCase()
     }
     
     func loadRomDetails(romId: Int) async {
@@ -333,5 +351,90 @@ class RomDetailViewModel {
 
     func emulatorPresentationDidEnd() {
         isLaunchingEmulator = false
+    }
+
+    // MARK: - Local Download
+
+    /// Refreshes whether this ROM is already downloaded to the device.
+    func refreshDownloadState(romId: Int) {
+        isDownloaded = (try? getDownloadedROMUseCase.execute(romId: romId)) != nil
+    }
+
+    /// Downloads all files of the ROM to local device storage with progress.
+    func downloadROM(rom: Rom) async {
+        guard !isDownloadingROM, !isDownloaded else { return }
+
+        isDownloadingROM = true
+        downloadProgress = 0
+        downloadError = nil
+
+        do {
+            // Resolve the concrete files to download from the server details.
+            let details = try await apiClient.getRomDetails(id: rom.id)
+            var files: [RomFileInfo] = []
+            if !details.fsName.isEmpty {
+                files.append(RomFileInfo(
+                    id: details.fsName,
+                    fileName: details.fsName,
+                    fileSizeBytes: Int64(details.fsSizeBytes),
+                    fileExtension: (details.fsName as NSString).pathExtension
+                ))
+            }
+            for supplementary in details.files
+            where supplementary.fileName != details.fsName && !supplementary.fileName.isEmpty {
+                files.append(RomFileInfo(from: supplementary))
+            }
+            if files.isEmpty {
+                let fallbackName = rom.fileName ?? "\(rom.name).rom"
+                files = [RomFileInfo(
+                    id: fallbackName,
+                    fileName: fallbackName,
+                    fileSizeBytes: Int64(rom.sizeBytes ?? 0),
+                    fileExtension: (fallbackName as NSString).pathExtension
+                )]
+            }
+
+            let downloadService = LocalROMDownloadService(apiClient: apiClient)
+            _ = try await downloadService.downloadROM(rom: rom, files: files) { [weak self] downloaded, total in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.downloadProgress = total > 0
+                        ? min(max(Double(downloaded) / Double(total), 0), 1)
+                        : 0
+                }
+            }
+
+            isDownloaded = true
+            downloadProgress = 1
+            logger.info("Downloaded ROM \(rom.id) - \(rom.name) to device")
+        } catch {
+            downloadError = error.localizedDescription
+            logger.error("ROM download failed for \(rom.id): \(error)")
+        }
+
+        isDownloadingROM = false
+    }
+
+    /// Prepares the downloaded ROM files for the iOS share sheet ("Open In…").
+    func prepareOpenIn(romId: Int) {
+        do {
+            let resolved = try getDownloadedROMUseCase.execute(romId: romId)
+            let result = getROMShareFilesUseCase.execute(rom: resolved.rom)
+            guard !result.files.isEmpty else {
+                downloadError = "No files available to open."
+                return
+            }
+            shareItem = ShareURLsItem(urls: result.files, tempDirectory: result.tempDirectory)
+        } catch {
+            downloadError = error.localizedDescription
+        }
+    }
+
+    /// Cleans up the temporary directory created for sharing.
+    func cleanupShareTemp() {
+        if let dir = shareItem?.tempDirectory {
+            try? FileManager.default.removeItem(at: dir)
+        }
+        shareItem = nil
     }
 }
