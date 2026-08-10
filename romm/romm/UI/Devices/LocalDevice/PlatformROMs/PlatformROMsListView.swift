@@ -132,6 +132,7 @@ struct PlatformROMsListView: View {
             "nes", "snes", "n64", "gba", "gbc", "gb", "nds",
             "genesis", "megadrive", "mastersystem", "gamegear", "saturn", "dreamcast",
             "psx", "ps1", "playstation", "psp",
+            "pce", "pc-engine", "pcengine", "turbografx", "tg16", "supergrafx",
             "arcade"
         ]
         return supportedPlatforms.contains { platformSlug.lowercased().contains($0) }

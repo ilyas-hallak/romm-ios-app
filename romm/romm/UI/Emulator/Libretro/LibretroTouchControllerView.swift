@@ -170,8 +170,16 @@ final class LibretroTouchControllerView: UIView {
 
     // MARK: - Init
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    /// On-screen button layout per core family.
+    enum Layout {
+        case standard   // D-pad + △○✕□ + shoulders + Start/Select (PSX-style)
+        case pcEngine   // D-pad + II / I + Select / Run
+    }
+    private let layout: Layout
+
+    init(layout: Layout = .standard) {
+        self.layout = layout
+        super.init(frame: .zero)
         isMultipleTouchEnabled = true
         backgroundColor = .clear
         buildLayout()
@@ -197,17 +205,27 @@ final class LibretroTouchControllerView: UIView {
         menuButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
         addSubview(menuButton)
 
-        addFace(.x, "△", .systemGreen)   // Triangle
-        addFace(.a, "○", .systemRed)     // Circle
-        addFace(.b, "✕", .systemBlue)    // Cross
-        addFace(.y, "□", .systemPink)    // Square
+        switch layout {
+        case .standard:
+            addFace(.x, "△", .systemGreen)   // Triangle
+            addFace(.a, "○", .systemRed)     // Circle
+            addFace(.b, "✕", .systemBlue)    // Cross
+            addFace(.y, "□", .systemPink)    // Square
 
-        addFace(.l, "L1", .darkGray, thin: true, font: 16)
-        addFace(.r, "R1", .darkGray, thin: true, font: 16)
-        addFace(.l2, "L2", .darkGray, thin: true, font: 16)
-        addFace(.r2, "R2", .darkGray, thin: true, font: 16)
-        addFace(.select, "SELECT", .darkGray, thin: true, font: 12)
-        addFace(.start, "START", .darkGray, thin: true, font: 12)
+            addFace(.l, "L1", .darkGray, thin: true, font: 16)
+            addFace(.r, "R1", .darkGray, thin: true, font: 16)
+            addFace(.l2, "L2", .darkGray, thin: true, font: 16)
+            addFace(.r2, "R2", .darkGray, thin: true, font: 16)
+            addFace(.select, "SELECT", .darkGray, thin: true, font: 12)
+            addFace(.start, "START", .darkGray, thin: true, font: 12)
+
+        case .pcEngine:
+            // PC Engine pad: two face buttons + Select / Run. RetroPad A → I, B → II.
+            addFace(.b, "II", .systemOrange)
+            addFace(.a, "I", .systemRed)
+            addFace(.select, "SELECT", .darkGray, thin: true, font: 12)
+            addFace(.start, "RUN", .darkGray, thin: true, font: 14)
+        }
     }
 
     private func addFace(_ button: LibretroABI.JoypadButton,
@@ -235,6 +253,17 @@ final class LibretroTouchControllerView: UIView {
         faceButtons.first { $0.button == b }
     }
 
+    /// Positions the two PC Engine face buttons (II left, I right) centred in the face area.
+    private func layoutPCEFaces(faceX: CGFloat, faceY: CGFloat, faceSize: CGFloat) {
+        let btn = faceSize * 0.44
+        let gap = faceSize * 0.14
+        let totalW = btn * 2 + gap
+        let startX = faceX + (faceSize - totalW) / 2
+        let cy = faceY + (faceSize - btn) / 2
+        face(.b)?.frame = CGRect(x: startX, y: cy, width: btn, height: btn)              // II
+        face(.a)?.frame = CGRect(x: startX + btn + gap, y: cy, width: btn, height: btn)  // I
+    }
+
     private func layoutPortrait() {
         let w = bounds.width
         let h = bounds.height
@@ -250,20 +279,24 @@ final class LibretroTouchControllerView: UIView {
         let faceX = w - faceSize - 24 - safe.right
         let faceY = dpadY
 
-        face(.x)?.frame = CGRect(x: faceX + faceCellW, y: faceY, width: faceCellW, height: faceCellW)
-        face(.y)?.frame = CGRect(x: faceX, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-        face(.a)?.frame = CGRect(x: faceX + 2 * faceCellW, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-        face(.b)?.frame = CGRect(x: faceX + faceCellW, y: faceY + 2 * faceCellW, width: faceCellW, height: faceCellW)
+        if layout == .standard {
+            face(.x)?.frame = CGRect(x: faceX + faceCellW, y: faceY, width: faceCellW, height: faceCellW)
+            face(.y)?.frame = CGRect(x: faceX, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
+            face(.a)?.frame = CGRect(x: faceX + 2 * faceCellW, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
+            face(.b)?.frame = CGRect(x: faceX + faceCellW, y: faceY + 2 * faceCellW, width: faceCellW, height: faceCellW)
 
-        let shoulderW: CGFloat = 72
-        let shoulderH: CGFloat = 36
-        let shoulderGap: CGFloat = 8
-        let shoulderTopY = 16 + safe.top
-        let shoulderBottomY = shoulderTopY + shoulderH + shoulderGap
-        face(.l)?.frame  = CGRect(x: 24 + safe.left, y: shoulderTopY, width: shoulderW, height: shoulderH)
-        face(.l2)?.frame = CGRect(x: 24 + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        face(.r)?.frame  = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
-        face(.r2)?.frame = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
+            let shoulderW: CGFloat = 72
+            let shoulderH: CGFloat = 36
+            let shoulderGap: CGFloat = 8
+            let shoulderTopY = 16 + safe.top
+            let shoulderBottomY = shoulderTopY + shoulderH + shoulderGap
+            face(.l)?.frame  = CGRect(x: 24 + safe.left, y: shoulderTopY, width: shoulderW, height: shoulderH)
+            face(.l2)?.frame = CGRect(x: 24 + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
+            face(.r)?.frame  = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
+            face(.r2)?.frame = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
+        } else {
+            layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
+        }
 
         let centerW: CGFloat = 80
         let centerH: CGFloat = 32
@@ -293,21 +326,25 @@ final class LibretroTouchControllerView: UIView {
         let faceX = w - faceSize - edgePad - safe.right
         let faceY = dpadY
 
-        face(.x)?.frame = CGRect(x: faceX + faceCellW, y: faceY, width: faceCellW, height: faceCellW)
-        face(.y)?.frame = CGRect(x: faceX, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-        face(.a)?.frame = CGRect(x: faceX + 2 * faceCellW, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-        face(.b)?.frame = CGRect(x: faceX + faceCellW, y: faceY + 2 * faceCellW, width: faceCellW, height: faceCellW)
+        if layout == .standard {
+            face(.x)?.frame = CGRect(x: faceX + faceCellW, y: faceY, width: faceCellW, height: faceCellW)
+            face(.y)?.frame = CGRect(x: faceX, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
+            face(.a)?.frame = CGRect(x: faceX + 2 * faceCellW, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
+            face(.b)?.frame = CGRect(x: faceX + faceCellW, y: faceY + 2 * faceCellW, width: faceCellW, height: faceCellW)
 
-        // Schultertasten: L1 oben, L2 darunter — links. R1/R2 rechts.
-        let shoulderW: CGFloat = 84
-        let shoulderH: CGFloat = 40
-        let shoulderGap: CGFloat = 8
-        let shoulderTopY = edgePad + safe.top
-        let shoulderBottomY = shoulderTopY + shoulderH + shoulderGap
-        face(.l)?.frame  = CGRect(x: edgePad + safe.left, y: shoulderTopY, width: shoulderW, height: shoulderH)
-        face(.l2)?.frame = CGRect(x: edgePad + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        face(.r)?.frame  = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
-        face(.r2)?.frame = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
+            // Schultertasten: L1 oben, L2 darunter — links. R1/R2 rechts.
+            let shoulderW: CGFloat = 84
+            let shoulderH: CGFloat = 40
+            let shoulderGap: CGFloat = 8
+            let shoulderTopY = edgePad + safe.top
+            let shoulderBottomY = shoulderTopY + shoulderH + shoulderGap
+            face(.l)?.frame  = CGRect(x: edgePad + safe.left, y: shoulderTopY, width: shoulderW, height: shoulderH)
+            face(.l2)?.frame = CGRect(x: edgePad + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
+            face(.r)?.frame  = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
+            face(.r2)?.frame = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
+        } else {
+            layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
+        }
 
         // Start/Select mittig unten.
         let centerW: CGFloat = 90
