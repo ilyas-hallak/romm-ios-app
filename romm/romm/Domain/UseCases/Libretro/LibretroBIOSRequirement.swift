@@ -40,6 +40,29 @@ enum LibretroBIOSRequirement {
         case .beetlePCEFast:
             // HuCard games need no BIOS. (PCE-CD would need syscard3.pce — out of scope for now.)
             return []
+        case .genesisPlusGX:
+            // Master System / Game Gear / SG-1000 / Genesis carts need no BIOS.
+            // Sega CD needs a region BIOS; any one region is enough (see below).
+            return [
+                LibretroBIOSFile(
+                    fileName: "bios_CD_U.bin",
+                    canonicalMD5: "2efd74e3232ff260e371b99f84024f7f",
+                    required: false,
+                    note: "Sega CD BIOS – USA"
+                ),
+                LibretroBIOSFile(
+                    fileName: "bios_CD_E.bin",
+                    canonicalMD5: "e66fa1dc5820d254611fdcdba0662372",
+                    required: false,
+                    note: "Sega CD BIOS – Europe"
+                ),
+                LibretroBIOSFile(
+                    fileName: "bios_CD_J.bin",
+                    canonicalMD5: "278a9397d192149e84e820ac621a8edd",
+                    required: false,
+                    note: "Sega CD BIOS – Japan"
+                )
+            ]
         }
     }
 
@@ -50,6 +73,10 @@ enum LibretroBIOSRequirement {
         case .pcsxRearmed:
             return ["scph5500.bin", "scph5501.bin", "scph5502.bin"]
         case .beetlePCEFast:
+            return nil
+        case .genesisPlusGX:
+            // No hard gate: SMS/GG/SG-1000/Genesis carts boot without any BIOS.
+            // Sega CD BIOS is optional and only needed for CD images.
             return nil
         }
     }
@@ -63,6 +90,8 @@ enum LibretroBIOSRequirement {
             return ["ps", "ps1", "psx", "playstation"]
         case .beetlePCEFast:
             return ["pce", "pc-engine", "turbografx-16", "tg16"]
+        case .genesisPlusGX:
+            return ["sms", "master-system", "gamegear", "game-gear", "sg1000", "segacd", "sega-cd"]
         }
     }
 }

@@ -131,6 +131,7 @@ struct PlatformROMsListView: View {
         let supportedPlatforms: Set<String> = [
             "nes", "snes", "n64", "gba", "gbc", "gb", "nds",
             "genesis", "megadrive", "mastersystem", "gamegear", "saturn", "dreamcast",
+            "sms", "master-system", "game-gear", "sg1000", "sg-1000", "segacd", "sega-cd", "mega-cd",
             "psx", "ps1", "playstation", "psp",
             "pce", "pc-engine", "pcengine", "turbografx", "tg16", "supergrafx",
             "arcade"
