@@ -109,11 +109,19 @@ struct DownloadQueueView: View {
                 .foregroundColor(.secondary)
         case .downloading(let progress):
             VStack(alignment: .leading, spacing: 3) {
-                ProgressView(value: progress)
-                    .tint(.accentColor)
-                Text("\(Int(progress * 100))%")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                if let progress {
+                    ProgressView(value: progress)
+                        .tint(.accentColor)
+                    Text("\(Int(progress * 100))%")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else {
+                    ProgressView()
+                        .tint(.accentColor)
+                    Text("Downloading…")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
         case .finished:
             Text("Downloaded")

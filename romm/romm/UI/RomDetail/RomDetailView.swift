@@ -381,8 +381,12 @@ struct RomDetailView: View {
                         Text("Queued").font(.headline)
                     case .downloading(let progress):
                         ProgressView().progressViewStyle(.circular).tint(.white)
-                        Text("Downloading… \(Int((progress * 100).rounded()))%")
-                            .font(.headline)
+                        if let progress {
+                            Text("Downloading… \(Int((progress * 100).rounded()))%")
+                                .font(.headline)
+                        } else {
+                            Text("Downloading…").font(.headline)
+                        }
                     case .downloaded:
                         Label("Downloaded", systemImage: "checkmark.circle.fill")
                             .font(.headline)

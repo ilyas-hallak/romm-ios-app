@@ -12,7 +12,7 @@ struct DownloadTask: Identifiable {
 
     enum Status: Equatable {
         case queued
-        case downloading(progress: Double) // 0...1
+        case downloading(progress: Double?) // 0...1, or nil when size is unknown
         case finished
         case failed(String)
     }
@@ -117,7 +117,7 @@ final class DownloadQueueManager {
         defer { isProcessing = false }
         while let index = tasks.firstIndex(where: { if case .queued = $0.status { return true } else { return false } }) {
             let task = tasks[index]
-            tasks[index].status = .downloading(progress: 0)
+            tasks[index].status = .downloading(progress: nil)
             do {
                 try await download(task)
                 updateStatus(id: task.id, to: .finished)
@@ -164,7 +164,9 @@ final class DownloadQueueManager {
         let downloadService = LocalROMDownloadService(apiClient: apiClient)
         _ = try await downloadService.downloadROM(rom: rom, files: files) { [weak self] downloaded, total in
             guard let self else { return }
-            let progress = total > 0 ? min(max(Double(downloaded) / Double(total), 0), 1) : 0
+            let progress: Double? = total > 0
+                ? min(max(Double(downloaded) / Double(total), 0), 1)
+                : nil
             Task { @MainActor in
                 self.updateStatus(id: rom.id, to: .downloading(progress: progress))
             }

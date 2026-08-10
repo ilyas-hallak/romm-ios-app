@@ -55,7 +55,7 @@ class RomDetailViewModel {
     enum DownloadButtonState: Equatable {
         case idle
         case queued
-        case downloading(Double) // 0...1
+        case downloading(Double?) // 0...1, or nil when size is unknown
         case downloaded
         case failed
     }
