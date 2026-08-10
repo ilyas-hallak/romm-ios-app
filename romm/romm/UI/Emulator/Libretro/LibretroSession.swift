@@ -230,7 +230,7 @@ final class LibretroGameViewController: UIViewController {
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     private let screenPositionPreference: PEmulatorScreenPositionPreference
     let videoView = LibretroVideoView()
-    let controllerView = LibretroTouchControllerView()
+    let controllerView: LibretroTouchControllerView
     private let errorLabel = UILabel()
     private var aspectConstraint: NSLayoutConstraint?
 
@@ -244,6 +244,7 @@ final class LibretroGameViewController: UIViewController {
         self.gameURL = gameURL
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
+        self.controllerView = LibretroTouchControllerView(layout: core == .beetlePCEFast ? .pcEngine : .standard)
         super.init(nibName: nil, bundle: nil)
     }
 
