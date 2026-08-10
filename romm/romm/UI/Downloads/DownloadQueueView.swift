@@ -112,9 +112,12 @@ struct DownloadQueueView: View {
                 if let progress {
                     ProgressView(value: progress)
                         .tint(.accentColor)
+                        .animation(.easeOut(duration: 0.4), value: progress)
                     Text("\(Int(progress * 100))%")
                         .font(.caption2)
                         .foregroundColor(.secondary)
+                        .contentTransition(.numericText())
+                        .animation(.easeOut(duration: 0.4), value: progress)
                 } else {
                     ProgressView()
                         .tint(.accentColor)

@@ -380,11 +380,18 @@ struct RomDetailView: View {
                         ProgressView().progressViewStyle(.circular).tint(.white)
                         Text("Queued").font(.headline)
                     case .downloading(let progress):
-                        ProgressView().progressViewStyle(.circular).tint(.white)
                         if let progress {
-                            Text("Downloading… \(Int((progress * 100).rounded()))%")
+                            ProgressView(value: progress)
+                                .progressViewStyle(.linear)
+                                .tint(.white)
+                                .frame(maxWidth: 140)
+                                .animation(.easeOut(duration: 0.4), value: progress)
+                            Text("\(Int((progress * 100).rounded()))%")
                                 .font(.headline)
+                                .contentTransition(.numericText())
+                                .animation(.easeOut(duration: 0.4), value: progress)
                         } else {
+                            ProgressView().progressViewStyle(.circular).tint(.white)
                             Text("Downloading…").font(.headline)
                         }
                     case .downloaded:
