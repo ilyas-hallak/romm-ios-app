@@ -37,6 +37,9 @@ enum LibretroBIOSRequirement {
                     note: "PS1 BIOS – Europe (SCPH-5502)"
                 )
             ]
+        case .beetlePCEFast:
+            // HuCard games need no BIOS. (PCE-CD would need syscard3.pce — out of scope for now.)
+            return []
         }
     }
 
@@ -46,6 +49,8 @@ enum LibretroBIOSRequirement {
         switch core {
         case .pcsxRearmed:
             return ["scph5500.bin", "scph5501.bin", "scph5502.bin"]
+        case .beetlePCEFast:
+            return nil
         }
     }
 
@@ -56,6 +61,8 @@ enum LibretroBIOSRequirement {
         switch core {
         case .pcsxRearmed:
             return ["ps", "ps1", "psx", "playstation"]
+        case .beetlePCEFast:
+            return ["pce", "pc-engine", "turbografx-16", "tg16"]
         }
     }
 }

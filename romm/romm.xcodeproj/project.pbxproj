@@ -25,6 +25,7 @@
 		5D93A1752FBF68F400086CE8 /* N64DeltaCore_Video.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A1522FBF67E300086CE8 /* N64DeltaCore_Video.framework */; };
 		5D93A1762FBF68F400086CE8 /* N64DeltaCore_Video.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A1522FBF67E300086CE8 /* N64DeltaCore_Video.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5D93A8982FC241F000086CE8 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 5D9D918D2E5F8F21009AF769 /* Kingfisher */; };
 		5DAA110000000007ABCD0007 /* SNESDeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; };
 		5DAA110000000008ABCD0008 /* SNESDeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -148,6 +149,7 @@
 				5DF893FC2FB7D26D0083B111 /* GBADeltaCore.framework in Embed Frameworks */,
 				5D93A16C2FBF681C00086CE8 /* NESDeltaCore.framework in Embed Frameworks */,
 				5D93A8982FC241F000086CE8 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */,
+				A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */,
 				5D93A1312FBF55D300086CE8 /* GPGXDeltaCore.framework in Embed Frameworks */,
 				5DAA110000000008ABCD0008 /* SNESDeltaCore.framework in Embed Frameworks */,
 			);
@@ -164,6 +166,7 @@
 		5D93A1532FBF67E900086CE8 /* MelonDSDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = MelonDSDeltaCore.xcodeproj; path = ../Vendor/MelonDSDeltaCore/MelonDSDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5D93A15F2FBF67EF00086CE8 /* GBCDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GBCDeltaCore.xcodeproj; path = ../Vendor/GBCDeltaCore/GBCDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = pcsx_rearmed_libretro_ios.framework; sourceTree = "<group>"; };
+		A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = mednafen_pce_fast_libretro_ios.framework; sourceTree = "<group>"; };
 		5DA7E4202E43D870003680D9 /* romm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = romm.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DA7E4332E43D872003680D9 /* rommTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rommTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DA7E43D2E43D872003680D9 /* rommUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rommUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -299,6 +302,7 @@
 			isa = PBXGroup;
 			children = (
 				5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */,
+				A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */,
 			);
 			name = Libretro;
 			path = ../Vendor/Libretro;
