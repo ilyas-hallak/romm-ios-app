@@ -28,8 +28,10 @@ class CheckEmulatorSupportUseCase: PCheckEmulatorSupportUseCase {
 
         // Sega
         "genesis", "mega drive", "sega genesis", "sega mega drive",
-        "master system", "sega master system",
-        "game gear", "sega game gear",
+        "master system", "sega master system", "sms", "mark-iii",
+        "game gear", "sega game gear", "gamegear",
+        "sg1000", "sg-1000",
+        "segacd", "sega cd", "mega-cd", "megacd",
         "saturn", "sega saturn",
         "dreamcast", "sega dreamcast",
 

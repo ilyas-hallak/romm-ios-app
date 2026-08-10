@@ -244,7 +244,13 @@ final class LibretroGameViewController: UIViewController {
         self.gameURL = gameURL
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
-        self.controllerView = LibretroTouchControllerView(layout: core == .beetlePCEFast ? .pcEngine : .standard)
+        let controllerLayout: LibretroTouchControllerView.Layout
+        switch core {
+        case .beetlePCEFast: controllerLayout = .pcEngine
+        case .genesisPlusGX: controllerLayout = .genesis
+        default: controllerLayout = .standard
+        }
+        self.controllerView = LibretroTouchControllerView(layout: controllerLayout)
         super.init(nibName: nil, bundle: nil)
     }
 

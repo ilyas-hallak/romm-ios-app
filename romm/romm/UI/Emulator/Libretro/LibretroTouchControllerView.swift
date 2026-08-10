@@ -174,6 +174,7 @@ final class LibretroTouchControllerView: UIView {
     enum Layout {
         case standard   // D-pad + △○✕□ + shoulders + Start/Select (PSX-style)
         case pcEngine   // D-pad + II / I + Select / Run
+        case genesis    // D-pad + A / B / C + Mode / Start (Sega 3-button)
     }
     private let layout: Layout
 
@@ -225,6 +226,15 @@ final class LibretroTouchControllerView: UIView {
             addFace(.a, "I", .systemRed)
             addFace(.select, "SELECT", .darkGray, thin: true, font: 12)
             addFace(.start, "RUN", .darkGray, thin: true, font: 14)
+
+        case .genesis:
+            // Sega 3-button pad. Genesis Plus GX RetroPad map: Y → A, B → B, A → C.
+            // Select → Mode, Start → Start. Also covers SMS/GG (1 = B, 2 = A).
+            addFace(.y, "A", .systemTeal)
+            addFace(.b, "B", .systemBlue)
+            addFace(.a, "C", .systemRed)
+            addFace(.select, "MODE", .darkGray, thin: true, font: 13)
+            addFace(.start, "START", .darkGray, thin: true, font: 12)
         }
     }
 
@@ -264,6 +274,18 @@ final class LibretroTouchControllerView: UIView {
         face(.a)?.frame = CGRect(x: startX + btn + gap, y: cy, width: btn, height: btn)  // I
     }
 
+    /// Positions the three Sega face buttons (A / B / C) in a centred row.
+    private func layoutGenesisFaces(faceX: CGFloat, faceY: CGFloat, faceSize: CGFloat) {
+        let btn = faceSize * 0.40
+        let gap = faceSize * 0.06
+        let totalW = btn * 3 + gap * 2
+        let startX = faceX + (faceSize - totalW) / 2
+        let cy = faceY + (faceSize - btn) / 2
+        face(.y)?.frame = CGRect(x: startX, y: cy, width: btn, height: btn)                    // A
+        face(.b)?.frame = CGRect(x: startX + btn + gap, y: cy, width: btn, height: btn)        // B
+        face(.a)?.frame = CGRect(x: startX + 2 * (btn + gap), y: cy, width: btn, height: btn)  // C
+    }
+
     private func layoutPortrait() {
         let w = bounds.width
         let h = bounds.height
@@ -294,8 +316,10 @@ final class LibretroTouchControllerView: UIView {
             face(.l2)?.frame = CGRect(x: 24 + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
             face(.r)?.frame  = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
             face(.r2)?.frame = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        } else {
+        } else if layout == .pcEngine {
             layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
+        } else {
+            layoutGenesisFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
         }
 
         let centerW: CGFloat = 80
@@ -342,8 +366,10 @@ final class LibretroTouchControllerView: UIView {
             face(.l2)?.frame = CGRect(x: edgePad + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
             face(.r)?.frame  = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
             face(.r2)?.frame = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        } else {
+        } else if layout == .pcEngine {
             layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
+        } else {
+            layoutGenesisFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
         }
 
         // Start/Select mittig unten.
