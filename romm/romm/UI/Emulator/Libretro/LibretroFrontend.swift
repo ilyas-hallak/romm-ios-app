@@ -123,12 +123,45 @@ final class LibretroFrontend {
 
         retro_init?()
 
-        // need_fullpath: pcsx_rearmed = true => path-only reicht.
-        // Wichtig: cPath nur innerhalb von withCString gültig.
-        let loaded: Bool = gamePath.withCString { cPath in
-            var info = LibretroABI.GameInfo(path: cPath, data: nil, size: 0, meta: nil)
-            return withUnsafePointer(to: &info) { ptr in
-                retro_load_game?(UnsafeRawPointer(ptr)) ?? false
+        // Cores differ in how they want the game handed over: PCSX ReARMed loads
+        // the disc by path itself (need_fullpath = true), while HuCard/cartridge
+        // cores like Beetle PCE need the ROM bytes in memory (need_fullpath = false)
+        // — otherwise they boot to a black screen.
+        var sysInfo = LibretroABI.SystemInfo(
+            library_name: nil,
+            library_version: nil,
+            valid_extensions: nil,
+            need_fullpath: false,
+            block_extract: false
+        )
+        withUnsafeMutablePointer(to: &sysInfo) { ptr in
+            retro_get_system_info?(UnsafeMutableRawPointer(ptr))
+        }
+        print("[Libretro] need_fullpath=\(sysInfo.need_fullpath)")
+
+        // cPath / data pointers must stay valid across the retro_load_game call.
+        let loaded: Bool
+        if sysInfo.need_fullpath {
+            loaded = gamePath.withCString { cPath in
+                var info = LibretroABI.GameInfo(path: cPath, data: nil, size: 0, meta: nil)
+                return withUnsafePointer(to: &info) { ptr in
+                    retro_load_game?(UnsafeRawPointer(ptr)) ?? false
+                }
+            }
+        } else {
+            let romData = try Data(contentsOf: URL(fileURLWithPath: gamePath))
+            loaded = gamePath.withCString { cPath in
+                romData.withUnsafeBytes { raw -> Bool in
+                    var info = LibretroABI.GameInfo(
+                        path: cPath,
+                        data: raw.baseAddress,
+                        size: romData.count,
+                        meta: nil
+                    )
+                    return withUnsafePointer(to: &info) { ptr in
+                        retro_load_game?(UnsafeRawPointer(ptr)) ?? false
+                    }
+                }
             }
         }
         guard loaded else { throw FrontendError.loadGameFailed }

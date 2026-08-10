@@ -25,7 +25,9 @@ enum LibretroCore: String, Codable, Sendable {
             return ["bin", "cue", "iso", "img", "mdf", "pbp", "chd", "ecm", "m3u", "toc"]
         case .beetlePCEFast:
             // HuCard (.pce/.sgx) plus CD image formats (SuperGrafx via .sgx).
-            return ["pce", "sgx", "cue", "ccd", "chd", "iso", "img", "bin", "m3u", "toc", "zip"]
+            // NOTE: never list "zip"/"7z" here — the resolver must EXTRACT archives
+            // and hand the inner ROM to the core, not the archive itself.
+            return ["pce", "sgx", "cue", "ccd", "chd", "iso", "img", "bin", "m3u", "toc"]
         }
     }
 }
