@@ -164,14 +164,15 @@ class PlatformDetailViewModel {
             }
             
             let allRoms = existingRoms + response.roms
-            
+
             if allRoms.isEmpty {
                 viewState = .empty("No ROMs found for this platform")
             } else {
                 viewState = .loaded(allRoms)
                 lastLoadedRoms = allRoms // Update cached ROMs for smooth transitions
+                prefetchCovers(for: response.roms)
             }
-            
+
             currentOffset = response.offset + response.limit
             hasMoreRoms = response.hasMore
             totalRoms = response.total
@@ -228,8 +229,9 @@ class PlatformDetailViewModel {
                 viewState = .empty(query.isEmpty ? "No ROMs found" : "No results for '\(query)'")
             } else {
                 viewState = .loaded(response.roms)
+                prefetchCovers(for: response.roms)
             }
-            
+
             charIndex = processCharIndex(response.charIndex)
             hasMoreRoms = response.hasMore
             totalRoms = response.total
@@ -311,8 +313,9 @@ class PlatformDetailViewModel {
             } else {
                 viewState = .loaded(response.roms)
                 lastLoadedRoms = response.roms
+                prefetchCovers(for: response.roms)
             }
-            
+
             charIndex = processCharIndex(response.charIndex)
             hasMoreRoms = response.hasMore
             totalRoms = response.total
@@ -367,8 +370,9 @@ class PlatformDetailViewModel {
                     viewState = .empty("No ROMs found for '\(char!)'")
                 } else {
                     viewState = .loaded(response.roms)
+                    prefetchCovers(for: response.roms)
                 }
-                
+
                 // Don't overwrite charIndex when filtering - keep original index for navigation
                 // charIndex = processCharIndex(response.charIndex) // Keep original for char navigation
                 hasMoreRoms = response.hasMore
@@ -402,6 +406,13 @@ class PlatformDetailViewModel {
         
         return processedIndex
     }
+
+    private func prefetchCovers(for roms: [Rom]) {
+        let urls = roms.compactMap { $0.urlCover }.compactMap { URL(string: $0) }
+        KingfisherCacheManager.shared.preloadImages(urls: urls)
+    }
+
+    // MARK: - Helper Methods
 }
 
 // MARK: - Mock Data for Development

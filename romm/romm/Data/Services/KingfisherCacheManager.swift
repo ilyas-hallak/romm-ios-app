@@ -15,7 +15,23 @@ class KingfisherCacheManager: ObservableObject {
     static let shared = KingfisherCacheManager()
     
     private let settings = ImageCacheSettings.shared
-    
+
+    private var authModifier: AnyModifier?
+
+    /// Shared downsampling target so on-demand loads and prefetch produce the same cache key.
+    static let downsampleSize = CGSize(width: 600, height: 600)
+
+    /// Image options shared between CachedKFImage and prefetching so both hit the same cache entry.
+    static var sharedImageOptions: KingfisherOptionsInfo {
+        [
+            .diskCacheExpiration(.days(30)),
+            .backgroundDecode,
+            .scaleFactor(UIScreen.main.scale),
+            .processor(DownsamplingImageProcessor(size: downsampleSize)),
+            .cacheOriginalImage
+        ]
+    }
+
     private init() {
         configureKingfisher()
     }
@@ -102,9 +118,13 @@ class KingfisherCacheManager: ObservableObject {
     }
     
     func preloadImages(urls: [URL]) {
-        guard settings.preloadEnabled else { return }
-        
-        let prefetcher = ImagePrefetcher(urls: urls)
+        guard settings.preloadEnabled, !urls.isEmpty else { return }
+
+        var options = Self.sharedImageOptions
+        if let authModifier {
+            options.append(.requestModifier(authModifier))
+        }
+        let prefetcher = ImagePrefetcher(urls: urls, options: options)
         prefetcher.start()
     }
     
@@ -151,6 +171,7 @@ class KingfisherCacheManager: ObservableObject {
             }
             return r
         }
+        self.authModifier = modifier
         KingfisherManager.shared.defaultOptions += [.requestModifier(modifier)]
     }
 }

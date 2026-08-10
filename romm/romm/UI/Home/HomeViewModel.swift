@@ -54,6 +54,7 @@ class HomeViewModel {
             group.addTask { await self.fetchPlatforms() }
             group.addTask { await self.fetchCollections() }
         }
+        prefetchCovers()
     }
 
     private func fetchRecentlyAdded() async {
@@ -104,5 +105,11 @@ class HomeViewModel {
             collections = []
         }
         isLoadingCollections = false
+    }
+
+    private func prefetchCovers() {
+        var urls = (recentlyAdded + continuePlaying).compactMap { $0.urlCover }.compactMap { URL(string: $0) }
+        urls += collections.compactMap { coverURL(for: $0) }.compactMap { URL(string: $0) }
+        KingfisherCacheManager.shared.preloadImages(urls: urls)
     }
 }

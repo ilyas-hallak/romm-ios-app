@@ -12,7 +12,9 @@ struct PlatformsView: View {
     @State private var platformsViewModel = PlatformsViewModel()
 
     @EnvironmentObject var appData: AppData
-    
+
+    @State private var searchText = ""
+
     var body: some View {
         ZStack {
             if platformsViewModel.isLoading && platformsViewModel.platforms.isEmpty {
@@ -31,11 +33,13 @@ struct PlatformsView: View {
                 PlatformListView(
                     platforms: platformsViewModel.platforms,
                     isLoading: platformsViewModel.isLoading,
-                    viewModel: platformsViewModel
+                    viewModel: platformsViewModel,
+                    searchText: searchText
                 )
             }
         }
         .navigationTitle("Platforms")
+        .searchableWhen(platformsViewModel.platforms.filter { $0.romCount > 0 }.count > 10, text: $searchText, prompt: "Search platforms")
         .onAppear {
             // Load platforms on first appear for better performance
             // This prevents blocking during ViewModel initialization
@@ -65,10 +69,13 @@ struct PlatformListView: View {
     let platforms: [Platform]
     let isLoading: Bool
     let viewModel: PlatformsViewModel
+    let searchText: String
 
-    // Filter platforms with at least one ROM
+    // Filter platforms with at least one ROM, then by the search query
     private var nonEmptyPlatforms: [Platform] {
-        platforms.filter { $0.romCount > 0 }
+        let nonEmpty = platforms.filter { $0.romCount > 0 }
+        guard !searchText.isEmpty else { return nonEmpty }
+        return nonEmpty.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
     var body: some View {

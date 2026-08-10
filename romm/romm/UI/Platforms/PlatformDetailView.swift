@@ -18,6 +18,8 @@ struct PlatformDetailView: View {
     
     // Filter state
     @State private var filterStates = FilterStates()
+
+    @State private var searchText = ""
     
     // Check if custom sorting is active (not default name/asc)
     private var isCustomSortingActive: Bool {
@@ -111,6 +113,16 @@ struct PlatformDetailView: View {
         }
         .navigationTitle(platform.name)
         .navigationBarTitleDisplayMode(.large)
+        .opaqueNavigationBar()
+        .searchableWhen(getCurrentRoms().count > 10, text: $searchText, prompt: "Search \(platform.name)")
+        .onSubmit(of: .search) {
+            Task { await viewModel.searchRoms(query: searchText, platformId: platform.id) }
+        }
+        .onChange(of: searchText) { _, newValue in
+            if newValue.isEmpty {
+                Task { await viewModel.loadRoms(for: platform.id, refresh: true) }
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 // Sort/Filter Button
