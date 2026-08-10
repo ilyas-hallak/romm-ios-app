@@ -131,6 +131,15 @@ final class DownloadQueueManager {
 
     private func updateStatus(id: Int, to status: DownloadTask.Status) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        // A late progress callback (dispatched async onto the main actor) can
+        // arrive after the download already finished — don't let it clobber a
+        // terminal state back into `.downloading`, or the spinner never stops.
+        if case .downloading = status {
+            switch tasks[index].status {
+            case .finished, .failed: return
+            default: break
+            }
+        }
         tasks[index].status = status
     }
 
