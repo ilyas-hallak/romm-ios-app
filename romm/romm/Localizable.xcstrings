@@ -342,6 +342,28 @@
         }
       }
     },
+    "Search %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ durchsuchen"
+          }
+        }
+      }
+    },
+    "Search collections" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sammlungen durchsuchen"
+          }
+        }
+      }
+    },
     "Search failed: %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -349,6 +371,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Suche fehlgeschlagen: %1$@"
+          }
+        }
+      }
+    },
+    "Search platforms" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plattformen durchsuchen"
           }
         }
       }

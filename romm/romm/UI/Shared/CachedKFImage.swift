@@ -63,14 +63,16 @@ private struct CachedKFImageLoader<Content: View, Placeholder: View>: View {
     private func loadImage() {
         guard let url = url else { return }
 
-        let options: KingfisherOptionsInfo = [
-            .diskCacheExpiration(.days(30)),
-            .backgroundDecode,
-            .scaleFactor(UIScreen.main.scale),
-            .processor(DownsamplingImageProcessor(size: CGSize(width: 600, height: 600))),
-            .cacheOriginalImage,
-            .transition(.fade(0.2))
-        ]
+        let options = KingfisherCacheManager.sharedImageOptions
+
+        // Return a cached image synchronously to avoid the placeholder flashing while scrolling.
+        if let cached = ImageCache.default.retrieveImageInMemoryCache(
+            forKey: url.cacheKey,
+            options: KingfisherParsedOptionsInfo(options)
+        ) {
+            loadedImage = cached
+            return
+        }
 
         KingfisherManager.shared.retrieveImage(with: url, options: options) { result in
             switch result {

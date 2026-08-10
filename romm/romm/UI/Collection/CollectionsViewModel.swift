@@ -126,6 +126,7 @@ class CollectionsViewModel {
             self.canLoadMoreCollections = loadedCollections.count == self.collectionsPageSize
             self.isLoading = false
             self.hasLoadedOnce = true
+            prefetchCovers()
 
             logger.info("✅ Loaded \(loadedCollections.count) collections and \(loadedVirtualCollections.count) virtual collections")
 
@@ -166,7 +167,8 @@ class CollectionsViewModel {
             self.currentCollectionOffset = 0
             self.canLoadMoreCollections = loadedCollections.count == self.collectionsPageSize
             self.isLoading = false
-            
+            prefetchCovers()
+
             logger.info("✅ Refreshed \(loadedCollections.count) collections and \(loadedVirtualCollections.count) virtual collections")
             
         } catch {
@@ -258,7 +260,8 @@ class CollectionsViewModel {
                 // Append new collections to existing ones
                 collections.append(contentsOf: moreCollections)
                 currentCollectionOffset += collectionsPageSize
-                
+                prefetchCovers()
+
                 logger.info("✅ Loaded \(moreCollections.count) more collections. Total: \(collections.count)")
             }
             
@@ -269,7 +272,12 @@ class CollectionsViewModel {
         
         isLoadingMore = false
     }
-    
+
+    private func prefetchCovers() {
+        let urls = collections.compactMap { coverURL(for: $0) }.compactMap { URL(string: $0) }
+        KingfisherCacheManager.shared.preloadImages(urls: urls)
+    }
+
     private func resetPagination() {
         currentCollectionOffset = 0
         canLoadMoreCollections = true

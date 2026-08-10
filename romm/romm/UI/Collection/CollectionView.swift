@@ -10,7 +10,9 @@ import SwiftUI
 struct CollectionView: View {
     @State private var collectionsViewModel = CollectionsViewModel()
     @EnvironmentObject var appData: AppData
-    
+
+    @State private var searchText = ""
+
     var body: some View {
         VStack {
             switch collectionsViewModel.viewState {
@@ -23,6 +25,7 @@ struct CollectionView: View {
             }
         }
         .navigationTitle("Collections")
+        .searchableWhen(collectionsViewModel.virtualCollections.count + collectionsViewModel.collections.count > 10, text: $searchText, prompt: "Search collections")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Add") {
@@ -111,11 +114,21 @@ struct CollectionView: View {
         }
     }
     
+    private var filteredVirtual: [VirtualCollection] {
+        guard !searchText.isEmpty else { return collectionsViewModel.virtualCollections }
+        return collectionsViewModel.virtualCollections.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var filteredCollections: [Collection] {
+        guard !searchText.isEmpty else { return collectionsViewModel.collections }
+        return collectionsViewModel.collections.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
     @ViewBuilder
     private var virtualCollectionsSection: some View {
-        if !collectionsViewModel.virtualCollections.isEmpty {
+        if !filteredVirtual.isEmpty {
             Section("Virtual Collections") {
-                ForEach(collectionsViewModel.virtualCollections, id: \.id) { virtualCollection in
+                ForEach(filteredVirtual, id: \.id) { virtualCollection in
                     NavigationLink {
                         VirtualCollectionDetailView(virtualCollection: virtualCollection)
                     } label: {
@@ -128,17 +141,17 @@ struct CollectionView: View {
     
     @ViewBuilder
     private var customCollectionsSection: some View {
-        if !collectionsViewModel.collections.isEmpty {
+        if !filteredCollections.isEmpty {
             Section("Custom Collections") {
-                ForEach(collectionsViewModel.collections, id: \.id) { collection in
+                ForEach(filteredCollections, id: \.id) { collection in
                     NavigationLink {
                         CollectionDetailView(collection: collection)
                     } label: {
                         CollectionRowView(collection: collection, coverURL: collectionsViewModel.coverURL(for: collection))
                     }
                     .onAppear {
-                        // Load more when approaching the end
-                        if collection == collectionsViewModel.collections.last {
+                        // Load more when approaching the end (only while not filtering)
+                        if searchText.isEmpty && collection == collectionsViewModel.collections.last {
                             Task {
                                 await collectionsViewModel.loadMoreCollectionsIfNeeded()
                             }
@@ -147,7 +160,7 @@ struct CollectionView: View {
                 }
                 .onDelete { indexSet in
                     if let index = indexSet.first {
-                        let collection = collectionsViewModel.collections[index]
+                        let collection = filteredCollections[index]
                         collectionsViewModel.showDeleteConfirmation(for: collection)
                     }
                 }

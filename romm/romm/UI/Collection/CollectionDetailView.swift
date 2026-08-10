@@ -81,6 +81,8 @@ struct CollectionDetailView: View {
         }
         .navigationTitle(collection.name)
         .navigationBarTitleDisplayMode(.large)
+        .opaqueNavigationBar()
+        .searchableWhen(loadedRoms.count > 10, text: $searchText, prompt: "Search \(collection.name)")
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 // Sort/Filter Button
@@ -136,6 +138,15 @@ struct CollectionDetailView: View {
         })
     }
     
+    private var loadedRoms: [Rom] {
+        switch viewModel.viewState {
+        case .loaded(let roms), .loadingMore(let roms):
+            return roms
+        default:
+            return []
+        }
+    }
+
     private func filteredRoms(from roms: [Rom]) -> [Rom] {
         if searchText.isEmpty {
             return roms
