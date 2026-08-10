@@ -18,7 +18,6 @@ struct RomDetailView: View {
     @State private var selectedTab: DetailTab = .details
     @State private var dominantColor: Color? = nil
     @State private var isHashesExpanded: Bool = false
-    @State private var showingActionSheet = false
     @State private var showingSFTPUpload = false
     @State private var showingCollectionPicker = false
     @State private var showingFullScreenPDF = false
@@ -73,9 +72,6 @@ struct RomDetailView: View {
         )
     }
 
-    private var downloadPercentText: String {
-        "\(Int((viewModel.downloadProgress * 100).rounded()))%"
-    }
 
     var body: some View {
         ScrollView {
@@ -161,9 +157,6 @@ struct RomDetailView: View {
                             }
                         }
                     }
-                    .confirmationDialog("Actions", isPresented: $showingActionSheet, titleVisibility: .visible) {
-                        actionSheetButtons
-                    }
                     .sheet(item: Binding(
                         get: { viewModel.shareItem },
                         set: { viewModel.shareItem = $0 }
@@ -245,8 +238,14 @@ struct RomDetailView: View {
                 }
                 viewModel.refreshDownloadState(romId: rom.id)
             }
+            .toast(
+                isPresented: $viewModel.showAddedToast,
+                message: "Added to downloads",
+                type: .success,
+                duration: 2.0
+            )
     }
-    
+
     @ViewBuilder
     private var titleBlock: some View {
         VStack(spacing: 12) {
@@ -369,25 +368,28 @@ struct RomDetailView: View {
                 .accessibility(hint: Text(viewModel.romCollectionsCount > 0 ? "Manage ROM collections" : "Add this ROM to a collection"))
             }
             
-            // Primary action: download to this device.
+            // Primary action: queue a download to this device.
             // Playing happens in the Downloads tab (ROMCardRow), not here.
+            let downloadState = viewModel.downloadButtonState(forRomId: currentSelectedRom.id)
             Button(action: {
-                guard !viewModel.isDownloadingROM, !viewModel.isDownloaded else { return }
-                Task {
-                    await viewModel.downloadROM(rom: currentSelectedRom)
-                }
+                viewModel.downloadROM(rom: currentSelectedRom)
             }) {
                 HStack(spacing: 8) {
-                    if viewModel.isDownloadingROM {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(.white)
-                        Text("Downloading… \(downloadPercentText)")
+                    switch downloadState {
+                    case .queued:
+                        ProgressView().progressViewStyle(.circular).tint(.white)
+                        Text("Queued").font(.headline)
+                    case .downloading(let progress):
+                        ProgressView().progressViewStyle(.circular).tint(.white)
+                        Text("Downloading… \(Int((progress * 100).rounded()))%")
                             .font(.headline)
-                    } else if viewModel.isDownloaded {
+                    case .downloaded:
                         Label("Downloaded", systemImage: "checkmark.circle.fill")
                             .font(.headline)
-                    } else {
+                    case .failed:
+                        Label("Retry Download", systemImage: "arrow.clockwise.circle.fill")
+                            .font(.headline)
+                    case .idle:
                         Label("Download", systemImage: "arrow.down.circle.fill")
                             .font(.headline)
                     }
@@ -396,13 +398,18 @@ struct RomDetailView: View {
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(viewModel.isDownloaded ? Color.green : Color.accentColor)
+                        .fill(downloadState == .downloaded ? Color.green : Color.accentColor)
                 )
                 .foregroundColor(.white)
                 .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
             }
-            .disabled(viewModel.isDownloadingROM || viewModel.isDownloaded)
-            .accessibility(hint: Text(viewModel.isDownloaded ? "Already downloaded to this device" : "Download this ROM to this device"))
+            .disabled({
+                switch downloadState {
+                case .idle, .failed: return false
+                case .queued, .downloading, .downloaded: return true
+                }
+            }())
+            .accessibility(hint: Text(downloadState == .downloaded ? "Already downloaded to this device" : "Download this ROM to this device"))
 
             // Secondary actions: open the downloaded file in another app, or send it to a device.
             HStack(spacing: 12) {
@@ -727,23 +734,6 @@ struct RomDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 8)
-    }
-    
-    @ViewBuilder
-    private var actionSheetButtons: some View {
-        Button(viewModel.actualFavoriteStatus ? "Remove from Favorites" : "Add to Favorites") {
-            viewModel.toggleFavorite(originalRom: rom)
-        }
-        
-        Button(viewModel.romCollectionsCount > 0 ? "Manage Collections (\(viewModel.romCollectionsCount))" : "Add to Collection") {
-            showingCollectionPicker = true
-        }
-        
-        Button("Set as Default") {
-            // TODO: Implement set as default
-        }
-        
-        Button("Cancel", role: .cancel) {}
     }
     
     private func extractDominantColor(from image: Image) {

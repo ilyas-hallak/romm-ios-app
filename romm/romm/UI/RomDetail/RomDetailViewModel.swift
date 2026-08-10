@@ -43,10 +43,33 @@ class RomDetailViewModel {
 
     // Local download (playing happens in the Downloads tab)
     var isDownloaded: Bool = false
-    var isDownloadingROM: Bool = false
-    var downloadProgress: Double = 0 // 0...1
     var downloadError: String? = nil
     var shareItem: ShareURLsItem? = nil
+    var showAddedToast: Bool = false
+
+    /// Shared, app-wide download queue. Downloads keep running after this screen
+    /// is dismissed; the queue is viewable from the Downloads tab.
+    let downloadQueue = DownloadQueueManager.shared
+
+    /// Combined button state from on-disk status and the live queue.
+    enum DownloadButtonState: Equatable {
+        case idle
+        case queued
+        case downloading(Double) // 0...1
+        case downloaded
+        case failed
+    }
+
+    func downloadButtonState(forRomId id: Int) -> DownloadButtonState {
+        if isDownloaded { return .downloaded }
+        switch downloadQueue.status(forRomId: id) {
+        case .queued: return .queued
+        case .downloading(let progress): return .downloading(progress)
+        case .finished: return .downloaded
+        case .failed: return .failed
+        case nil: return .idle
+        }
+    }
 
     private let logger = Logger.viewModel
 
@@ -360,59 +383,13 @@ class RomDetailViewModel {
         isDownloaded = (try? getDownloadedROMUseCase.execute(romId: romId)) != nil
     }
 
-    /// Downloads all files of the ROM to local device storage with progress.
-    func downloadROM(rom: Rom) async {
-        guard !isDownloadingROM, !isDownloaded else { return }
-
-        isDownloadingROM = true
-        downloadProgress = 0
-        downloadError = nil
-
-        do {
-            // Resolve the concrete files to download from the server details.
-            let details = try await apiClient.getRomDetails(id: rom.id)
-            var files: [RomFileInfo] = []
-            if !details.fsName.isEmpty {
-                files.append(RomFileInfo(
-                    id: details.fsName,
-                    fileName: details.fsName,
-                    fileSizeBytes: Int64(details.fsSizeBytes),
-                    fileExtension: (details.fsName as NSString).pathExtension
-                ))
-            }
-            for supplementary in details.files
-            where supplementary.fileName != details.fsName && !supplementary.fileName.isEmpty {
-                files.append(RomFileInfo(from: supplementary))
-            }
-            if files.isEmpty {
-                let fallbackName = rom.fileName ?? "\(rom.name).rom"
-                files = [RomFileInfo(
-                    id: fallbackName,
-                    fileName: fallbackName,
-                    fileSizeBytes: Int64(rom.sizeBytes ?? 0),
-                    fileExtension: (fallbackName as NSString).pathExtension
-                )]
-            }
-
-            let downloadService = LocalROMDownloadService(apiClient: apiClient)
-            _ = try await downloadService.downloadROM(rom: rom, files: files) { [weak self] downloaded, total in
-                guard let self else { return }
-                Task { @MainActor in
-                    self.downloadProgress = total > 0
-                        ? min(max(Double(downloaded) / Double(total), 0), 1)
-                        : 0
-                }
-            }
-
-            isDownloaded = true
-            downloadProgress = 1
-            logger.info("Downloaded ROM \(rom.id) - \(rom.name) to device")
-        } catch {
-            downloadError = error.localizedDescription
-            logger.error("ROM download failed for \(rom.id): \(error)")
-        }
-
-        isDownloadingROM = false
+    /// Adds the ROM to the shared download queue and shows a brief confirmation.
+    /// The actual transfer runs in `DownloadQueueManager`, so the user can leave
+    /// this screen and watch progress from the Downloads tab.
+    func downloadROM(rom: Rom) {
+        guard !isDownloaded else { return }
+        downloadQueue.enqueue(rom: rom)
+        showAddedToast = true
     }
 
     /// Prepares the downloaded ROM files for the iOS share sheet ("Open In…").
