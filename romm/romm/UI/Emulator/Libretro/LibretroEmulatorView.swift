@@ -8,7 +8,10 @@ struct LibretroEmulatorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    init(rom: Rom, core: LibretroCore, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+    private let resumeSlot: Int?
+
+    init(rom: Rom, core: LibretroCore, resumeSlot: Int? = nil, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.resumeSlot = resumeSlot
         let vm = factory.makeLibretroEmulatorViewModel(rom: rom, core: core)
         self._viewModel = SwiftUI.State(wrappedValue: vm)
     }
@@ -39,7 +42,7 @@ struct LibretroEmulatorView: View {
         .onAppear {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.onMenuRequested = { showMenu = true }
-            viewModel.bootstrap()
+            viewModel.bootstrap(resumeSlot: resumeSlot)
         }
         .onDisappear { viewModel.teardown() }
         .onChange(of: scenePhase) { _, phase in

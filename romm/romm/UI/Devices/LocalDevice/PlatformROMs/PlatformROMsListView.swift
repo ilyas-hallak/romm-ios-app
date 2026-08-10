@@ -18,6 +18,10 @@ struct PlatformROMsListView: View {
     @State private var romPendingDelete: DownloadedROM?
     @State private var romPendingSync: DownloadedROM?
     @State private var detailRom: DownloadedROM?
+    /// ROM awaiting a resume/new-game choice in the pre-launch sheet.
+    @State private var romPendingLaunch: DownloadedROM?
+    /// Slot chosen in the pre-launch sheet; read by the emulator cover builder.
+    @State private var pendingResumeSlot: Int?
     private let factory: PDependencyFactory
     private let launchUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
@@ -44,9 +48,13 @@ struct PlatformROMsListView: View {
                     hasSaveGame: hasSaveGame(romId: rom.id),
                     hasSaveState: hasSaveState(romId: rom.id),
                     onPlay: {
-                        if isPlatformSupported(rom.platformSlug) && launchingRomId == nil {
+                        guard isPlatformSupported(rom.platformSlug), launchingRomId == nil else { return }
+                        if hasSaveState(romId: rom.id) {
+                            // Offer resume vs. new game before booting the core.
+                            romPendingLaunch = rom
+                        } else {
                             launchingRomId = rom.id
-                            Task { await launch(rom: rom) }
+                            Task { await launch(rom: rom, resumeSlot: nil) }
                         }
                     },
                     onSync: { romPendingSync = rom },
@@ -71,10 +79,24 @@ struct PlatformROMsListView: View {
         }
         .fullScreenCover(item: $launchDecision, onDismiss: {
             launchingRomId = nil
+            pendingResumeSlot = nil
             OrientationLock.set(.portrait, rotateTo: .portrait)
         }) { decision in
-            EmulatorRouterView(decision: decision)
+            EmulatorRouterView(decision: decision, resumeSlot: pendingResumeSlot)
                 .ignoresSafeArea()
+        }
+        .sheet(item: $romPendingLaunch) { rom in
+            PreLaunchSheet(
+                romName: rom.name,
+                romId: rom.id,
+                saveStore: saveStore
+            ) { resumeSlot in
+                romPendingLaunch = nil
+                launchingRomId = rom.id
+                Task { await launch(rom: rom, resumeSlot: resumeSlot) }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .confirmationDialog(
             "Delete ROM?",
@@ -109,7 +131,7 @@ struct PlatformROMsListView: View {
         return false
     }
 
-    private func launch(rom: DownloadedROM) async {
+    private func launch(rom: DownloadedROM, resumeSlot: Int?) async {
         let start = Date()
         let result = await launchUseCase.execute(rom: rom.toRom())
         let elapsed = Date().timeIntervalSince(start)
@@ -118,6 +140,8 @@ struct PlatformROMsListView: View {
             try? await Task.sleep(nanoseconds: UInt64((minVisible - elapsed) * 1_000_000_000))
         }
         if case .success(let decision) = result {
+            // Set the slot before the decision so the cover builder reads it.
+            pendingResumeSlot = resumeSlot
             launchDecision = decision
             Task { [updateLastPlayedUseCase] in
                 try? await updateLastPlayedUseCase.execute(romId: rom.id)

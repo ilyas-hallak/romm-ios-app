@@ -43,7 +43,12 @@ final class LibretroEmulatorViewModel {
         self.factory = factory
     }
 
-    func bootstrap() {
+    /// Save-state slot to auto-load once the core is running (chosen in the
+    /// pre-launch sheet), or `nil` for a fresh start.
+    private var resumeSlot: Int?
+
+    func bootstrap(resumeSlot: Int? = nil) {
+        self.resumeSlot = resumeSlot
         isLoading = true
         Task { @MainActor in
             let missing = await biosSync.missingMandatory(for: core)
@@ -92,6 +97,17 @@ final class LibretroEmulatorViewModel {
             s.start()
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
+                // The core needs a moment of run-loop time after retro_load_game
+                // before it can accept a serialized state, so resume only after
+                // the loading overlay has been shown.
+                if let slot = resumeSlot {
+                    do {
+                        try s.loadState(slot: slot)
+                        logger.info("Resumed ROM \(rom.id) from save state slot \(slot)")
+                    } catch {
+                        logger.error("Failed to resume from slot \(slot): \(error)")
+                    }
+                }
                 withAnimation(.easeOut(duration: 0.3)) {
                     isLoading = false
                 }

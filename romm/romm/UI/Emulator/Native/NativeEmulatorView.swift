@@ -7,7 +7,10 @@ struct NativeEmulatorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    init(rom: Rom, gameType: DeltaGameType, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+    private let resumeSlot: Int?
+
+    init(rom: Rom, gameType: DeltaGameType, resumeSlot: Int? = nil, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.resumeSlot = resumeSlot
         self._viewModel = SwiftUI.State(wrappedValue: NativeEmulatorViewModel(
             rom: rom, gameType: gameType,
             getDownloadedROM: factory.makeGetDownloadedROMUseCase(),
@@ -36,7 +39,7 @@ struct NativeEmulatorView: View {
         .animation(.easeOut(duration: 0.25), value: viewModel.isLoading)
         .onAppear {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
-            viewModel.bootstrap()
+            viewModel.bootstrap(resumeSlot: resumeSlot)
             viewModel.session?.onMenuRequested = { showMenu = true }
         }
         .onDisappear {

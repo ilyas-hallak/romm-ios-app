@@ -41,7 +41,12 @@ final class NativeEmulatorViewModel {
         self.factory = factory
     }
 
-    func bootstrap() {
+    /// Save-state slot to auto-load once the core is running (chosen in the
+    /// pre-launch sheet), or `nil` for a fresh start.
+    private var resumeSlot: Int?
+
+    func bootstrap(resumeSlot: Int? = nil) {
+        self.resumeSlot = resumeSlot
         isLoading = true
         do {
             let resolved = try getDownloadedROM.execute(romId: rom.id)
@@ -70,6 +75,16 @@ final class NativeEmulatorViewModel {
             session?.start()
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
+                // Load the chosen save state only after the core has had run-loop
+                // time — DeltaCore rejects a state load before emulation is live.
+                if let slot = resumeSlot {
+                    do {
+                        try session?.loadState(slot: slot)
+                        logger.info("Resumed ROM \(rom.id) from save state slot \(slot)")
+                    } catch {
+                        logger.error("Failed to resume from slot \(slot): \(error)")
+                    }
+                }
                 withAnimation(.easeOut(duration: 0.3)) {
                     isLoading = false
                 }
