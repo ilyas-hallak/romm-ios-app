@@ -104,13 +104,26 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     // MARK: - Lifecycle
 
-    func start() {
+    /// - Parameter resumeSlot: Save-state slot to auto-load once emulation is
+    ///   live, or `nil` to start fresh. Sequenced after `startEmulation()` and
+    ///   loaded while paused, mirroring the in-game menu's load path.
+    func start(resumeSlot: Int? = nil) {
         Task { [weak self] in
-            await self?.cloudSync?.pullBeforeLaunch()
-            self?.loadBatteryIfAvailable()
-            self?.viewController.startEmulation()
-            self?.attachExternalControllers()
-            self?.observeControllerConnections()
+            guard let self else { return }
+            await self.cloudSync?.pullBeforeLaunch()
+            self.loadBatteryIfAvailable()
+            self.viewController.startEmulation()
+            self.attachExternalControllers()
+            self.observeControllerConnections()
+            guard let slot = resumeSlot else { return }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            self.viewController.pauseEmulation()
+            do {
+                try self.loadState(slot: slot)
+            } catch {
+                print("[Native] resume from slot \(slot) failed: \(error.localizedDescription)")
+            }
+            self.viewController.resumeEmulation()
         }
     }
 

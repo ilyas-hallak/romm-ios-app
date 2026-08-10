@@ -94,20 +94,11 @@ final class LibretroEmulatorViewModel {
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }
             session = s
-            s.start()
+            // The session sequences the resume-load after the core is up and
+            // performs it while paused (see LibretroSession.start).
+            s.start(resumeSlot: resumeSlot)
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
-                // The core needs a moment of run-loop time after retro_load_game
-                // before it can accept a serialized state, so resume only after
-                // the loading overlay has been shown.
-                if let slot = resumeSlot {
-                    do {
-                        try s.loadState(slot: slot)
-                        logger.info("Resumed ROM \(rom.id) from save state slot \(slot)")
-                    } catch {
-                        logger.error("Failed to resume from slot \(slot): \(error)")
-                    }
-                }
                 withAnimation(.easeOut(duration: 0.3)) {
                     isLoading = false
                 }

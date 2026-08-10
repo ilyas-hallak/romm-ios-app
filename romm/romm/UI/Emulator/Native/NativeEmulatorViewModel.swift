@@ -72,19 +72,11 @@ final class NativeEmulatorViewModel {
                 romId: rom.id, saveStates: saveStates,
                 cloudSync: cloudSync
             )
-            session?.start()
+            // The session sequences the resume-load after emulation is live and
+            // performs it while paused (see NativeEmulatorSession.start).
+            session?.start(resumeSlot: resumeSlot)
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
-                // Load the chosen save state only after the core has had run-loop
-                // time — DeltaCore rejects a state load before emulation is live.
-                if let slot = resumeSlot {
-                    do {
-                        try session?.loadState(slot: slot)
-                        logger.info("Resumed ROM \(rom.id) from save state slot \(slot)")
-                    } catch {
-                        logger.error("Failed to resume from slot \(slot): \(error)")
-                    }
-                }
                 withAnimation(.easeOut(duration: 0.3)) {
                     isLoading = false
                 }
