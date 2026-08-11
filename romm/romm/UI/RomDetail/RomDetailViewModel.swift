@@ -8,6 +8,13 @@
 import Foundation
 import Observation
 
+/// Wrapper so the "Open In…" share sheet can be presented via `.sheet(item:)`.
+struct ShareURLsItem: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+    let tempDirectory: URL?
+}
+
 @Observable
 @MainActor
 class RomDetailViewModel {
@@ -34,6 +41,36 @@ class RomDetailViewModel {
     var launchDecision: LaunchDecision? = nil
     var isLaunchingEmulator: Bool = false
 
+    // Local download (playing happens in the Downloads tab)
+    var isDownloaded: Bool = false
+    var downloadError: String? = nil
+    var shareItem: ShareURLsItem? = nil
+    var showAddedToast: Bool = false
+
+    /// Shared, app-wide download queue. Downloads keep running after this screen
+    /// is dismissed; the queue is viewable from the Downloads tab.
+    let downloadQueue = DownloadQueueManager.shared
+
+    /// Combined button state from on-disk status and the live queue.
+    enum DownloadButtonState: Equatable {
+        case idle
+        case queued
+        case downloading(Double?) // 0...1, or nil when size is unknown
+        case downloaded
+        case failed
+    }
+
+    func downloadButtonState(forRomId id: Int) -> DownloadButtonState {
+        if isDownloaded { return .downloaded }
+        switch downloadQueue.status(forRomId: id) {
+        case .queued: return .queued
+        case .downloading(let progress): return .downloading(progress)
+        case .finished: return .downloaded
+        case .failed: return .failed
+        case nil: return .idle
+        }
+    }
+
     private let logger = Logger.viewModel
 
     private let apiClient: PRommAPIClient
@@ -45,6 +82,8 @@ class RomDetailViewModel {
     private let platformEngineSupport: PPlatformEngineSupport
     private let launchEmulatorUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
+    private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
+    private let getROMShareFilesUseCase: PGetROMShareFilesUseCase
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared,
          apiClient: PRommAPIClient = RommAPIClient.shared) {
@@ -57,6 +96,8 @@ class RomDetailViewModel {
         self.platformEngineSupport = factory.makePlatformEngineSupport()
         self.launchEmulatorUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
+        self.getDownloadedROMUseCase = factory.makeGetDownloadedROMUseCase()
+        self.getROMShareFilesUseCase = factory.makeGetROMShareFilesUseCase()
     }
     
     func loadRomDetails(romId: Int) async {
@@ -333,5 +374,44 @@ class RomDetailViewModel {
 
     func emulatorPresentationDidEnd() {
         isLaunchingEmulator = false
+    }
+
+    // MARK: - Local Download
+
+    /// Refreshes whether this ROM is already downloaded to the device.
+    func refreshDownloadState(romId: Int) {
+        isDownloaded = (try? getDownloadedROMUseCase.execute(romId: romId)) != nil
+    }
+
+    /// Adds the ROM to the shared download queue and shows a brief confirmation.
+    /// The actual transfer runs in `DownloadQueueManager`, so the user can leave
+    /// this screen and watch progress from the Downloads tab.
+    func downloadROM(rom: Rom) {
+        guard !isDownloaded else { return }
+        downloadQueue.enqueue(rom: rom)
+        showAddedToast = true
+    }
+
+    /// Prepares the downloaded ROM files for the iOS share sheet ("Open In…").
+    func prepareOpenIn(romId: Int) {
+        do {
+            let resolved = try getDownloadedROMUseCase.execute(romId: romId)
+            let result = getROMShareFilesUseCase.execute(rom: resolved.rom)
+            guard !result.files.isEmpty else {
+                downloadError = "No files available to open."
+                return
+            }
+            shareItem = ShareURLsItem(urls: result.files, tempDirectory: result.tempDirectory)
+        } catch {
+            downloadError = error.localizedDescription
+        }
+    }
+
+    /// Cleans up the temporary directory created for sharing.
+    func cleanupShareTemp() {
+        if let dir = shareItem?.tempDirectory {
+            try? FileManager.default.removeItem(at: dir)
+        }
+        shareItem = nil
     }
 }

@@ -3,7 +3,10 @@ import SwiftUI
 struct LocalDeviceDetailView: View {
     @State private var viewModel = LocalDeviceDetailViewModel()
     @State private var showingDeviceManagement = false
+    @State private var showingDownloadQueue = false
     @State private var isStorageExpanded = false
+
+    private let downloadQueue = DownloadQueueManager.shared
 
     private var device: LocalDevice {
         LocalDeviceManager.shared.currentDevice
@@ -22,12 +25,26 @@ struct LocalDeviceDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
+                    showingDownloadQueue = true
+                } label: {
+                    downloadQueueIcon
+                }
+                .accessibilityLabel("Download Queue")
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
                     showingDeviceManagement = true
                 } label: {
                     Image(systemName: "server.rack")
                 }
                 .accessibilityLabel("Manage Devices")
             }
+        }
+        .sheet(isPresented: $showingDownloadQueue) {
+            DownloadQueueView()
+        }
+        .onChange(of: downloadQueue.finishedCount) { _, _ in
+            Task { await viewModel.loadDownloadedROMsAsync() }
         }
         .sheet(isPresented: $showingDeviceManagement) {
             NavigationStack {
@@ -57,6 +74,21 @@ struct LocalDeviceDetailView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
+    }
+
+    private var downloadQueueIcon: some View {
+        let count = downloadQueue.activeCount
+        return Image(systemName: "arrow.down.circle")
+            .overlay(alignment: .topTrailing) {
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(4)
+                        .background(Circle().fill(Color.red))
+                        .offset(x: 8, y: -8)
+                }
+            }
     }
 
     private var emptyStateView: some View {
