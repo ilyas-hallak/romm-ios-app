@@ -36,12 +36,12 @@ final class DownloadQueueManager {
 
     private(set) var tasks: [DownloadTask] = []
 
-    private let apiClient: PRommAPIClient
+    private let downloadUseCase: PDownloadROMUseCase
     private var isProcessing = false
     private let logger = Logger.viewModel
 
-    init(apiClient: PRommAPIClient = RommAPIClient.shared) {
-        self.apiClient = apiClient
+    init(downloadUseCase: PDownloadROMUseCase = DownloadROMUseCase()) {
+        self.downloadUseCase = downloadUseCase
     }
 
     // MARK: - Derived state
@@ -144,40 +144,13 @@ final class DownloadQueueManager {
     }
 
     private func download(_ task: DownloadTask) async throws {
-        let rom = task.rom
-        // Resolve the concrete files to download from the server details.
-        let details = try await apiClient.getRomDetails(id: rom.id)
-        var files: [RomFileInfo] = []
-        if !details.fsName.isEmpty {
-            files.append(RomFileInfo(
-                id: details.fsName,
-                fileName: details.fsName,
-                fileSizeBytes: Int64(details.fsSizeBytes),
-                fileExtension: (details.fsName as NSString).pathExtension
-            ))
-        }
-        for supplementary in details.files
-        where supplementary.fileName != details.fsName && !supplementary.fileName.isEmpty {
-            files.append(RomFileInfo(from: supplementary))
-        }
-        if files.isEmpty {
-            let fallbackName = rom.fileName ?? "\(rom.name).rom"
-            files = [RomFileInfo(
-                id: fallbackName,
-                fileName: fallbackName,
-                fileSizeBytes: Int64(rom.sizeBytes ?? 0),
-                fileExtension: (fallbackName as NSString).pathExtension
-            )]
-        }
-
-        let downloadService = LocalROMDownloadService(apiClient: apiClient)
-        _ = try await downloadService.downloadROM(rom: rom, files: files) { [weak self] downloaded, total in
+        _ = try await downloadUseCase.execute(rom: task.rom) { [weak self] downloaded, total in
             guard let self else { return }
             let progress: Double? = total > 0
                 ? min(max(Double(downloaded) / Double(total), 0), 1)
                 : nil
             Task { @MainActor in
-                self.updateStatus(id: rom.id, to: .downloading(progress: progress))
+                self.updateStatus(id: task.id, to: .downloading(progress: progress))
             }
         }
     }
