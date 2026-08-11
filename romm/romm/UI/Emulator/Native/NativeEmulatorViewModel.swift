@@ -41,7 +41,12 @@ final class NativeEmulatorViewModel {
         self.factory = factory
     }
 
-    func bootstrap() {
+    /// Save-state slot to auto-load once the core is running (chosen in the
+    /// pre-launch sheet), or `nil` for a fresh start.
+    private var resumeSlot: Int?
+
+    func bootstrap(resumeSlot: Int? = nil) {
+        self.resumeSlot = resumeSlot
         isLoading = true
         do {
             let resolved = try getDownloadedROM.execute(romId: rom.id)
@@ -67,7 +72,9 @@ final class NativeEmulatorViewModel {
                 romId: rom.id, saveStates: saveStates,
                 cloudSync: cloudSync
             )
-            session?.start()
+            // The session sequences the resume-load after emulation is live and
+            // performs it while paused (see NativeEmulatorSession.start).
+            session?.start(resumeSlot: resumeSlot)
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 withAnimation(.easeOut(duration: 0.3)) {

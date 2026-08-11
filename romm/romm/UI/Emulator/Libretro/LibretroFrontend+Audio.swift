@@ -49,6 +49,17 @@ extension LibretroFrontend {
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 
+    /// Drops any buffered samples by collapsing the read cursor onto the write
+    /// cursor. Called right after loading a save state: the ring still holds the
+    /// audio produced before the load (e.g. the boot/intro that ran while the
+    /// core warmed up), and playing it out would leave sound permanently lagging
+    /// the picture.
+    func flushAudio() {
+        Self.audioRingLock.lock()
+        Self.audioReadIdx = Self.audioWriteIdx
+        Self.audioRingLock.unlock()
+    }
+
     func pauseAudio() {
         audioEngine.pause()
     }

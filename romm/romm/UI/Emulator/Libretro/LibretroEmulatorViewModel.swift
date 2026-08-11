@@ -43,7 +43,12 @@ final class LibretroEmulatorViewModel {
         self.factory = factory
     }
 
-    func bootstrap() {
+    /// Save-state slot to auto-load once the core is running (chosen in the
+    /// pre-launch sheet), or `nil` for a fresh start.
+    private var resumeSlot: Int?
+
+    func bootstrap(resumeSlot: Int? = nil) {
+        self.resumeSlot = resumeSlot
         isLoading = true
         Task { @MainActor in
             let missing = await biosSync.missingMandatory(for: core)
@@ -89,7 +94,9 @@ final class LibretroEmulatorViewModel {
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }
             session = s
-            s.start()
+            // The session sequences the resume-load after the core is up and
+            // performs it while paused (see LibretroSession.start).
+            s.start(resumeSlot: resumeSlot)
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 withAnimation(.easeOut(duration: 0.3)) {

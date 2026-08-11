@@ -47,14 +47,31 @@ final class LibretroSession: NSObject {
 
     // MARK: - Lifecycle
 
-    func start() {
+    /// - Parameter resumeSlot: Save-state slot to auto-load once the core is
+    ///   running, or `nil` to start fresh. The load is sequenced after the core
+    ///   is loaded and performed while paused — the same safe path the in-game
+    ///   menu uses. Loading into a running core makes pcsx_rearmed reject
+    ///   `retro_unserialize`, so this must not race the boot.
+    func start(resumeSlot: Int? = nil) {
         let videoView = viewController.videoView
         frontend.videoSink = videoView
 
         Task { [weak self] in
-            await self?.cloudSync?.pullBeforeLaunch()
-            self?.stageBatteryForCore()
-            self?.startCore()
+            guard let self else { return }
+            await self.cloudSync?.pullBeforeLaunch()
+            self.stageBatteryForCore()
+            self.startCore()
+            guard let slot = resumeSlot else { return }
+            // Give the core a few frames so its serialize size is initialized,
+            // then load while paused.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            self.frontend.pause()
+            do {
+                try self.loadState(slot: slot)
+            } catch {
+                print("[Libretro] resume from slot \(slot) failed: \(error.localizedDescription)")
+            }
+            self.frontend.resume()
         }
     }
 
@@ -167,6 +184,8 @@ final class LibretroSession: NSObject {
         guard frontend.loadStateData(data) else {
             throw LibretroFrontend.FrontendError.symbolMissing("retro_unserialize")
         }
+        // Discard audio queued before the jump so sound doesn't trail the picture.
+        frontend.flushAudio()
     }
 
     func undoSave(slot: Int) throws {
