@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Orchestrates cloud sync of battery/state files against the RomM server for
 /// a single emulator session. Lives at the Session layer (not as a UseCase) so
@@ -28,6 +29,8 @@ final class CloudSaveSyncService {
     private let updateStateUseCase: PUpdateStateUseCase
     private let downloadStateUseCase: PDownloadStateUseCase
     private let settings: CloudSaveSyncSettings
+    private let apiClient: PRommAPIClient
+    private let syncDevice: SyncDeviceService
 
     private var serverBatteryId: Int?
     private var serverStateIdBySlot: [Int: Int] = [:]
@@ -43,7 +46,9 @@ final class CloudSaveSyncService {
         uploadStateUseCase: PUploadStateUseCase,
         updateStateUseCase: PUpdateStateUseCase,
         downloadStateUseCase: PDownloadStateUseCase,
-        settings: CloudSaveSyncSettings = .shared
+        settings: CloudSaveSyncSettings = .shared,
+        apiClient: PRommAPIClient = RommAPIClient.shared,
+        syncDevice: SyncDeviceService = .shared
     ) {
         self.config = config
         self.saveStore = saveStore
@@ -56,19 +61,127 @@ final class CloudSaveSyncService {
         self.updateStateUseCase = updateStateUseCase
         self.downloadStateUseCase = downloadStateUseCase
         self.settings = settings
+        self.apiClient = apiClient
+        self.syncDevice = syncDevice
     }
 
     var isEnabled: Bool { settings.isEnabled }
 
     // MARK: - Pull (download newer-than-local before emulator starts)
 
-    /// Lists server saves/states for this ROM and pulls any that are newer
-    /// than the corresponding local file. Errors are swallowed and logged so a
-    /// failed pull never blocks emulator launch.
+    /// Pulls saves/states newer than the local copy before the emulator starts.
+    ///
+    /// On RomM 5.0+ (issue #48) this first registers a device and runs a
+    /// `negotiate` round: the server returns an explicit plan so we only touch
+    /// what actually changed instead of blind-listing everything. States stay
+    /// on the proven list-based pull as the authority; a successful negotiate
+    /// owns the battery decision, otherwise we fall back to the legacy pull.
+    /// Errors are swallowed and logged so a failed pull never blocks launch.
     func pullBeforeLaunch() async {
         guard isEnabled else { return }
-        await pullBattery()
+        let negotiated = await tryNegotiatedPull()
+        if !negotiated {
+            await pullBattery()
+        }
         await pullStates()
+    }
+
+    // MARK: - Negotiated pull (RomM 5.0+)
+
+    /// Registers a device and negotiates a sync plan for this ROM. Returns
+    /// `true` when negotiate succeeded (so the caller skips the legacy battery
+    /// pull), `false` on an old server or any error (caller falls back).
+    private func tryNegotiatedPull() async -> Bool {
+        guard let deviceId = await syncDevice.deviceId() else { return false }
+        let localStates = buildClientStates()
+        let localHashByFile = Dictionary(localStates.map { ($0.fileName, $0.contentHash) },
+                                         uniquingKeysWith: { a, _ in a })
+        do {
+            let response = try await apiClient.negotiateSync(
+                SyncNegotiateRequest(deviceId: deviceId, saves: localStates)
+            )
+            print("[CloudSync] negotiate ok: \(response.operations.count) ops "
+                + "(down=\(response.totalDownload ?? 0) up=\(response.totalUpload ?? 0) "
+                + "conflict=\(response.totalConflict ?? 0) noop=\(response.totalNoOp ?? 0))")
+            // negotiate is global (ops span every ROM); only log/act on ours.
+            for op in response.operations where op.romId == config.romId {
+                let hashNote: String
+                if let file = op.fileName, let mine = localHashByFile[file], let theirs = op.serverContentHash {
+                    hashNote = (mine == theirs) ? " hash=match" : " hash=differ"
+                } else {
+                    hashNote = ""
+                }
+                print("[CloudSync]   op \(op.action.rawValue) file=\(op.fileName ?? "?") slot=\(op.slot ?? "-") reason=\(op.reason ?? "-")\(hashNote)")
+            }
+            for op in response.operations where op.action == .download && op.romId == config.romId {
+                await applyDownload(op)
+            }
+            return true
+        } catch {
+            print("[CloudSync] negotiate failed, using full sync: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Snapshot of everything we hold locally for this ROM, with a content hash
+    /// so the server can tell what actually changed.
+    private func buildClientStates() -> [ClientSaveState] {
+        var result: [ClientSaveState] = []
+
+        if let battery = try? saveStore.readBattery(romId: config.romId), !battery.isEmpty {
+            result.append(ClientSaveState(
+                romId: config.romId,
+                fileName: config.batteryFileName,
+                slot: nil,
+                emulator: config.emulator,
+                contentHash: Self.contentHash(battery),
+                updatedAt: saveStore.batteryModifiedAt(romId: config.romId) ?? Date(timeIntervalSince1970: 0),
+                fileSizeBytes: battery.count
+            ))
+        }
+
+        let entries = (try? saveStore.listStates(romId: config.romId)) ?? []
+        for entry in entries {
+            guard let data = try? saveStore.readState(romId: config.romId, slot: entry.slot),
+                  !data.isEmpty else { continue }
+            result.append(ClientSaveState(
+                romId: config.romId,
+                fileName: Self.stateFileName(slot: entry.slot),
+                slot: String(entry.slot),
+                emulator: config.emulator,
+                contentHash: Self.contentHash(data),
+                updatedAt: entry.modifiedAt,
+                fileSizeBytes: data.count
+            ))
+        }
+        return result
+    }
+
+    /// Applies a single `download` operation. States are intentionally left to
+    /// `pullStates()` (its slot mapping is proven and the save/state id
+    /// namespaces are ambiguous over negotiate), so only battery/save downloads
+    /// are handled here.
+    private func applyDownload(_ op: SyncOperationSchema) async {
+        guard let saveId = op.saveId, let fileName = op.fileName else { return }
+        guard !fileName.hasSuffix(".state") else { return }
+        // Null-slot battery saves are never paired server-side (per the sync
+        // API), so a `download` can point at the server's own battery. Only
+        // overwrite a local battery when the server copy is provably newer,
+        // mirroring pullBattery() — otherwise we'd clobber newer local progress.
+        if let localMTime = saveStore.batteryModifiedAt(romId: config.romId) {
+            guard let serverDate = op.serverUpdatedAt, serverDate > localMTime else { return }
+        }
+        do {
+            let data = try await downloadSaveUseCase.execute(id: saveId)
+            try saveStore.writeBattery(romId: config.romId, data: data)
+            if let serverDate = op.serverUpdatedAt {
+                try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
+            }
+            serverBatteryId = saveId
+            print("[CloudSync] negotiate down: battery (\(data.count) bytes)")
+        } catch {
+            print("[CloudSync] negotiate battery download failed (id=\(saveId)): \(error.localizedDescription)")
+        }
     }
 
     private func pullBattery() async {
@@ -223,6 +336,13 @@ final class CloudSaveSyncService {
     // MARK: - Filename helpers
 
     static func stateFileName(slot: Int) -> String { "slot\(slot).state" }
+
+    /// MD5 hex of a save/state blob, sent to the server as `content_hash`.
+    /// RomM hashes saves with MD5 server-side (verified against a live 5.1
+    /// server), so we must match that to let it detect real content changes.
+    static func contentHash(_ data: Data) -> String {
+        Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
 
     /// Parses `slotN.state` (or `slotN.*`) back to slot index `N`.
     static func slotFromFileName(_ name: String) -> Int? {
