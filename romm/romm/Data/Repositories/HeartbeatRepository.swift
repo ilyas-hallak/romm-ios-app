@@ -234,13 +234,30 @@ class HeartbeatRepository: PHeartbeatRepository {
     struct AuthCapabilities {
         let classic: Bool
         let clientTokens: Bool
+        /// Browser-based device authorization (RomM 5.x).
+        let deviceFlow: Bool
         let cloudflareBlocked: Bool
         let unreachable: Bool
+
+        init(
+            classic: Bool,
+            clientTokens: Bool,
+            deviceFlow: Bool = false,
+            cloudflareBlocked: Bool,
+            unreachable: Bool
+        ) {
+            self.classic = classic
+            self.clientTokens = clientTokens
+            self.deviceFlow = deviceFlow
+            self.cloudflareBlocked = cloudflareBlocked
+            self.unreachable = unreachable
+        }
 
         var description: String {
             if unreachable { return "Server unreachable" }
             if cloudflareBlocked { return "Server blocked by Cloudflare" }
             var methods: [String] = []
+            if deviceFlow { methods.append("Browser") }
             if classic { methods.append("Classic") }
             if clientTokens { methods.append("Client Tokens") }
             return methods.isEmpty ? "No auth methods available" : methods.joined(separator: ", ")
@@ -253,17 +270,29 @@ class HeartbeatRepository: PHeartbeatRepository {
     /// Minimum server version that supports client API tokens (PR #3114)
     private let minClientTokenVersion = "4.8.0"
 
+    /// Minimum server version with the browser device-authorization flow.
+    private let minDeviceFlowVersion = "5.0.0"
+
     func detectAuthCapabilities(serverURL: String) async -> AuthCapabilities {
         logger.info("Detecting authentication capabilities for: \(serverURL)")
 
         var classicAuthWorks = false
         var hasClientTokens = false
+        var hasDeviceFlow = false
         var hasCloudflare = false
 
         do {
             let response = try await apiClient.getHeartbeat(from: serverURL)
             classicAuthWorks = true
             logger.info("Classic auth works - heartbeat successful")
+
+            // Browser device-authorization flow is available from RomM 5.0.0.
+            let systemVersion = response.SYSTEM.VERSION
+            let baseSystemVersion = systemVersion.split(separator: "-").first.map(String.init) ?? systemVersion
+            if compareVersions(baseSystemVersion, minDeviceFlowVersion) >= 0 {
+                hasDeviceFlow = true
+                logger.info("Device flow available (server \(systemVersion) >= \(minDeviceFlowVersion))")
+            }
 
             // Check if classic auth is disabled
             if response.FRONTEND.DISABLE_USERPASS_LOGIN {
@@ -301,10 +330,10 @@ class HeartbeatRepository: PHeartbeatRepository {
             return AuthCapabilities(classic: false, clientTokens: false, cloudflareBlocked: true, unreachable: false)
         }
 
-        if !classicAuthWorks && !hasClientTokens {
+        if !classicAuthWorks && !hasClientTokens && !hasDeviceFlow {
             return AuthCapabilities(classic: false, clientTokens: false, cloudflareBlocked: false, unreachable: true)
         }
 
-        return AuthCapabilities(classic: classicAuthWorks, clientTokens: hasClientTokens, cloudflareBlocked: false, unreachable: false)
+        return AuthCapabilities(classic: classicAuthWorks, clientTokens: hasClientTokens, deviceFlow: hasDeviceFlow, cloudflareBlocked: false, unreachable: false)
     }
 }

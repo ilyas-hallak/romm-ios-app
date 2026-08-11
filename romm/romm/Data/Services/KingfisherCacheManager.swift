@@ -158,7 +158,7 @@ class KingfisherCacheManager: ObservableObject {
             var r = request
             let authMethod = tokenProvider.getAuthMethod()
             switch authMethod {
-            case .clientToken:
+            case .clientToken, .deviceFlow:
                 if let token = tokenProvider.getClientToken() {
                     r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }

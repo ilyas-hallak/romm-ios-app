@@ -9,6 +9,10 @@ import Foundation
 
 /// Authentication methods supported by the app
 enum AuthMethod: String, Codable, CaseIterable {
+    /// Browser-based device authorization (RomM 5.x). Approve in the browser,
+    /// the app receives a bound client token. No password typed in the app.
+    case deviceFlow
+
     /// Classic username/password authentication (Basic Auth)
     case classic
 
@@ -18,6 +22,8 @@ enum AuthMethod: String, Codable, CaseIterable {
     /// User-friendly display name
     var displayName: String {
         switch self {
+        case .deviceFlow:
+            return "Browser Sign-In"
         case .classic:
             return "Username & Password"
         case .clientToken:
@@ -28,6 +34,8 @@ enum AuthMethod: String, Codable, CaseIterable {
     /// Short description
     var description: String {
         switch self {
+        case .deviceFlow:
+            return "Approve this device in your browser — no password needed"
         case .classic:
             return "Traditional login with username and password"
         case .clientToken:
@@ -38,6 +46,8 @@ enum AuthMethod: String, Codable, CaseIterable {
     /// Icon name for UI
     var iconName: String {
         switch self {
+        case .deviceFlow:
+            return "safari"
         case .classic:
             return "person.fill"
         case .clientToken:
@@ -47,12 +57,14 @@ enum AuthMethod: String, Codable, CaseIterable {
 
     /// Whether this method requires a browser
     var requiresBrowser: Bool {
-        return false
+        self == .deviceFlow
     }
 
     /// Whether this method stores credentials locally
     var storesCredentials: Bool {
         switch self {
+        case .deviceFlow:
+            return false // Bound client token stored in Keychain
         case .classic:
             return true // Username stored, password used for Basic Auth
         case .clientToken:
@@ -71,9 +83,11 @@ extension AuthMethod {
         return "Choose your preferred authentication method"
     }
 
-    /// Returns available methods based on rich auth capabilities
+    /// Returns available methods based on rich auth capabilities, most-recommended
+    /// first. Browser sign-in leads when the server supports it.
     static func availableMethods(for capabilities: HeartbeatRepository.AuthCapabilities) -> [AuthMethod] {
         var methods: [AuthMethod] = []
+        if capabilities.deviceFlow { methods.append(.deviceFlow) }
         if capabilities.classic { methods.append(.classic) }
         if capabilities.clientTokens { methods.append(.clientToken) }
         return methods
