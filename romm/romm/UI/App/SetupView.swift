@@ -213,13 +213,17 @@ struct SetupView: View {
                 versionWarningBanner(title: title, details: versionWarningDetails)
             }
 
-            // Primary: browser device-flow sign-in
-            if showDeviceFlowPrimary {
-                deviceFlowSection
-            }
+            // Sign-in options only appear once the server has been checked and is
+            // reachable — no point offering a login before we know it works.
+            if serverValidated {
+                // Primary: browser device-flow sign-in
+                if showDeviceFlowPrimary {
+                    deviceFlowSection
+                }
 
-            // Fallback methods (username/password, API token)
-            otherOptionsSection
+                // Fallback methods (username/password, API token)
+                otherOptionsSection
+            }
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 20)
