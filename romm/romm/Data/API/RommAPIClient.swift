@@ -574,7 +574,9 @@ class RommAPIClient: PRommAPIClient {
     func makeAuthHeader() throws -> String {
         let authMethod = tokenProvider.getAuthMethod()
         switch authMethod {
-        case .clientToken:
+        case .clientToken, .deviceFlow:
+            // Browser device-flow yields a bound client token, stored and used
+            // exactly like a pasted client token (Bearer auth).
             guard let token = tokenProvider.getClientToken() else {
                 logger.error("No client token available")
                 throw APIClientError.noCredentials

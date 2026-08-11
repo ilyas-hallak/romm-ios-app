@@ -36,6 +36,11 @@ class AppViewModel {
     /// Non-nil while a server-version change alert should be shown to the user.
     var serverVersionAlert: ServerVersionAlert?
 
+    /// Single-flight guard: opening a game fires several requests at once, so an
+    /// expired/revoked token produces a burst of parallel 401/403s. Without this,
+    /// each one would re-run the logout, causing the reported sign-in loop (#59).
+    private var isHandlingSessionExpiration = false
+
     private let logger = Logger.viewModel
     private let launchArguments = ProcessInfo.processInfo.arguments
 
@@ -95,6 +100,8 @@ class AppViewModel {
 
     func checkInitialState() async {
         logger.debug("Checking initial state...")
+        // A fresh auth attempt is underway — allow session-expiry handling again.
+        isHandlingSessionExpiration = false
 
         if shouldForceSetupForUITests {
             resetAuthenticationState()
@@ -160,6 +167,7 @@ class AppViewModel {
             updateAppConfig(setupConfig)
             logger.info("Setup configuration saved successfully")
             appData.updateLoading(false)
+            isHandlingSessionExpiration = false
             appState = .authenticated
         } catch {
             logger.error("Setup configuration failed: \(error)")
@@ -221,6 +229,13 @@ class AppViewModel {
             logger.debug("Ignoring session expiration - not in authenticated state")
             return
         }
+
+        // Collapse a burst of parallel 401/403s into a single logout (#59).
+        guard !isHandlingSessionExpiration else {
+            logger.debug("Ignoring session expiration - already handling one")
+            return
+        }
+        isHandlingSessionExpiration = true
 
         // Clear configuration and redirect to setup
         do {

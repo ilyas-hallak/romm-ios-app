@@ -45,6 +45,15 @@ struct SetupView: View {
     @State private var clientTokenError: String?
     @State private var showQRScanner = false
 
+    // Device flow (browser) states
+    @State private var deviceFlowInit: DeviceAuthInitResponse?
+    @State private var isDeviceFlowRunning = false
+    @State private var deviceFlowError: String?
+    @State private var deviceFlowTask: Task<Void, Never>?
+
+    // "Other sign-in options" disclosure
+    @State private var showOtherOptions = false
+
     // Focus
     @FocusState private var focusedField: SetupField?
 
@@ -55,12 +64,27 @@ struct SetupView: View {
     // MARK: - Computed helpers
 
     private var isBusy: Bool {
-        appViewModel.appData.isLoading || isExchangingToken || isConnecting
+        appViewModel.appData.isLoading || isExchangingToken || isConnecting || isDeviceFlowRunning
+    }
+
+    /// Whether the browser device-flow is the primary path. Optimistic before the
+    /// server is validated; after validation, only when the server supports it.
+    private var showDeviceFlowPrimary: Bool {
+        guard let cap = detectedAuthCapability else { return true }
+        return cap.deviceFlow
+    }
+
+    /// Fallback methods (username/password, API token) shown under "Other options".
+    private var otherMethods: [AuthMethod] {
+        guard let cap = detectedAuthCapability else { return [.classic, .clientToken] }
+        return AuthMethod.availableMethods(for: cap).filter { $0 != .deviceFlow }
     }
 
     private var canSubmit: Bool {
         guard !isBusy && !serverURL.isEmpty else { return false }
         switch selectedAuthMethod {
+        case .deviceFlow:
+            return false // Browser sign-in has its own button, not this one.
         case .classic:
             return !username.isEmpty && !password.isEmpty
         case .clientToken:
@@ -146,6 +170,10 @@ struct SetupView: View {
         .tint(SetupTheme.coralLight)
         .onAppear {
             seedUITestLoginStateIfNeeded()
+            preloadLastServerURL()
+        }
+        .onDisappear {
+            deviceFlowTask?.cancel()
         }
         .onTapGesture {
             hideKeyboard()
@@ -180,28 +208,18 @@ struct SetupView: View {
             // Server URL field
             urlFieldSection
 
-            // Auth method picker (only when multiple methods available)
-            if let capability = detectedAuthCapability {
-                let methods = AuthMethod.availableMethods(for: capability)
-                if methods.count > 1 {
-                    authMethodPicker
-                }
-            }
-
-            // Auth fields — always visible
-            if selectedAuthMethod == .classic {
-                classicAuthFields
-            } else {
-                clientTokenAuthSection
-            }
-
             // Version warning banner
             if isVersionWarning, let title = versionWarningTitle {
                 versionWarningBanner(title: title, details: versionWarningDetails)
             }
 
-            // Login button
-            loginButton
+            // Primary: browser device-flow sign-in
+            if showDeviceFlowPrimary {
+                deviceFlowSection
+            }
+
+            // Fallback methods (username/password, API token)
+            otherOptionsSection
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 20)
@@ -398,7 +416,7 @@ struct SetupView: View {
             SetupFieldLabel(text: "Authentication Method")
 
             Picker("Auth Method", selection: $selectedAuthMethod) {
-                ForEach(AuthMethod.allCases, id: \.self) { method in
+                ForEach(otherMethods, id: \.self) { method in
                     Label(method.displayName, systemImage: method.iconName)
                         .tag(method)
                 }
@@ -580,6 +598,195 @@ struct SetupView: View {
                         .multilineTextAlignment(.leading)
                 }
             }
+        }
+    }
+
+    // MARK: - Device Flow (Browser) Section
+
+    @ViewBuilder
+    private var deviceFlowSection: some View {
+        VStack(spacing: 12) {
+            if let info = deviceFlowInit, isDeviceFlowRunning {
+                deviceFlowWaitingView(info: info)
+            } else {
+                Button {
+                    Task { await startDeviceFlow() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if isDeviceFlowRunning {
+                            ProgressView()
+                                .tint(SetupTheme.onAccent)
+                                .frame(width: 18, height: 18)
+                        } else {
+                            Image(systemName: "safari")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        Text("Sign in with Browser")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .foregroundStyle(deviceFlowButtonEnabled ? SetupTheme.onAccent : .white.opacity(0.4))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(deviceFlowButtonBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: deviceFlowButtonEnabled ? SetupTheme.coralLight.opacity(0.4) : .clear, radius: 10, x: 0, y: 4)
+                }
+                .buttonStyle(.plain)
+                .disabled(!deviceFlowButtonEnabled)
+
+                Text("Approve this device in your browser — no password needed.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            if let deviceFlowError {
+                setupErrorHint(deviceFlowError)
+            }
+        }
+    }
+
+    private var deviceFlowButtonEnabled: Bool {
+        !serverURL.isEmpty && !isBusy
+    }
+
+    @ViewBuilder
+    private var deviceFlowButtonBackground: some View {
+        if deviceFlowButtonEnabled {
+            SetupTheme.coralGradient
+        } else {
+            Color.white.opacity(0.06)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                )
+        }
+    }
+
+    private func deviceFlowWaitingView(info: DeviceAuthInitResponse) -> some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 10) {
+                ProgressView().tint(SetupTheme.coralLight)
+                Text("Waiting for approval…")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+
+            Text("Approve this device in the browser. If it didn't open, reopen it below.")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 8) {
+                Text("Code")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                Text(info.userCode)
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .kerning(2)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Color.white.opacity(0.06)))
+
+            HStack(spacing: 10) {
+                Button {
+                    openApprovalBrowser(info: info)
+                } label: {
+                    Label("Reopen Browser", systemImage: "safari")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.07)))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    cancelDeviceFlow()
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(SetupTheme.errorText)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.04)))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(SetupTheme.errorBorder.opacity(0.35), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.05)))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+    }
+
+    // MARK: - Other Sign-In Options
+
+    @ViewBuilder
+    private var otherOptionsSection: some View {
+        if showDeviceFlowPrimary {
+            if !otherMethods.isEmpty {
+                VStack(spacing: 14) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { showOtherOptions.toggle() }
+                    } label: {
+                        HStack {
+                            Text("Other sign-in options")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.7))
+                            Spacer()
+                            Image(systemName: showOtherOptions ? "chevron.up" : "chevron.down")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if showOtherOptions {
+                        otherMethodsContent
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+            }
+        } else {
+            // Server has no browser flow — show the fallback methods directly.
+            otherMethodsContent
+        }
+    }
+
+    @ViewBuilder
+    private var otherMethodsContent: some View {
+        VStack(spacing: 16) {
+            if otherMethods.count > 1 {
+                authMethodPicker
+            }
+
+            if selectedAuthMethod == .classic {
+                classicAuthFields
+            } else {
+                clientTokenAuthSection
+            }
+
+            loginButton
+        }
+    }
+
+    /// Small inline error row reused across auth sections.
+    private func setupErrorHint(_ message: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(SetupTheme.errorIcon)
+            Text(message)
+                .font(.system(size: 12.5))
+                .foregroundStyle(SetupTheme.errorText)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
         }
     }
 
@@ -842,6 +1049,8 @@ struct SetupView: View {
         versionWarningTitle = nil
         versionWarningDetails = nil
         didAcceptIncompatibleVersion = false
+        // Abort any in-flight browser pairing — it's tied to the old server.
+        cancelDeviceFlow()
         // NOTE: username/password are intentionally NOT cleared here
     }
 
@@ -914,6 +1123,131 @@ struct SetupView: View {
             clientTokenError = error.localizedDescription
         }
         isExchangingToken = false
+    }
+
+    // MARK: - Device Flow Actions
+
+    @MainActor
+    private func startDeviceFlow() async {
+        hideKeyboard()
+        deviceFlowError = nil
+
+        if !serverValidated {
+            await validateServer()
+        }
+        guard serverValidated && connectionError == nil else { return }
+
+        if isVersionWarning {
+            didAcceptIncompatibleVersion = true
+            if let version = detectedServerVersion {
+                appViewModel.acknowledgeServerVersion(version)
+            }
+        }
+
+        // Server validated but doesn't offer the browser flow — point the user
+        // at the fallback methods instead of failing silently.
+        if let cap = detectedAuthCapability, !cap.deviceFlow {
+            deviceFlowError = "This server doesn't support browser sign-in. Use another method below."
+            withAnimation { showOtherOptions = true }
+            return
+        }
+
+        isDeviceFlowRunning = true
+        let service = DeviceAuthService()
+        do {
+            let info = try await service.initPairing(serverURL: serverURL)
+            deviceFlowInit = info
+            openApprovalBrowser(info: info)
+            deviceFlowTask = Task { await pollDeviceFlow(service: service, info: info) }
+        } catch {
+            isDeviceFlowRunning = false
+            deviceFlowInit = nil
+            deviceFlowError = error.localizedDescription
+        }
+    }
+
+    private func openApprovalBrowser(info: DeviceAuthInitResponse) {
+        guard let url = DeviceAuthService().verificationURL(serverURL: serverURL, init: info) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    @MainActor
+    private func pollDeviceFlow(service: DeviceAuthService, info: DeviceAuthInitResponse) async {
+        do {
+            let token = try await service.pollForToken(serverURL: serverURL, init: info)
+            await finishDeviceFlow(token: token)
+        } catch {
+            if case DeviceAuthError.cancelled = error {
+                // User cancelled — no error message needed.
+            } else {
+                deviceFlowError = error.localizedDescription
+            }
+            isDeviceFlowRunning = false
+            deviceFlowInit = nil
+        }
+    }
+
+    @MainActor
+    private func finishDeviceFlow(token: DeviceAuthTokenResponse) async {
+        let clientService = ClientTokenAuthService()
+        let info = ClientTokenInfo(
+            tokenId: 0,
+            name: "Browser Sign-In",
+            scopes: token.scopes,
+            expiresAt: Self.parseISODate(token.expiresAt)
+        )
+        do {
+            try clientService.saveToken(token.accessToken, info: info)
+            // The device-flow token is bound to a server device — reuse its id
+            // for the save-sync device layer so we don't register twice.
+            UserDefaults.standard.set(token.deviceId, forKey: "sync.deviceId")
+
+            let setupRepo = SetupRepository()
+            if let version = detectedServerVersion {
+                appViewModel.saveServerVersion(version)
+            }
+            try setupRepo.saveClientTokenSetup(
+                serverURL: serverURL,
+                tokenName: info.name,
+                version: detectedServerVersion ?? "unknown",
+                allowIncompatibleVersionLogin: didAcceptIncompatibleVersion
+            )
+            Logger.auth.info("Browser device-flow login complete")
+            appViewModel.appData.isLoading = false
+            appViewModel.appData.errorMessage = nil
+            isDeviceFlowRunning = false
+            deviceFlowInit = nil
+            await appViewModel.checkInitialState()
+        } catch {
+            Logger.auth.error("Failed to store device-flow token: \(error)")
+            deviceFlowError = error.localizedDescription
+            isDeviceFlowRunning = false
+            deviceFlowInit = nil
+        }
+    }
+
+    private func cancelDeviceFlow() {
+        deviceFlowTask?.cancel()
+        deviceFlowTask = nil
+        isDeviceFlowRunning = false
+        deviceFlowInit = nil
+        deviceFlowError = nil
+    }
+
+    private static func parseISODate(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: string) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: string)
+    }
+
+    private func preloadLastServerURL() {
+        guard serverURL.isEmpty, !shouldShowLoginForUITests else { return }
+        if let config = SetupRepository().getSetupConfiguration(), !config.serverURL.isEmpty {
+            serverURL = config.serverURL
+        }
     }
 
     private func hideKeyboard() {
