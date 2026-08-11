@@ -24,7 +24,12 @@ struct SetupView: View {
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
-        self._viewModel = State(wrappedValue: SetupViewModel(appViewModel: appViewModel))
+        let vm = SetupViewModel()
+        // Wire the view model's outputs to the app root — the VM itself stays
+        // decoupled from AppViewModel.
+        vm.onAuthenticated = { await appViewModel.checkInitialState() }
+        vm.onAcknowledgeVersion = { appViewModel.acknowledgeServerVersion($0) }
+        self._viewModel = State(wrappedValue: vm)
     }
 
     // MARK: - Body
@@ -432,7 +437,7 @@ struct SetupView: View {
                 .setupField(pwState)
 
                 // Login error hint
-                if viewModel.hasLoginError, let errorMessage = appViewModel.appData.errorMessage {
+                if let errorMessage = viewModel.loginError {
                     HStack(spacing: 5) {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.system(size: 11))

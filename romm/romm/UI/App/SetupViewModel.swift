@@ -12,7 +12,18 @@ import UIKit
 @Observable
 @MainActor
 final class SetupViewModel {
-    let appViewModel: AppViewModel
+    // Dependencies — use cases only, no reference to the app root view model.
+    private let saveSetupConfigurationUseCase: PSaveSetupConfigurationUseCase
+    private let getHeartbeatUseCase: GetHeartbeatUseCase
+    private let checkServerVersionUseCase: CheckServerVersionUseCase
+    private let saveServerVersionUseCase: SaveServerVersionUseCase
+
+    /// Called after a successful login so the app can re-evaluate auth state.
+    /// The View wires this to `AppViewModel.checkInitialState()`.
+    var onAuthenticated: () async -> Void = {}
+    /// Called when the user accepts an incompatible server version during setup.
+    /// The View wires this to `AppViewModel.acknowledgeServerVersion(_:)`.
+    var onAcknowledgeVersion: (String) -> Void = { _ in }
 
     var serverURL = ""
     var username = ""
@@ -53,18 +64,25 @@ final class SetupViewModel {
     // "Other sign-in options" disclosure
     var showOtherOptions = false
 
+    // Classic login state (owned locally — no app-global state)
+    var isLoggingIn = false
+    var loginError: String?
+
     private var connectionLogger: ConnectionLogger { ConnectionLogger.shared }
     private let launchArguments = ProcessInfo.processInfo.arguments
     private var shouldShowLoginForUITests: Bool { launchArguments.contains("-ui_testing_show_login") }
 
-    init(appViewModel: AppViewModel) {
-        self.appViewModel = appViewModel
+    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.saveSetupConfigurationUseCase = factory.makeSaveSetupConfigurationUseCase()
+        self.getHeartbeatUseCase = factory.makeGetHeartbeatUseCase()
+        self.checkServerVersionUseCase = factory.makeCheckServerVersionUseCase()
+        self.saveServerVersionUseCase = factory.makeSaveServerVersionUseCase()
     }
 
     // MARK: - Computed helpers
 
     var isBusy: Bool {
-        appViewModel.appData.isLoading || isExchangingToken || isConnecting || isDeviceFlowRunning
+        isLoggingIn || isExchangingToken || isConnecting || isDeviceFlowRunning
     }
 
     /// Whether the browser device-flow is the primary path. Optimistic before the
@@ -93,7 +111,7 @@ final class SetupViewModel {
     }
 
     var hasLoginError: Bool {
-        appViewModel.appData.errorMessage != nil
+        loginError != nil
     }
 
     var deviceFlowButtonEnabled: Bool {
@@ -113,7 +131,7 @@ final class SetupViewModel {
         if isVersionWarning {
             didAcceptIncompatibleVersion = true
             if let version = detectedServerVersion {
-                appViewModel.acknowledgeServerVersion(version)
+                onAcknowledgeVersion(version)
             }
         }
         if selectedAuthMethod == .clientToken {
@@ -138,10 +156,10 @@ final class SetupViewModel {
         detectedAuthCapability = nil
 
         do {
-            let version = try await appViewModel.fetchServerVersion(from: serverURL)
+            let version = try await getHeartbeatUseCase.execute(from: serverURL).version
             detectedServerVersion = version
 
-            if appViewModel.isVersionCompatible(version) {
+            if checkServerVersionUseCase.isVersionCompatible(version) {
                 serverValidated = true
                 connectionError = nil
                 didAcceptIncompatibleVersion = false
@@ -154,7 +172,7 @@ final class SetupViewModel {
                 await detectAuthenticationMethod()
             } else {
                 versionWarningTitle = "Incompatible Server Version"
-                versionWarningDetails = "Server v\(version) is outside the supported range (\(appViewModel.minSupportedServerVersion) – \(appViewModel.maxSupportedServerVersion)). Some features may not work correctly."
+                versionWarningDetails = "Server v\(version) is outside the supported range (\(checkServerVersionUseCase.minSupportedServerVersion) – \(checkServerVersionUseCase.maxSupportedServerVersion)). Some features may not work correctly."
                 isVersionWarning = true
                 serverValidated = true
                 await detectAuthenticationMethod()
@@ -292,14 +310,26 @@ final class SetupViewModel {
     }
 
     func performClassicLogin() async {
-        if let version = detectedServerVersion {
-            appViewModel.saveServerVersion(version)
+        isLoggingIn = true
+        loginError = nil
+        do {
+            if let version = detectedServerVersion {
+                saveServerVersionUseCase.execute(version: version)
+            }
+            _ = try await saveSetupConfigurationUseCase.execute(
+                serverURL: serverURL,
+                username: username,
+                password: password,
+                allowIncompatibleVersionLogin: didAcceptIncompatibleVersion
+            )
+            try SetupRepository().saveAuthMethod(.classic)
+            Logger.auth.info("Classic login complete")
+            await onAuthenticated()
+        } catch {
+            Logger.auth.error("Classic login failed: \(error)")
+            loginError = error.localizedDescription
         }
-        await appViewModel.saveConfiguration(
-            serverURL: serverURL,
-            username: username,
-            password: password
-        )
+        isLoggingIn = false
     }
 
     // MARK: - Client Token Login
@@ -314,7 +344,7 @@ final class SetupViewModel {
             try service.saveToken(clientTokenInput, info: tokenInfo)
             let setupRepo = SetupRepository()
             if let version = detectedServerVersion {
-                appViewModel.saveServerVersion(version)
+                saveServerVersionUseCase.execute(version: version)
             }
             try setupRepo.saveClientTokenSetup(
                 serverURL: serverURL,
@@ -323,9 +353,7 @@ final class SetupViewModel {
                 allowIncompatibleVersionLogin: didAcceptIncompatibleVersion
             )
             Logger.auth.info("Client token login complete")
-            appViewModel.appData.isLoading = false
-            appViewModel.appData.errorMessage = nil
-            await appViewModel.checkInitialState()
+            await onAuthenticated()
         } catch {
             Logger.auth.error("Client token login failed: \(error)")
             clientTokenError = error.localizedDescription
@@ -343,7 +371,7 @@ final class SetupViewModel {
             try service.saveToken(token, info: tokenInfo)
             let setupRepo = SetupRepository()
             if let version = detectedServerVersion {
-                appViewModel.saveServerVersion(version)
+                saveServerVersionUseCase.execute(version: version)
             }
             try setupRepo.saveClientTokenSetup(
                 serverURL: serverURL,
@@ -352,9 +380,7 @@ final class SetupViewModel {
                 allowIncompatibleVersionLogin: didAcceptIncompatibleVersion
             )
             Logger.auth.info("Client token pairing complete")
-            appViewModel.appData.isLoading = false
-            appViewModel.appData.errorMessage = nil
-            await appViewModel.checkInitialState()
+            await onAuthenticated()
         } catch {
             Logger.auth.error("Client token pairing failed: \(error)")
             clientTokenError = error.localizedDescription
@@ -377,7 +403,7 @@ final class SetupViewModel {
         if isVersionWarning {
             didAcceptIncompatibleVersion = true
             if let version = detectedServerVersion {
-                appViewModel.acknowledgeServerVersion(version)
+                onAcknowledgeVersion(version)
             }
         }
 
@@ -441,7 +467,7 @@ final class SetupViewModel {
 
             let setupRepo = SetupRepository()
             if let version = detectedServerVersion {
-                appViewModel.saveServerVersion(version)
+                saveServerVersionUseCase.execute(version: version)
             }
             try setupRepo.saveClientTokenSetup(
                 serverURL: serverURL,
@@ -450,11 +476,9 @@ final class SetupViewModel {
                 allowIncompatibleVersionLogin: didAcceptIncompatibleVersion
             )
             Logger.auth.info("Browser device-flow login complete")
-            appViewModel.appData.isLoading = false
-            appViewModel.appData.errorMessage = nil
             isDeviceFlowRunning = false
             deviceFlowInit = nil
-            await appViewModel.checkInitialState()
+            await onAuthenticated()
         } catch {
             Logger.auth.error("Failed to store device-flow token: \(error)")
             deviceFlowError = error.localizedDescription
