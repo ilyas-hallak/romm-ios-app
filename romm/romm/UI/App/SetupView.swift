@@ -225,13 +225,13 @@ struct SetupView: View {
         .padding(.vertical, 20)
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color.white.opacity(0.055))
+                .fill(SetupTheme.cardFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.35), radius: 24, x: 0, y: 8)
+        .shadow(color: .black.opacity(0.45), radius: 24, x: 0, y: 8)
     }
 
     // MARK: - URL Field Section

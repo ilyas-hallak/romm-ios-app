@@ -51,6 +51,10 @@ enum SetupTheme {
     static let label = Color(hex: 0xb6acd8)
     static let subtitle = Color(hex: 0xb6acd8)
 
+    // Glass surfaces — opaque enough to stay readable over the coral blob.
+    static let cardFill = Color(hex: 0x2d2658, alpha: 0.92)
+    static let fieldFill = Color(hex: 0x211b42, alpha: 0.92)
+
     // Gradients
     static var backgroundGradient: LinearGradient {
         LinearGradient(
@@ -97,13 +101,14 @@ struct SetupBackground: View {
                 .frame(width: 460, height: 560)
                 .offset(x: -170, y: -240)
 
-            // Coral blob, bottom-right
+            // Coral blob, bottom-right — kept as a soft glow so it never bleeds
+            // through the glass card and hurts legibility.
             Ellipse()
                 .fill(SetupTheme.coralGradient)
-                .frame(width: 420, height: 460)
-                .opacity(0.9)
-                .blur(radius: 6)
-                .offset(x: 160, y: 320)
+                .frame(width: 380, height: 420)
+                .opacity(0.4)
+                .blur(radius: 55)
+                .offset(x: 190, y: 380)
         }
         .ignoresSafeArea()
     }
@@ -118,8 +123,8 @@ enum SetupFieldState {
 
     var fill: Color {
         switch self {
-        case .normal, .focused: return .white.opacity(0.05)
-        case .error: return SetupTheme.errorBorder.opacity(0.08)
+        case .normal, .focused: return SetupTheme.fieldFill
+        case .error: return SetupTheme.errorBorder.opacity(0.16)
         }
     }
 
