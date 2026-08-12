@@ -69,6 +69,7 @@ final class CloudSaveSyncService {
         guard isEnabled else { return }
         await pullBattery()
         await pullStates()
+        settings.recordSync(romId: config.romId, trigger: .automatic)
     }
 
     private func pullBattery() async {
@@ -177,6 +178,7 @@ final class CloudSaveSyncService {
                     )
                 }
                 await self.recordBatteryId(result.id)
+                await self.recordAutoSync()
                 print("[CloudSync] battery pushed id=\(result.id)")
             } catch {
                 print("[CloudSync] battery push failed: \(error.localizedDescription)")
@@ -210,6 +212,7 @@ final class CloudSaveSyncService {
                     )
                 }
                 await self.recordStateId(slot: slot, id: result.id)
+                await self.recordAutoSync()
                 print("[CloudSync] state slot \(slot) pushed id=\(result.id)")
             } catch {
                 print("[CloudSync] state slot \(slot) push failed: \(error.localizedDescription)")
@@ -219,6 +222,7 @@ final class CloudSaveSyncService {
 
     private func recordBatteryId(_ id: Int) { serverBatteryId = id }
     private func recordStateId(slot: Int, id: Int) { serverStateIdBySlot[slot] = id }
+    private func recordAutoSync() { settings.recordSync(romId: config.romId, trigger: .automatic) }
 
     // MARK: - Filename helpers
 

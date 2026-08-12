@@ -7,6 +7,7 @@ struct ROMCardRow: View {
     let isDisabled: Bool
     let hasSaveGame: Bool
     let hasSaveState: Bool
+    let lastSync: SyncMetadata?
     let onPlay: () -> Void
     let onSync: () -> Void
     let onDetails: () -> Void
@@ -61,6 +62,10 @@ struct ROMCardRow: View {
                                 SaveBadge(icon: "bookmark.fill", title: "Save state", tint: .purple)
                             }
                         }
+                    }
+
+                    if let lastSync {
+                        SyncStatusLine(meta: lastSync)
                     }
                 }
 
@@ -129,6 +134,35 @@ struct ROMCardRow: View {
         }
         .padding(.vertical, 4)
         .opacity(isLaunching ? 0.7 : 1)
+    }
+}
+
+struct SyncStatusLine: View {
+    let meta: SyncMetadata
+
+    private var tint: Color { meta.trigger == .automatic ? .green : .orange }
+
+    private var relative: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: meta.date, relativeTo: Date())
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.caption2)
+            Text("Synced \(relative)")
+                .font(.caption2)
+            Text(meta.trigger == .automatic ? "Auto" : "Manual")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(tint.opacity(0.15)))
+                .foregroundColor(tint)
+        }
+        .foregroundColor(.secondary)
+        .lineLimit(1)
     }
 }
 
