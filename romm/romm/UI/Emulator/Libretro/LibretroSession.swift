@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import GameController
 
 @MainActor
 final class LibretroSession: NSObject {
@@ -252,6 +253,9 @@ final class LibretroGameViewController: UIViewController {
     let controllerView: LibretroTouchControllerView
     private let errorLabel = UILabel()
     private var aspectConstraint: NSLayoutConstraint?
+    /// Top-anchor constraint used to slide the video within the safe area when
+    /// custom placement is active. Its constant is recomputed each layout pass.
+    private var verticalConstraint: NSLayoutConstraint?
 
     init(
         core: LibretroCore,
@@ -278,6 +282,14 @@ final class LibretroGameViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+
+        // Re-apply placement when a physical controller connects/disconnects so
+        // "Auto" mode reacts live during a session.
+        for name in [NSNotification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(controllerConnectionChanged), name: name, object: nil
+            )
+        }
 
         videoView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(videoView)
@@ -320,6 +332,8 @@ final class LibretroGameViewController: UIViewController {
         coordinator.animate(alongsideTransition: { [weak self] _ in
             self?.controllerView.setNeedsLayout()
             self?.controllerView.layoutIfNeeded()
+            // Portrait/landscape flips whether custom placement applies.
+            self?.applyAspectConstraints()
         })
     }
 
@@ -329,12 +343,24 @@ final class LibretroGameViewController: UIViewController {
         applyAspectConstraints()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateVerticalOffsetConstant()
+    }
+
+    @objc private func controllerConnectionChanged() {
+        applyAspectConstraints()
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
     /// Re-installs the aspect constraint for `videoView` based on the user's
     /// preference. Only PSX (libretro) games go through this controller, so we
     /// just read the PSX preference directly.
     func applyAspectConstraints() {
         aspectConstraint?.isActive = false
         aspectConstraint = nil
+        verticalConstraint = nil
 
         // Common constraints — center + don't exceed view bounds, prefer to fill.
         // We rebuild from scratch to keep this idempotent across pref changes.
@@ -346,24 +372,25 @@ final class LibretroGameViewController: UIViewController {
         let widthFill = videoView.widthAnchor.constraint(equalTo: view.widthAnchor)
         widthFill.priority = .defaultHigh
 
-        // Vertical placement + height follow the user's screen-position
-        // preference. `.top` pins to the safe-area top and limits the video to
-        // a user-chosen fraction of the safe-area height (leaving the rest free
-        // for a physical gamepad case). `.center` (aka "Default") fills the
-        // whole view and centers, as before — the height fraction is ignored.
-        let verticalConstraint: NSLayoutConstraint
+        // Controller Mode: when active (see `isCustomPlacementActive`) the video
+        // is limited to a user-chosen fraction of the safe-area height and slid
+        // vertically via a top-anchor constant (recomputed in layout, because
+        // the actual height depends on the aspect ratio). Otherwise it fills the
+        // whole view and centers, as before.
+        let vertical: NSLayoutConstraint
         let heightLimit: NSLayoutConstraint
         let heightFill: NSLayoutConstraint
-        switch screenPositionPreference.position {
-        case .top:
+        if isCustomPlacementActive {
             let fraction = CGFloat(min(1.0, max(0.3, screenPositionPreference.heightFraction)))
             let guide = view.safeAreaLayoutGuide
-            verticalConstraint = videoView.topAnchor.constraint(equalTo: guide.topAnchor)
+            let top = videoView.topAnchor.constraint(equalTo: guide.topAnchor, constant: 0)
+            verticalConstraint = top
+            vertical = top
             heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: guide.heightAnchor, multiplier: fraction)
             heightFill = videoView.heightAnchor.constraint(equalTo: guide.heightAnchor, multiplier: fraction)
             heightFill.priority = .defaultHigh
-        case .center:
-            verticalConstraint = videoView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        } else {
+            vertical = videoView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
             heightLimit = videoView.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor)
             heightFill = videoView.heightAnchor.constraint(equalTo: view.heightAnchor)
             heightFill.priority = .defaultHigh
@@ -371,7 +398,7 @@ final class LibretroGameViewController: UIViewController {
 
         NSLayoutConstraint.activate([
             videoView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            verticalConstraint,
+            vertical,
             widthLimit, heightLimit, widthFill, heightFill
         ])
 
@@ -382,5 +409,32 @@ final class LibretroGameViewController: UIViewController {
         }
 
         view.layoutIfNeeded()
+        updateVerticalOffsetConstant()
+    }
+
+    /// Whether the user's custom vertical placement should apply right now.
+    /// Portrait only — in landscape the game already fills the height.
+    private var isCustomPlacementActive: Bool {
+        guard view.bounds.height >= view.bounds.width else { return false }
+        switch screenPositionPreference.mode {
+        case .off:    return false
+        case .always: return true
+        case .auto:   return !GCController.controllers().isEmpty
+        }
+    }
+
+    /// Slides the video within the safe area to the user's vertical offset.
+    /// `0` = flush top, `0.5` = centered, `1` = flush bottom. Runs from
+    /// `viewDidLayoutSubviews` because it needs the resolved video height.
+    private func updateVerticalOffsetConstant() {
+        guard let top = verticalConstraint else { return }
+        let guideHeight = view.safeAreaLayoutGuide.layoutFrame.height
+        let videoHeight = videoView.frame.height
+        let free = max(0, guideHeight - videoHeight)
+        let offset = CGFloat(min(1.0, max(0.0, screenPositionPreference.verticalOffset)))
+        let target = (offset * free).rounded()
+        if abs(target - top.constant) > 0.5 {
+            top.constant = target
+        }
     }
 }

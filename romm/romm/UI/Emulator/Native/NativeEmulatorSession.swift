@@ -1,7 +1,9 @@
 import Foundation
 import UIKit
+import AVFoundation
 import DeltaCore
 import GBADeltaCore
+import GameController
 
 /// GameViewController subclass that forces the on-screen controller skin to
 /// reload after a rotation. DeltaCore only loads the skin image on initial
@@ -9,6 +11,9 @@ import GBADeltaCore
 /// controller renders as a centered portrait-aspect block.
 final class RommGameViewController: GameViewController {
     private var didApplyInitialSkin = false
+
+    /// "Controller Mode" placement preference. Set before `loadViewIfNeeded()`.
+    var screenPositionPreference: PEmulatorScreenPositionPreference?
 
     override func viewWillTransition(
         to size: CGSize,
@@ -22,11 +27,54 @@ final class RommGameViewController: GameViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        // DeltaCore has just positioned `gameViews`; nudge them to the user's
+        // custom placement before the frame is committed.
+        applyCustomScreenPlacement()
         guard !didApplyInitialSkin,
               view.window != nil,
               view.bounds.width > 0, view.bounds.height > 0 else { return }
         didApplyInitialSkin = true
         reapplyControllerSkin()
+    }
+
+    /// Repositions the single game screen per the Controller Mode preference:
+    /// limits its height to `heightFraction` of the safe area and slides it to
+    /// `verticalOffset` (0 = top … 1 = bottom). Portrait + single-screen only
+    /// (dual-screen systems like DS keep DeltaCore's default layout).
+    private func applyCustomScreenPlacement() {
+        guard let pref = screenPositionPreference else { return }
+        // Portrait only — landscape already fills the height.
+        guard view.bounds.height >= view.bounds.width else { return }
+        guard gameViews.count == 1, let gameView = gameViews.first else { return }
+
+        let active: Bool
+        switch pref.mode {
+        case .off:    active = false
+        case .always: active = true
+        case .auto:   active = !GCController.controllers().isEmpty
+        }
+        guard active else { return }
+
+        let current = gameView.frame
+        guard current.width > 0, current.height > 0 else { return }
+
+        let insets = view.safeAreaInsets
+        let availableTop = insets.top
+        let availableHeight = view.bounds.height - insets.top - insets.bottom
+        guard availableHeight > 0 else { return }
+
+        let fraction = CGFloat(min(1.0, max(0.3, pref.heightFraction)))
+        let offset = CGFloat(min(1.0, max(0.0, pref.verticalOffset)))
+
+        // Fit the game (keeping its aspect ratio) into a box that is at most
+        // `fraction` of the available height and the full width.
+        let box = CGRect(x: 0, y: 0, width: view.bounds.width, height: availableHeight * fraction)
+        let fitted = AVMakeRect(aspectRatio: current.size, insideRect: box)
+
+        let x = ((view.bounds.width - fitted.width) / 2).rounded()
+        let free = max(0, availableHeight - fitted.height)
+        let y = (availableTop + offset * free).rounded()
+        gameView.frame = CGRect(x: x, y: y, width: fitted.width.rounded(), height: fitted.height.rounded())
     }
 
     /// Reassign the controller skin to rebuild `gameViews` for dual-screen
@@ -62,7 +110,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.emulatorCore
     }
 
-    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, cloudSync: CloudSaveSyncService? = nil) {
+    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, cloudSync: CloudSaveSyncService? = nil) {
         self.gameURL = gameURL
         self.gameType = gameType
         self.romId = romId
@@ -70,6 +118,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         self.cloudSync = cloudSync
 
         let vc = RommGameViewController()
+        vc.screenPositionPreference = screenPositionPreference
         vc.loadViewIfNeeded()
         let game = Game(fileURL: gameURL, type: gameType)
         vc.game = game

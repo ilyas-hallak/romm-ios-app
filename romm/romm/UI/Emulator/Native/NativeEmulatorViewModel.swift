@@ -70,6 +70,7 @@ final class NativeEmulatorViewModel {
             session = NativeEmulatorSession(
                 gameURL: url, gameType: deltaType,
                 romId: rom.id, saveStates: saveStates,
+                screenPositionPreference: factory.emulatorScreenPositionPreference,
                 cloudSync: cloudSync
             )
             // The session sequences the resume-load after emulation is live and

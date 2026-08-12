@@ -1,18 +1,25 @@
 import Foundation
 
-/// Vertical placement of the emulator video output within the display.
-/// `.top` is useful for physical gamepad cases (e.g. GameBaby / flip-pad
-/// style) where the game surface should sit flush with the top of the screen.
-enum EmulatorScreenPosition: String, CaseIterable, Identifiable {
-    case center = "center"
-    case top = "top"
+/// How the emulator video output is positioned within the display ("Controller
+/// Mode"). Physical gamepad cases (e.g. GameSir Pocket Taco, GameBaby flip-pad)
+/// cover the lower part of the screen, so players want to slide the game up and
+/// shrink it. The chosen vertical offset + height apply to both the native
+/// (DeltaCore) and libretro renderers in portrait.
+enum ControllerScreenMode: String, CaseIterable, Identifiable {
+    /// Default rendering — game fills / centers as usual. Custom placement off.
+    case off = "off"
+    /// Apply the custom placement only while a physical controller is connected.
+    case auto = "auto"
+    /// Always apply the custom placement, with or without a controller.
+    case always = "always"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .center: return "Default"
-        case .top:    return "Top"
+        case .off:    return "Off"
+        case .auto:   return "Auto"
+        case .always: return "On"
         }
     }
 }

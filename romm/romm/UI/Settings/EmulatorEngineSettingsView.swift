@@ -2,7 +2,8 @@ import SwiftUI
 
 struct EmulatorEngineSettingsView: View {
     @State private var selection: EmulatorEngine
-    @State private var screenPosition: EmulatorScreenPosition
+    @State private var mode: ControllerScreenMode
+    @State private var verticalOffset: Double
     @State private var heightFraction: Double
     private let preference: PEmulatorEnginePreference
     private let screenPositionPreference: PEmulatorScreenPositionPreference
@@ -11,7 +12,8 @@ struct EmulatorEngineSettingsView: View {
         self.preference = factory.enginePreference
         self.screenPositionPreference = factory.emulatorScreenPositionPreference
         _selection = State(wrappedValue: factory.enginePreference.current)
-        _screenPosition = State(wrappedValue: factory.emulatorScreenPositionPreference.position)
+        _mode = State(wrappedValue: factory.emulatorScreenPositionPreference.mode)
+        _verticalOffset = State(wrappedValue: factory.emulatorScreenPositionPreference.verticalOffset)
         _heightFraction = State(wrappedValue: factory.emulatorScreenPositionPreference.heightFraction)
     }
 
@@ -35,116 +37,131 @@ struct EmulatorEngineSettingsView: View {
                     }
                 }
             }
-            // Screen Position only affects the native (libretro) renderer — hide
-            // it entirely for the Web (EmulatorJS) engine, where it does nothing.
-            if selection == .native {
-                Section(
-                    header: Text("Screen Position"),
-                    footer: Text("Applies to the PlayStation (libretro) core in portrait. “Top” pins the game to the top and lets you pick how much of the height it uses — handy for physical gamepad cases so the lower part of the screen stays free for the controls. In landscape the game already fills the height, so this setting has no effect there.")
-                ) {
-                    Picker("Screen Position", selection: $screenPosition) {
-                        ForEach(EmulatorScreenPosition.allCases) { position in
-                            Text(position.displayName).tag(position)
-                        }
-                    }
-                    .pickerStyle(.segmented)
 
-                    if screenPosition == .top {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Height")
-                                Spacer()
-                                Text("\(Int((heightFraction * 100).rounded()))%")
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            Slider(value: $heightFraction, in: 0.3...1.0, step: 0.05)
-                        }
-                    }
-
-                    ScreenLayoutPreview(position: screenPosition, fraction: heightFraction)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-            }
+            controllerModeSection
         }
         .navigationTitle("Emulator")
         .onChange(of: selection) { _, new in preference.current = new }
-        .onChange(of: screenPosition) { _, new in screenPositionPreference.position = new }
+        .onChange(of: mode) { _, new in screenPositionPreference.mode = new }
+        .onChange(of: verticalOffset) { _, new in screenPositionPreference.verticalOffset = new }
         .onChange(of: heightFraction) { _, new in screenPositionPreference.heightFraction = new }
+    }
+
+    // MARK: - Controller Mode
+
+    // Only relevant for the on-device renderers (native + libretro). Hide it for
+    // the Web (EmulatorJS) engine, where the setting does nothing.
+    @ViewBuilder
+    private var controllerModeSection: some View {
+        if selection == .native {
+            Section(
+                header: Text("Controller Mode"),
+                footer: Text("Repositions the game in portrait so a physical gamepad case (e.g. GameSir Pocket Taco) doesn't cover it. “Auto” only kicks in while a controller is connected; “On” always applies. Drag the game in the preview to place it, and use the bottom handle to set its height. Landscape already fills the screen, so this has no effect there.")
+            ) {
+                Picker("Mode", selection: $mode) {
+                    ForEach(ControllerScreenMode.allCases) { m in
+                        Text(m.displayName).tag(m)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if mode != .off {
+                    VStack(spacing: 14) {
+                        ControllerScreenPreview(
+                            verticalOffset: $verticalOffset,
+                            heightFraction: $heightFraction
+                        )
+                        HStack {
+                            Label("\(Int((verticalOffset * 100).rounded()))% from top", systemImage: "arrow.up.and.down")
+                            Spacer()
+                            Label("\(Int((heightFraction * 100).rounded()))% height", systemImage: "arrow.up.left.and.arrow.down.right")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+            }
+        }
     }
 }
 
-/// Side-by-side phone mockups that show where the game screen will sit.
-/// The portrait mock reflects the current Screen Position settings; the
-/// landscape mock illustrates that the game always fills the height there,
-/// so the setting has no effect in landscape.
-private struct ScreenLayoutPreview: View {
-    let position: EmulatorScreenPosition
-    let fraction: Double
+/// Interactive portrait phone mock: drag the game block to reposition it and
+/// drag the bottom handle to resize its height. Writes back into the bound
+/// `verticalOffset` (0 = top … 1 = bottom) and `heightFraction` (0.3…1.0).
+private struct ControllerScreenPreview: View {
+    @Binding var verticalOffset: Double
+    @Binding var heightFraction: Double
 
-    private let inset: CGFloat = 5
+    @State private var baseOffset: Double?
+    @State private var baseHeight: Double?
+
+    private let phoneWidth: CGFloat = 132
+    private let phoneHeight: CGFloat = 264
+    private let bezel: CGFloat = 9
 
     var body: some View {
-        let frac = position == .top ? CGFloat(min(1.0, max(0.3, fraction))) : 1.0
+        let innerW = phoneWidth - bezel * 2
+        let innerH = phoneHeight - bezel * 2
+        let frac = CGFloat(min(1.0, max(0.3, heightFraction)))
+        let blockH = innerH * frac
+        let freeSpace = innerH - blockH
+        let blockTop = bezel + CGFloat(min(1.0, max(0.0, verticalOffset))) * freeSpace
 
-        HStack(alignment: .top, spacing: 24) {
-            VStack(spacing: 6) {
-                phone(
-                    width: 84, height: 168,
-                    alignment: position == .top ? .top : .center,
-                    blockWidth: 84 - inset * 2,
-                    blockHeight: (168 - inset * 2) * frac
-                )
-                Text("Portrait")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(spacing: 6) {
-                // Landscape: a 4:3 picture already fills the full height and is
-                // pillar-boxed on the sides — the setting can't move it.
-                phone(
-                    width: 168, height: 84,
-                    alignment: .center,
-                    blockWidth: (84 - inset * 2) * (4.0 / 3.0),
-                    blockHeight: 84 - inset * 2
-                )
-                Text("Landscape · no effect")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .animation(.easeInOut(duration: 0.15), value: frac)
-        .animation(.easeInOut(duration: 0.15), value: position)
-    }
-
-    private func phone(
-        width: CGFloat,
-        height: CGFloat,
-        alignment: Alignment,
-        blockWidth: CGFloat,
-        blockHeight: CGFloat
-    ) -> some View {
-        ZStack(alignment: alignment) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(.systemBackground))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
                         .stroke(Color(.separator), lineWidth: 1)
                 )
+                .frame(width: phoneWidth, height: phoneHeight)
 
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
+            // Game surface — draggable to reposition.
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.accentColor.opacity(0.85))
-                .frame(width: blockWidth, height: blockHeight)
+                .frame(width: innerW, height: blockH)
                 .overlay(
                     Image(systemName: "gamecontroller.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: 20))
                         .foregroundStyle(.white.opacity(0.9))
                 )
-                .padding(inset)
+                .overlay(alignment: .bottom) { resizeHandle }
+                .offset(x: bezel, y: blockTop)
+                .gesture(repositionGesture(freeSpace: freeSpace))
         }
-        .frame(width: width, height: height)
+        .frame(width: phoneWidth, height: phoneHeight)
+    }
+
+    private var resizeHandle: some View {
+        Capsule()
+            .fill(.white.opacity(0.9))
+            .frame(width: 40, height: 6)
+            .padding(.bottom, 4)
+            .contentShape(Rectangle().inset(by: -12))
+            .gesture(resizeGesture())
+    }
+
+    private func repositionGesture(freeSpace: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if baseOffset == nil { baseOffset = verticalOffset }
+                guard freeSpace > 0 else { return }
+                let delta = Double(value.translation.height / freeSpace)
+                verticalOffset = min(1.0, max(0.0, (baseOffset ?? verticalOffset) + delta))
+            }
+            .onEnded { _ in baseOffset = nil }
+    }
+
+    private func resizeGesture() -> some Gesture {
+        let innerH = phoneHeight - bezel * 2
+        return DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if baseHeight == nil { baseHeight = heightFraction }
+                let delta = Double(value.translation.height / innerH)
+                heightFraction = min(1.0, max(0.3, (baseHeight ?? heightFraction) + delta))
+            }
+            .onEnded { _ in baseHeight = nil }
     }
 }
