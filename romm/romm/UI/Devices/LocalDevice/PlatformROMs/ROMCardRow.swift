@@ -80,7 +80,7 @@ struct ROMCardRow: View {
                     .frame(maxWidth: .infinity, minHeight: 36)
                     .background(Color.green.opacity(0.85))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                } else {
+                } else if isPlayable {
                     CardActionButton(
                         title: "Play",
                         systemImage: "play.fill",
@@ -88,8 +88,18 @@ struct ROMCardRow: View {
                         filled: true,
                         action: onPlay
                     )
-                    .disabled(!isPlayable || isDisabled)
-                    .opacity((!isPlayable || isDisabled) ? 0.5 : 1)
+                    .disabled(isDisabled)
+                    .opacity(isDisabled ? 0.5 : 1)
+                } else {
+                    // Platform has no on-device core — show a distinct, calm
+                    // "unavailable" state instead of a greyed-out Play button so
+                    // it reads as an intentional limitation, not a broken button.
+                    CardActionLabel(
+                        title: "Not playable",
+                        systemImage: "play.slash.fill",
+                        tint: Color(.tertiaryLabel)
+                    )
+                    .accessibilityLabel("Not playable on this device")
                 }
 
                 Button(action: onDetails) {
@@ -104,6 +114,17 @@ struct ROMCardRow: View {
                     filled: false,
                     action: onSync
                 )
+            }
+
+            if !isPlayable {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                    Text("This system can't be emulated on your device yet, so it can't be played here. You can still sync saves and view details.")
+                        .font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 4)
