@@ -11,6 +11,9 @@ final class LibretroEmulatorViewModel {
     var session: LibretroSession?
     var isLoading: Bool = true
     var onMenuRequested: (() -> Void)?
+    /// True when the on-screen touch controls are hidden (physical controller or
+    /// Controller Mode "On") — the view shows a standalone menu button instead.
+    var controlsHidden: Bool = false
 
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let resolveROMFile: PResolveROMFileUseCase
@@ -93,6 +96,7 @@ final class LibretroEmulatorViewModel {
                 cloudSync: cloudSync
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }
+            s.onControlsHiddenChanged = { [weak self] hidden in self?.controlsHidden = hidden }
             session = s
             // The session sequences the resume-load after the core is up and
             // performs it while paused (see LibretroSession.start).

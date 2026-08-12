@@ -15,6 +15,9 @@ final class LibretroSession: NSObject {
     private let frontend = LibretroFrontend.shared
 
     var onMenuRequested: (() -> Void)?
+    /// Reports whether the on-screen touch controls are currently hidden, so the
+    /// SwiftUI layer can show a standalone menu button in their place.
+    var onControlsHiddenChanged: ((Bool) -> Void)?
 
     let viewController: LibretroGameViewController
 
@@ -43,6 +46,9 @@ final class LibretroSession: NSObject {
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in
             self?.onMenuRequested?()
+        }
+        self.viewController.onControlsHiddenChanged = { [weak self] hidden in
+            self?.onControlsHiddenChanged?(hidden)
         }
     }
 
@@ -251,6 +257,8 @@ final class LibretroGameViewController: UIViewController {
     private let screenPositionPreference: PEmulatorScreenPositionPreference
     let videoView = LibretroVideoView()
     let controllerView: LibretroTouchControllerView
+    var onControlsHiddenChanged: ((Bool) -> Void)?
+    private var controlsHidden = false
     private let errorLabel = UILabel()
     private var aspectConstraint: NSLayoutConstraint?
     /// Top-anchor constraint used to slide the video within the safe area when
@@ -303,6 +311,7 @@ final class LibretroGameViewController: UIViewController {
             controllerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             controllerView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
+        updateControlsVisibility()
 
         errorLabel.numberOfLines = 0
         errorLabel.textColor = .systemRed
@@ -341,6 +350,7 @@ final class LibretroGameViewController: UIViewController {
         super.viewWillAppear(animated)
         // Pick up changes made from settings while paused in the menu overlay.
         applyAspectConstraints()
+        updateControlsVisibility()
     }
 
     override func viewDidLayoutSubviews() {
@@ -350,6 +360,19 @@ final class LibretroGameViewController: UIViewController {
 
     @objc private func controllerConnectionChanged() {
         applyAspectConstraints()
+        updateControlsVisibility()
+    }
+
+    /// Hide the touch overlay when a physical controller is connected or the
+    /// user pinned Controller Mode to "On"; a standalone menu button (SwiftUI)
+    /// then provides access to the in-game menu.
+    private func updateControlsVisibility() {
+        let hide = !GCController.controllers().isEmpty || screenPositionPreference.mode == .always
+        controllerView.isHidden = hide
+        if hide != controlsHidden {
+            controlsHidden = hide
+            onControlsHiddenChanged?(hide)
+        }
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }

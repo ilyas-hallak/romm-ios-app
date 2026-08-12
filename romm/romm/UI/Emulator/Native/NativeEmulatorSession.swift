@@ -95,8 +95,12 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let romId: Int
     private let cloudSync: CloudSaveSyncService?
+    private let screenPositionPreference: PEmulatorScreenPositionPreference
 
     var onMenuRequested: (() -> Void)?
+    /// Reports whether the on-screen touch controls are currently hidden, so the
+    /// SwiftUI layer can show a standalone menu button in their place.
+    var onControlsHiddenChanged: ((Bool) -> Void)?
 
     let viewController: GameViewController
 
@@ -116,6 +120,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         self.romId = romId
         self.saveStates = saveStates
         self.cloudSync = cloudSync
+        self.screenPositionPreference = screenPositionPreference
 
         let vc = RommGameViewController()
         vc.screenPositionPreference = screenPositionPreference
@@ -177,7 +182,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     func pause() { viewController.pauseEmulation() }
-    func resume() { viewController.resumeEmulation() }
+    func resume() {
+        viewController.resumeEmulation()
+        // Mode may have changed while paused in the menu.
+        updateOnScreenControlsVisibility()
+    }
 
     func stop() {
         // Pause the render thread before flushing battery — DeltaCore expects
@@ -248,8 +257,15 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     private func updateOnScreenControlsVisibility() {
-        let hasExternal = !ExternalGameControllerManager.shared.connectedControllers.isEmpty
-        viewController.controllerView?.isHidden = hasExternal
+        let hide = shouldHideOnScreenControls
+        viewController.controllerView?.isHidden = hide
+        onControlsHiddenChanged?(hide)
+    }
+
+    /// Hide the on-screen buttons when a physical controller is connected or the
+    /// user pinned Controller Mode to "On" — a standalone menu button takes over.
+    private var shouldHideOnScreenControls: Bool {
+        !GCController.controllers().isEmpty || screenPositionPreference.mode == .always
     }
 
     // MARK: - Save / Load

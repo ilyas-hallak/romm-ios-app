@@ -37,7 +37,12 @@ struct LibretroEmulatorView: View {
                 }
                 .padding()
             }
+            if viewModel.controlsHidden, !viewModel.isLoading, viewModel.errorMessage == nil {
+                EmulatorMenuButtonOverlay { showMenu = true }
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: viewModel.controlsHidden)
         .animation(.easeOut(duration: 0.25), value: viewModel.isLoading)
         .onAppear {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
