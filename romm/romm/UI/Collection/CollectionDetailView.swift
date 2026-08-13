@@ -118,7 +118,6 @@ struct CollectionDetailView: View {
                 }
             }
         }
-        .toolbar(.hidden, for: .tabBar)
         .task {
             // Guard: Only load if not already loaded or loading
             // This prevents unnecessary reloading when navigating back

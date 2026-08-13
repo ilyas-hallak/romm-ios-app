@@ -11,7 +11,12 @@ import SafariServices
 struct RomDetailView: View {
     let rom: Rom
     @State private var viewModel = RomDetailViewModel()
-    
+
+    @EnvironmentObject private var appData: AppData
+    @State private var downloadButtonFrame: CGRect = .zero
+    /// Mirrors the native tab-bar minimize (which has no readable state): true
+    /// once the scroll view has moved down far enough that the bar collapses.
+    @State private var tabBarMinimized: Bool = false
     @Environment(\.dismiss) private var dismiss
     @State private var scrollOffset: CGFloat = 0
     @State private var showTitle: Bool = false
@@ -220,10 +225,14 @@ struct RomDetailView: View {
                 .ignoresSafeArea(edges: .top)
             }
             .coordinateSpace(name: CoordinateSpaces.scrollView)
+            .onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y > 40
+            } action: { _, minimized in
+                tabBarMinimized = minimized
+            }
             .ignoresSafeArea(edges: .top)
             .navigationBarTitle(showTitle ? rom.name : "", displayMode: .inline)
             .navigationBarBackButtonHidden(false)
-            .toolbar(.hidden, for: .tabBar)
             .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
                 scrollOffset = value
                 // Show title when content view reaches navbar (around 300px up from original position)
@@ -372,6 +381,13 @@ struct RomDetailView: View {
             // Playing happens in the Downloads tab (ROMCardRow), not here.
             let downloadState = viewModel.downloadButtonState(forRomId: currentSelectedRom.id)
             Button(action: {
+                appData.launchDownloadFlight(
+                    coverURL: currentSelectedRom.urlCover,
+                    from: downloadButtonFrame,
+                    // No public API exposes the tab-bar's minimized state, so
+                    // derive it from the live scroll offset (see onScrollGeometryChange).
+                    tabBarMinimized: tabBarMinimized
+                )
                 viewModel.downloadROM(rom: currentSelectedRom)
             }) {
                 HStack(spacing: 8) {
@@ -421,6 +437,11 @@ struct RomDetailView: View {
                 }
             }())
             .accessibility(hint: Text(downloadState == .downloaded ? "Already downloaded to this device" : "Download this ROM to this device"))
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { newFrame in
+                downloadButtonFrame = newFrame
+            }
 
             // Secondary actions: open the downloaded file in another app, or send it to a device.
             HStack(spacing: 12) {
