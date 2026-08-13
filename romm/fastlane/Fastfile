@@ -61,10 +61,23 @@ platform :ios do
       clean: true
     )
 
+    # Release notes ("What to Test"). Explicit override via TF_CHANGELOG, else
+    # the recent git commit subjects. Notes can only be set once the build has
+    # finished processing, so we wait when a changelog is present.
+    changelog = ENV["TF_CHANGELOG"].to_s.strip
+    if changelog.empty?
+      changelog = (changelog_from_git_commits(
+        commits_count: 15,
+        pretty: "- %s",
+        merge_commit_filtering: "exclude_merges"
+      ) rescue nil)
+    end
+
     upload_to_testflight(
       api_key: api_key,
-      skip_waiting_for_build_processing: true,
-      distribute_external: false
+      changelog: changelog,
+      distribute_external: false,
+      skip_waiting_for_build_processing: changelog.to_s.strip.empty?
     )
 
     UI.success("Uploaded build #{next_build} to TestFlight 🚀")
