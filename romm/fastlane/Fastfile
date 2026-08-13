@@ -33,10 +33,30 @@ platform :ios do
       initial_build_number: 41
     ).to_i + 1
 
+    # Let xcodebuild create/fetch the distribution certificate and regenerate the
+    # App Store provisioning profile on demand during export, authenticating with
+    # the App Store Connect API key. Requires the key to have the Admin role.
+    # Absolute path, resolved relative to this fastlane dir so it's independent
+    # of the current working directory (xcodebuild requires an absolute path).
+    key_path = File.expand_path(File.basename(ENV["ASC_KEY_PATH"]), __dir__)
+    UI.user_error!("API key not found at #{key_path}") unless File.exist?(key_path)
+
+    prov_args = [
+      "-allowProvisioningUpdates",
+      "-authenticationKeyID", ENV["ASC_KEY_ID"],
+      "-authenticationKeyIssuerID", ENV["ASC_ISSUER_ID"],
+      "-authenticationKeyPath", key_path
+    ].join(" ")
+
     build_app(
       scheme: "romm",
       export_method: "app-store",
       xcargs: "CURRENT_PROJECT_VERSION=#{next_build}",
+      export_xcargs: prov_args,
+      export_options: {
+        signingStyle: "automatic",
+        teamID: "8J69P655GN"
+      },
       output_directory: "./build",
       clean: true
     )
