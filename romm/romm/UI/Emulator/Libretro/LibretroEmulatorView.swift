@@ -242,6 +242,15 @@ private struct LibretroMenuSheet: View {
                         HapticsPreferences.onRelease = newValue
                     }
             }
+            if let preference = session?.screenPositionPreference,
+               EmulatorControllerState.isConnected {
+                EmulatorScreenControls(preference: preference) {
+                    session?.reloadAspectRatio()
+                }
+            }
+            #if DEBUG
+            EmulatorControllerDebugToggle()
+            #endif
         }
     }
 

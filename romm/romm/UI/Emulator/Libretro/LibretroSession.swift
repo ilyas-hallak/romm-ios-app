@@ -10,7 +10,7 @@ final class LibretroSession: NSObject {
     private let romId: Int
     private let saveStates: PEmulatorSaveStatesUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
-    private let screenPositionPreference: PEmulatorScreenPositionPreference
+    let screenPositionPreference: PEmulatorScreenPositionPreference
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
 
@@ -265,6 +265,18 @@ final class LibretroGameViewController: UIViewController {
     /// custom placement is active. Its constant is recomputed each layout pass.
     private var verticalConstraint: NSLayoutConstraint?
 
+    /// `verticalOffset` captured at the start of a drag, so the whole gesture is
+    /// applied relative to it.
+    private var basePanOffset: Double?
+
+    /// Lets the user drag the game vertically. Only enabled while the touch
+    /// controls are hidden (a physical controller is connected).
+    private lazy var screenPanRecognizer: UIPanGestureRecognizer = {
+        let r = UIPanGestureRecognizer(target: self, action: #selector(handleScreenPan(_:)))
+        r.isEnabled = false
+        return r
+    }()
+
     init(
         core: LibretroCore,
         gameURL: URL,
@@ -291,9 +303,13 @@ final class LibretroGameViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
 
-        // Re-apply placement when a physical controller connects/disconnects so
-        // "Auto" mode reacts live during a session.
-        for name in [NSNotification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
+        // Re-apply placement + control visibility when a physical controller
+        // connects/disconnects, live during a session.
+        var connectionNames: [NSNotification.Name] = [.GCControllerDidConnect, .GCControllerDidDisconnect]
+        #if DEBUG
+        connectionNames.append(.emulatorSimulatedControllerChanged)
+        #endif
+        for name in connectionNames {
             NotificationCenter.default.addObserver(
                 self, selector: #selector(controllerConnectionChanged), name: name, object: nil
             )
@@ -302,6 +318,7 @@ final class LibretroGameViewController: UIViewController {
         videoView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(videoView)
         applyAspectConstraints()
+        view.addGestureRecognizer(screenPanRecognizer)
 
         controllerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(controllerView)
@@ -363,12 +380,13 @@ final class LibretroGameViewController: UIViewController {
         updateControlsVisibility()
     }
 
-    /// Hide the touch overlay when a physical controller is connected or the
-    /// user pinned Controller Mode to "On"; a standalone menu button (SwiftUI)
-    /// then provides access to the in-game menu.
+    /// Hide the touch overlay when a physical controller is connected; a
+    /// standalone menu button (SwiftUI) then provides access to the in-game
+    /// menu, and the game becomes draggable.
     private func updateControlsVisibility() {
-        let hide = !GCController.controllers().isEmpty || screenPositionPreference.mode == .always
+        let hide = EmulatorControllerState.isConnected
         controllerView.isHidden = hide
+        screenPanRecognizer.isEnabled = hide
         if hide != controlsHidden {
             controlsHidden = hide
             onControlsHiddenChanged?(hide)
@@ -435,14 +453,32 @@ final class LibretroGameViewController: UIViewController {
         updateVerticalOffsetConstant()
     }
 
-    /// Whether the user's custom vertical placement should apply right now.
-    /// Portrait only — in landscape the game already fills the height.
+    /// Whether the user's custom vertical placement should apply right now: only
+    /// while a physical controller is connected, portrait only (in landscape the
+    /// game already fills the height).
     private var isCustomPlacementActive: Bool {
         guard view.bounds.height >= view.bounds.width else { return false }
-        switch screenPositionPreference.mode {
-        case .off:    return false
-        case .always: return true
-        case .auto:   return !GCController.controllers().isEmpty
+        return EmulatorControllerState.isConnected
+    }
+
+    /// Drag-to-move handler: converts the vertical pan into a `verticalOffset`
+    /// (0…1) relative to where the drag started, then slides the video live.
+    @objc private func handleScreenPan(_ gesture: UIPanGestureRecognizer) {
+        guard isCustomPlacementActive else { return }
+        switch gesture.state {
+        case .began:
+            basePanOffset = screenPositionPreference.verticalOffset
+        case .changed:
+            let free = max(1, view.safeAreaLayoutGuide.layoutFrame.height - videoView.frame.height)
+            let base = basePanOffset ?? screenPositionPreference.verticalOffset
+            let delta = Double(gesture.translation(in: view).y / free)
+            screenPositionPreference.verticalOffset = min(1.0, max(0.0, base + delta))
+            updateVerticalOffsetConstant()
+            view.layoutIfNeeded()
+        case .ended, .cancelled, .failed:
+            basePanOffset = nil
+        default:
+            break
         }
     }
 

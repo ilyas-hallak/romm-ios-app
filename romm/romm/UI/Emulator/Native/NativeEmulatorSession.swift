@@ -12,8 +12,32 @@ import GameController
 final class RommGameViewController: GameViewController {
     private var didApplyInitialSkin = false
 
-    /// "Controller Mode" placement preference. Set before `loadViewIfNeeded()`.
+    /// Screen placement preference (drag-to-move + height). Set before `loadViewIfNeeded()`.
     var screenPositionPreference: PEmulatorScreenPositionPreference?
+
+    /// `verticalOffset` captured at the start of a drag, so the whole gesture is
+    /// applied relative to it.
+    private var basePanOffset: Double?
+
+    /// Lets the user drag the game vertically. Only enabled while the on-screen
+    /// controls are hidden (a physical controller is connected), so it never
+    /// competes with the touch skin. Toggled from the session.
+    private lazy var screenPanRecognizer: UIPanGestureRecognizer = {
+        let r = UIPanGestureRecognizer(target: self, action: #selector(handleScreenPan(_:)))
+        r.isEnabled = false
+        return r
+    }()
+
+    /// Enable/disable drag-to-move from the session (mirrors control visibility).
+    var isScreenDragEnabled: Bool {
+        get { screenPanRecognizer.isEnabled }
+        set { screenPanRecognizer.isEnabled = newValue }
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.addGestureRecognizer(screenPanRecognizer)
+    }
 
     override func viewWillTransition(
         to size: CGSize,
@@ -37,23 +61,20 @@ final class RommGameViewController: GameViewController {
         reapplyControllerSkin()
     }
 
-    /// Repositions the single game screen per the Controller Mode preference:
-    /// limits its height to `heightFraction` of the safe area and slides it to
-    /// `verticalOffset` (0 = top … 1 = bottom). Portrait + single-screen only
-    /// (dual-screen systems like DS keep DeltaCore's default layout).
+    /// Whether the custom placement applies right now: only while a physical
+    /// controller is connected (so a gamepad case doesn't cover the game),
+    /// portrait, single-screen (dual-screen systems like DS keep the default).
+    private var isCustomPlacementActive: Bool {
+        guard view.bounds.height >= view.bounds.width else { return false }
+        guard gameViews.count == 1 else { return false }
+        return EmulatorControllerState.isConnected
+    }
+
+    /// Repositions the single game screen: limits its height to `heightFraction`
+    /// of the safe area and slides it to `verticalOffset` (0 = top … 1 = bottom).
     private func applyCustomScreenPlacement() {
         guard let pref = screenPositionPreference else { return }
-        // Portrait only — landscape already fills the height.
-        guard view.bounds.height >= view.bounds.width else { return }
-        guard gameViews.count == 1, let gameView = gameViews.first else { return }
-
-        let active: Bool
-        switch pref.mode {
-        case .off:    active = false
-        case .always: active = true
-        case .auto:   active = !GCController.controllers().isEmpty
-        }
-        guard active else { return }
+        guard isCustomPlacementActive, let gameView = gameViews.first else { return }
 
         let current = gameView.frame
         guard current.width > 0, current.height > 0 else { return }
@@ -77,6 +98,32 @@ final class RommGameViewController: GameViewController {
         gameView.frame = CGRect(x: x, y: y, width: fitted.width.rounded(), height: fitted.height.rounded())
     }
 
+    /// Drag-to-move handler: converts the vertical pan into a `verticalOffset`
+    /// (0…1) relative to where the drag started, then re-lays out so
+    /// `applyCustomScreenPlacement()` slides the game live.
+    @objc private func handleScreenPan(_ gesture: UIPanGestureRecognizer) {
+        guard let pref = screenPositionPreference, isCustomPlacementActive,
+              let gameView = gameViews.first else { return }
+
+        switch gesture.state {
+        case .began:
+            basePanOffset = pref.verticalOffset
+        case .changed:
+            let availableHeight = view.bounds.height - view.safeAreaInsets.top - view.safeAreaInsets.bottom
+            // Free travel = space not taken by the game; the height is fixed
+            // during a vertical drag, so this stays stable across the gesture.
+            let free = max(1, availableHeight - gameView.frame.height)
+            let base = basePanOffset ?? pref.verticalOffset
+            let delta = Double(gesture.translation(in: view).y / free)
+            pref.verticalOffset = min(1.0, max(0.0, base + delta))
+            view.setNeedsLayout()
+        case .ended, .cancelled, .failed:
+            basePanOffset = nil
+        default:
+            break
+        }
+    }
+
     /// Reassign the controller skin to rebuild `gameViews` for dual-screen
     /// systems (e.g. Nintendo DS). Setting `controllerSkin` posts the change
     /// notification that triggers `GameViewController.updateGameViews()`,
@@ -95,7 +142,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let romId: Int
     private let cloudSync: CloudSaveSyncService?
-    private let screenPositionPreference: PEmulatorScreenPositionPreference
+    let screenPositionPreference: PEmulatorScreenPositionPreference
 
     var onMenuRequested: (() -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
@@ -184,8 +231,13 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     func pause() { viewController.pauseEmulation() }
     func resume() {
         viewController.resumeEmulation()
-        // Mode may have changed while paused in the menu.
+        // Controller may have (dis)connected while paused in the menu.
         updateOnScreenControlsVisibility()
+    }
+
+    /// Re-apply the screen placement after the height changed in the menu.
+    func refreshScreenPlacement() {
+        viewController.view.setNeedsLayout()
     }
 
     func stop() {
@@ -234,7 +286,22 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             name: .externalGameControllerDidDisconnect,
             object: nil
         )
+        #if DEBUG
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(simulatedControllerChanged),
+            name: .emulatorSimulatedControllerChanged,
+            object: nil
+        )
+        #endif
     }
+
+    #if DEBUG
+    @objc private func simulatedControllerChanged() {
+        updateOnScreenControlsVisibility()
+        refreshScreenPlacement()
+    }
+    #endif
 
     @objc private func externalControllerDidConnect(_ notification: Notification) {
         guard let controller = notification.object as? GameController,
@@ -259,13 +326,15 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private func updateOnScreenControlsVisibility() {
         let hide = shouldHideOnScreenControls
         viewController.controllerView?.isHidden = hide
+        // Drag-to-move is only available when the touch skin is out of the way.
+        (viewController as? RommGameViewController)?.isScreenDragEnabled = hide
         onControlsHiddenChanged?(hide)
     }
 
-    /// Hide the on-screen buttons when a physical controller is connected or the
-    /// user pinned Controller Mode to "On" — a standalone menu button takes over.
+    /// Hide the on-screen buttons when a physical controller is connected — a
+    /// standalone menu button takes over and the game becomes draggable.
     private var shouldHideOnScreenControls: Bool {
-        !GCController.controllers().isEmpty || screenPositionPreference.mode == .always
+        EmulatorControllerState.isConnected
     }
 
     // MARK: - Save / Load
