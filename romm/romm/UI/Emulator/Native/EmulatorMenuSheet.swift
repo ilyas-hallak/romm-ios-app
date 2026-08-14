@@ -23,6 +23,19 @@ struct EmulatorMenuSheet: View {
                     actionButtons
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
+                    if let preference = session?.screenPositionPreference,
+                       EmulatorControllerState.isConnected {
+                        Divider().background(Color.white.opacity(0.1))
+                        EmulatorScreenControls(preference: preference) {
+                            session?.refreshScreenPlacement()
+                        }
+                        .padding(16)
+                    }
+                    #if DEBUG
+                    Divider().background(Color.white.opacity(0.1))
+                    EmulatorControllerDebugToggle()
+                        .padding(16)
+                    #endif
                     Divider().background(Color.white.opacity(0.1))
                     slotList
                 }

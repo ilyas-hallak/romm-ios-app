@@ -1,34 +1,34 @@
 import Foundation
 
 final class UserDefaultsEmulatorScreenPositionPreferenceStore: PEmulatorScreenPositionPreference {
-    private let key = "emulator.screenPosition"
+    private let offsetKey = "emulator.screenVerticalOffset"
     private let heightKey = "emulator.screenHeightFraction"
+    /// Legacy key from the first screen-position feature ("center"/"top"). Used
+    /// only to migrate existing users' vertical offset.
+    private let legacyPositionKey = "emulator.screenPosition"
+
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
     }
 
-    var position: EmulatorScreenPosition {
+    var verticalOffset: Double {
         get {
-            guard let raw = userDefaults.string(forKey: key),
-                  let value = EmulatorScreenPosition(rawValue: raw) else {
-                return .center
+            if userDefaults.object(forKey: offsetKey) != nil {
+                return min(1.0, max(0.0, userDefaults.double(forKey: offsetKey)))
             }
-            return value
+            // Migration: old "top" pinned to the top (offset 0); otherwise center.
+            return userDefaults.string(forKey: legacyPositionKey) == "top" ? 0.0 : 0.5
         }
-        set {
-            userDefaults.set(newValue.rawValue, forKey: key)
-        }
+        set { userDefaults.set(min(1.0, max(0.0, newValue)), forKey: offsetKey) }
     }
 
     var heightFraction: Double {
         get {
             guard userDefaults.object(forKey: heightKey) != nil else { return 1.0 }
-            return userDefaults.double(forKey: heightKey)
+            return min(1.0, max(0.3, userDefaults.double(forKey: heightKey)))
         }
-        set {
-            userDefaults.set(min(1.0, max(0.3, newValue)), forKey: heightKey)
-        }
+        set { userDefaults.set(min(1.0, max(0.3, newValue)), forKey: heightKey) }
     }
 }

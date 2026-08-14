@@ -18,6 +18,9 @@ final class NativeEmulatorViewModel {
     var errorMessage: String?
     var session: NativeEmulatorSession?
     var isLoading: Bool = true
+    /// True when the on-screen touch controls are hidden (physical controller or
+    /// Controller Mode "On") — the view shows a standalone menu button instead.
+    var controlsHidden: Bool = false
 
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let resolveROMFile: PResolveROMFileUseCase
@@ -70,8 +73,12 @@ final class NativeEmulatorViewModel {
             session = NativeEmulatorSession(
                 gameURL: url, gameType: deltaType,
                 romId: rom.id, saveStates: saveStates,
+                screenPositionPreference: factory.emulatorScreenPositionPreference,
                 cloudSync: cloudSync
             )
+            session?.onControlsHiddenChanged = { [weak self] hidden in
+                self?.controlsHidden = hidden
+            }
             // The session sequences the resume-load after emulation is live and
             // performs it while paused (see NativeEmulatorSession.start).
             session?.start(resumeSlot: resumeSlot)
