@@ -85,6 +85,11 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 fastlane/README.md
 
+# fastlane secrets — never commit these
+fastlane/.env
+**/AuthKey_*.p8
+*.p8
+
 # Bundler
 Gemfile.lock
 .bundle/
