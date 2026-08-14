@@ -5,7 +5,7 @@ struct EmulatorMenuSheet: View {
     let onResume: () -> Void
     let onQuit: () -> Void
 
-    @SwiftUI.State private var selectedSlot: Int = 1
+    @SwiftUI.State private var selectedSlot: Int = 0
     @SwiftUI.State private var statusMessage: String?
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var showQuitConfirmation = false

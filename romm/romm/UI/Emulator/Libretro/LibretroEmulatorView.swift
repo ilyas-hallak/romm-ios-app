@@ -93,7 +93,7 @@ private struct LibretroMenuSheet: View {
     let onResume: () -> Void
     let onQuit: () -> Void
 
-    @SwiftUI.State private var selectedSlot: Int = 1
+    @SwiftUI.State private var selectedSlot: Int = 0
     @SwiftUI.State private var statusMessage: String?
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var showQuitConfirmation = false
@@ -113,7 +113,9 @@ private struct LibretroMenuSheet: View {
         self._aspectRatio = SwiftUI.State(initialValue: aspectRatioPreference.psx)
     }
 
-    private let slots = Array(1...20)
+    // 0-based to match the save-state storage / cloud-sync layer
+    // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
+    private let slots = Array(0...20)
 
     var body: some View {
         NavigationStack {
