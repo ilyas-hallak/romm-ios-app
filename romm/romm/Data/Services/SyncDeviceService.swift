@@ -11,12 +11,12 @@ import Foundation
 import UIKit
 
 @MainActor
-final class SyncDeviceService {
+final class SyncDeviceService: PSyncDeviceService {
     static let shared = SyncDeviceService()
 
     private let apiClient: PRommAPIClient
     private let userDefaults: UserDefaults
-    private let heartbeat: HeartbeatRepository
+    private let heartbeat: PHeartbeatRepository
 
     /// The device + sync negotiate routers are available from RomM 4.9.0.
     private let minSyncVersion = "4.9.0"
@@ -28,7 +28,7 @@ final class SyncDeviceService {
     init(
         apiClient: PRommAPIClient = RommAPIClient.shared,
         userDefaults: UserDefaults = .standard,
-        heartbeat: HeartbeatRepository = HeartbeatRepository()
+        heartbeat: PHeartbeatRepository = HeartbeatRepository()
     ) {
         self.apiClient = apiClient
         self.userDefaults = userDefaults

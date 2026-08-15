@@ -30,7 +30,7 @@ final class CloudSaveSyncService {
     private let downloadStateUseCase: PDownloadStateUseCase
     private let settings: CloudSaveSyncSettings
     private let apiClient: PRommAPIClient
-    private let syncDevice: SyncDeviceService
+    private let syncDevice: PSyncDeviceService
 
     private var serverBatteryId: Int?
     private var serverStateIdBySlot: [Int: Int] = [:]
@@ -48,7 +48,7 @@ final class CloudSaveSyncService {
         downloadStateUseCase: PDownloadStateUseCase,
         settings: CloudSaveSyncSettings = .shared,
         apiClient: PRommAPIClient = RommAPIClient.shared,
-        syncDevice: SyncDeviceService = .shared
+        syncDevice: PSyncDeviceService = SyncDeviceService.shared
     ) {
         self.config = config
         self.saveStore = saveStore
