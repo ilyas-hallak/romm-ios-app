@@ -21,6 +21,7 @@ final class LibretroEmulatorViewModel {
     private let biosSync: PBIOSSyncUseCase
     let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
+    private let menuShortcutPreference: PEmulatorMenuShortcutPreference?
     private let factory: PDependencyFactory
     private let logger = Logger.viewModel
 
@@ -33,6 +34,7 @@ final class LibretroEmulatorViewModel {
         biosSync: PBIOSSyncUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference,
+        menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         factory: PDependencyFactory
     ) {
         self.rom = rom
@@ -43,6 +45,7 @@ final class LibretroEmulatorViewModel {
         self.biosSync = biosSync
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
+        self.menuShortcutPreference = menuShortcutPreference
         self.factory = factory
     }
 
@@ -93,6 +96,7 @@ final class LibretroEmulatorViewModel {
                 saveStates: saveStates,
                 aspectRatioPreference: aspectRatioPreference,
                 screenPositionPreference: screenPositionPreference,
+                menuShortcutPreference: menuShortcutPreference,
                 cloudSync: cloudSync
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }

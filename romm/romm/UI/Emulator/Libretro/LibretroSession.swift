@@ -33,6 +33,7 @@ final class LibretroSession: NSObject {
         saveStates: PEmulatorSaveStatesUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference,
+        menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -51,7 +52,10 @@ final class LibretroSession: NSObject {
         // controllerInput must be created before super.init() because stored
         // properties must be initialised before the instance escapes.
         // onMenuRequested is wired after super.init() once self is available.
-        self.controllerInput = LibretroControllerInput(frontend: LibretroFrontend.shared)
+        self.controllerInput = LibretroControllerInput(
+            frontend: LibretroFrontend.shared,
+            menuShortcutPreference: menuShortcutPreference
+        )
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in
             self?.onMenuRequested?()
@@ -60,7 +64,7 @@ final class LibretroSession: NSObject {
             self?.onControlsHiddenChanged?(hidden)
         }
 
-        // Forward menu requests from the controller's Menu button.
+        // Forward menu requests from the optional controller shortcut combo.
         controllerInput.onMenuRequested = { [weak self] in
             self?.onMenuRequested?()
         }
