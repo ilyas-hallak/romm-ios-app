@@ -40,12 +40,35 @@ struct MainTabView: View {
                     LocalDeviceDetailView()
                 }
             }
+            .badge(DownloadQueueManager.shared.activeCount)
 
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 NavigationStack {
                     SearchView()
                 }
             }
+        }
+        .tabBarMinimizeOnScrollDown()
+        .overlay {
+            if let flight = appData.downloadFlight {
+                DownloadFlightOverlay(flight: flight) {
+                    appData.finishDownloadFlight(flight.id)
+                }
+                .id(flight.id)
+            }
+        }
+    }
+}
+
+private extension View {
+    /// Keeps the tab bar visible and lets it minimize (slide down) as the user
+    /// scrolls content down — the native iOS 26 behavior. No-op on older OSes.
+    @ViewBuilder
+    func tabBarMinimizeOnScrollDown() -> some View {
+        if #available(iOS 26.0, *) {
+            self.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            self
         }
     }
 }

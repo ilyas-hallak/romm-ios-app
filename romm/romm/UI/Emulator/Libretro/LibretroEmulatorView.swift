@@ -93,12 +93,16 @@ private struct LibretroMenuSheet: View {
     let onResume: () -> Void
     let onQuit: () -> Void
 
-    @SwiftUI.State private var selectedSlot: Int = 0
+    @SwiftUI.State private var selectedSlot: Int
     @SwiftUI.State private var statusMessage: String?
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
+
+    // 0-based to match the save-state storage / cloud-sync layer
+    // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
+    private let slots = Array(0...20)
 
     init(
         session: LibretroSession?,
@@ -111,11 +115,15 @@ private struct LibretroMenuSheet: View {
         self.onResume = onResume
         self.onQuit = onQuit
         self._aspectRatio = SwiftUI.State(initialValue: aspectRatioPreference.psx)
+        // Pre-select the most recently touched slot so existing saves are
+        // immediately visible and loadable after the 1→0 slot renumbering (PR #57).
+        let slots = Array(0...20)
+        let mostRecent = slots.compactMap { slot -> (slot: Int, date: Date)? in
+            guard let date = session?.stateModifiedAt(slot: slot) else { return nil }
+            return (slot, date)
+        }.max(by: { $0.date < $1.date })?.slot ?? 0
+        self._selectedSlot = SwiftUI.State(initialValue: mostRecent)
     }
-
-    // 0-based to match the save-state storage / cloud-sync layer
-    // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
-    private let slots = Array(0...20)
 
     var body: some View {
         NavigationStack {
