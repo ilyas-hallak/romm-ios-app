@@ -95,6 +95,8 @@ protocol PDependencyFactory {
     func makeUpdateSaveUseCase() -> PUpdateSaveUseCase
     func makeUploadStateUseCase() -> PUploadStateUseCase
     func makeUpdateStateUseCase() -> PUpdateStateUseCase
+    func makeRecordSyncUseCase() -> PRecordSyncUseCase
+    func makeGetLastSyncUseCase() -> PGetLastSyncUseCase
 
     // Local ROM Use Cases
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
@@ -396,6 +398,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
+    lazy var cloudSaveSyncStore: PCloudSaveSyncStore = CloudSaveSyncSettings.shared
     lazy var savesRepository: PSavesRepository = SavesRepository()
     lazy var statesRepository: PStatesRepository = StatesRepository()
     lazy var fileSystemService: PFileSystemService = DefaultFileSystemService()
@@ -466,6 +469,14 @@ class DefaultDependencyFactory: PDependencyFactory {
         UpdateStateUseCase(repository: statesRepository)
     }
 
+    func makeRecordSyncUseCase() -> PRecordSyncUseCase {
+        RecordSyncUseCase(store: cloudSaveSyncStore)
+    }
+
+    func makeGetLastSyncUseCase() -> PGetLastSyncUseCase {
+        GetLastSyncUseCase(store: cloudSaveSyncStore)
+    }
+
     // MARK: - Local ROM Use Cases
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
@@ -485,7 +496,9 @@ class DefaultDependencyFactory: PDependencyFactory {
             updateSaveUseCase: makeUpdateSaveUseCase(),
             uploadStateUseCase: makeUploadStateUseCase(),
             updateStateUseCase: makeUpdateStateUseCase(),
-            saveStore: saveStore
+            saveStore: saveStore,
+            recordSyncUseCase: makeRecordSyncUseCase(),
+            getLastSyncUseCase: makeGetLastSyncUseCase()
         )
     }
 

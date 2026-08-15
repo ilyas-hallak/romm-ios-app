@@ -20,7 +20,8 @@ final class SyncSaveViewModel {
     var pendingUpload: PendingUpload?
     var lastSyncMeta: SyncMetadata?
 
-    private let syncSettings = CloudSaveSyncSettings.shared
+    private let recordSyncUseCase: PRecordSyncUseCase
+    private let getLastSyncUseCase: PGetLastSyncUseCase
 
     private let listSavesUseCase: PListServerSavesUseCase
     private let listStatesUseCase: PListServerStatesUseCase
@@ -42,7 +43,9 @@ final class SyncSaveViewModel {
         updateSaveUseCase: PUpdateSaveUseCase,
         uploadStateUseCase: PUploadStateUseCase,
         updateStateUseCase: PUpdateStateUseCase,
-        saveStore: PSaveStore
+        saveStore: PSaveStore,
+        recordSyncUseCase: PRecordSyncUseCase,
+        getLastSyncUseCase: PGetLastSyncUseCase
     ) {
         self.rom = rom
         self.listSavesUseCase = listSavesUseCase
@@ -54,6 +57,8 @@ final class SyncSaveViewModel {
         self.uploadStateUseCase = uploadStateUseCase
         self.updateStateUseCase = updateStateUseCase
         self.saveStore = saveStore
+        self.recordSyncUseCase = recordSyncUseCase
+        self.getLastSyncUseCase = getLastSyncUseCase
     }
 
     // MARK: - Load
@@ -73,13 +78,12 @@ final class SyncSaveViewModel {
         localStates = (try? saveStore.listStates(romId: rom.id)) ?? []
         localBatteryDate = saveStore.batteryModifiedAt(romId: rom.id)
         hasLocalBattery = localBatteryDate != nil
-        lastSyncMeta = syncSettings.lastSync(romId: rom.id)
+        lastSyncMeta = getLastSyncUseCase.execute(romId: rom.id)
     }
 
     private func recordManualSync() {
-        let now = Date()
-        syncSettings.recordSync(romId: rom.id, trigger: .manual, date: now)
-        lastSyncMeta = SyncMetadata(date: now, trigger: .manual)
+        recordSyncUseCase.execute(romId: rom.id, trigger: .manual)
+        lastSyncMeta = SyncMetadata(date: Date(), trigger: .manual)
     }
 
     // MARK: - Download

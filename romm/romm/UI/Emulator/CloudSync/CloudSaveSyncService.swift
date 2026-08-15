@@ -28,6 +28,7 @@ final class CloudSaveSyncService {
     private let updateStateUseCase: PUpdateStateUseCase
     private let downloadStateUseCase: PDownloadStateUseCase
     private let settings: CloudSaveSyncSettings
+    private let recordSyncUseCase: PRecordSyncUseCase
 
     private var serverBatteryId: Int?
     private var serverStateIdBySlot: [Int: Int] = [:]
@@ -43,7 +44,8 @@ final class CloudSaveSyncService {
         uploadStateUseCase: PUploadStateUseCase,
         updateStateUseCase: PUpdateStateUseCase,
         downloadStateUseCase: PDownloadStateUseCase,
-        settings: CloudSaveSyncSettings = .shared
+        settings: CloudSaveSyncSettings = .shared,
+        recordSyncUseCase: PRecordSyncUseCase? = nil
     ) {
         self.config = config
         self.saveStore = saveStore
@@ -56,6 +58,7 @@ final class CloudSaveSyncService {
         self.updateStateUseCase = updateStateUseCase
         self.downloadStateUseCase = downloadStateUseCase
         self.settings = settings
+        self.recordSyncUseCase = recordSyncUseCase ?? RecordSyncUseCase(store: settings)
     }
 
     var isEnabled: Bool { settings.isEnabled }
@@ -69,7 +72,7 @@ final class CloudSaveSyncService {
         guard isEnabled else { return }
         await pullBattery()
         await pullStates()
-        settings.recordSync(romId: config.romId, trigger: .automatic)
+        recordSyncUseCase.execute(romId: config.romId, trigger: .automatic)
     }
 
     private func pullBattery() async {
@@ -222,7 +225,7 @@ final class CloudSaveSyncService {
 
     private func recordBatteryId(_ id: Int) { serverBatteryId = id }
     private func recordStateId(slot: Int, id: Int) { serverStateIdBySlot[slot] = id }
-    private func recordAutoSync() { settings.recordSync(romId: config.romId, trigger: .automatic) }
+    private func recordAutoSync() { recordSyncUseCase.execute(romId: config.romId, trigger: .automatic) }
 
     // MARK: - Filename helpers
 

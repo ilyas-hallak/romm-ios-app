@@ -321,6 +321,7 @@ class MockDependencyFactory: PDependencyFactory {
     }
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
+    lazy var cloudSaveSyncStore: PCloudSaveSyncStore = CloudSaveSyncSettings.shared
 
     func makeGetDownloadedROMUseCase() -> PGetDownloadedROMUseCase {
         GetDownloadedROMUseCase(localROMRepository: localROMRepository)
@@ -381,6 +382,8 @@ class MockDependencyFactory: PDependencyFactory {
     func makeUpdateSaveUseCase() -> PUpdateSaveUseCase { UpdateSaveUseCase(repository: savesRepository) }
     func makeUploadStateUseCase() -> PUploadStateUseCase { UploadStateUseCase(repository: statesRepository) }
     func makeUpdateStateUseCase() -> PUpdateStateUseCase { UpdateStateUseCase(repository: statesRepository) }
+    func makeRecordSyncUseCase() -> PRecordSyncUseCase { RecordSyncUseCase(store: cloudSaveSyncStore) }
+    func makeGetLastSyncUseCase() -> PGetLastSyncUseCase { GetLastSyncUseCase(store: cloudSaveSyncStore) }
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
         GetROMShareFilesUseCase(localROMRepository: localROMRepository)
@@ -397,7 +400,9 @@ class MockDependencyFactory: PDependencyFactory {
             updateSaveUseCase: makeUpdateSaveUseCase(),
             uploadStateUseCase: makeUploadStateUseCase(),
             updateStateUseCase: makeUpdateStateUseCase(),
-            saveStore: saveStore
+            saveStore: saveStore,
+            recordSyncUseCase: makeRecordSyncUseCase(),
+            getLastSyncUseCase: makeGetLastSyncUseCase()
         )
     }
 
