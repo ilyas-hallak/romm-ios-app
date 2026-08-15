@@ -8,6 +8,8 @@ import CryptoKit
 @MainActor
 final class CloudSaveSyncService {
 
+    private let logger = Logger.sync
+
     struct Config {
         let romId: Int
         /// Server-side `emulator` tag used to group saves/states. Examples:
@@ -30,7 +32,7 @@ final class CloudSaveSyncService {
     private let downloadStateUseCase: PDownloadStateUseCase
     private let settings: CloudSaveSyncSettings
     private let apiClient: PRommAPIClient
-    private let syncDevice: PSyncDeviceService
+    private let syncDevice: PSyncDeviceRepository
 
     private var serverBatteryId: Int?
     private var serverStateIdBySlot: [Int: Int] = [:]
@@ -48,7 +50,7 @@ final class CloudSaveSyncService {
         downloadStateUseCase: PDownloadStateUseCase,
         settings: CloudSaveSyncSettings = .shared,
         apiClient: PRommAPIClient = RommAPIClient.shared,
-        syncDevice: PSyncDeviceService = SyncDeviceService.shared
+        syncDevice: PSyncDeviceRepository = SyncDeviceRepository.shared
     ) {
         self.config = config
         self.saveStore = saveStore
@@ -100,7 +102,7 @@ final class CloudSaveSyncService {
             let response = try await apiClient.negotiateSync(
                 SyncNegotiateRequest(deviceId: deviceId, saves: localStates)
             )
-            print("[CloudSync] negotiate ok: \(response.operations.count) ops "
+            logger.info("Negotiate ok: \(response.operations.count) ops "
                 + "(down=\(response.totalDownload ?? 0) up=\(response.totalUpload ?? 0) "
                 + "conflict=\(response.totalConflict ?? 0) noop=\(response.totalNoOp ?? 0))")
             // negotiate is global (ops span every ROM); only log/act on ours.
@@ -111,14 +113,14 @@ final class CloudSaveSyncService {
                 } else {
                     hashNote = ""
                 }
-                print("[CloudSync]   op \(op.action.rawValue) file=\(op.fileName ?? "?") slot=\(op.slot ?? "-") reason=\(op.reason ?? "-")\(hashNote)")
+                logger.debug("  op \(op.action.rawValue) file=\(op.fileName ?? "?") slot=\(op.slot ?? "-") reason=\(op.reason ?? "-")\(hashNote)")
             }
             for op in response.operations where op.action == .download && op.romId == config.romId {
                 await applyDownload(op)
             }
             return true
         } catch {
-            print("[CloudSync] negotiate failed, using full sync: \(error.localizedDescription)")
+            logger.warning("Negotiate failed, using full sync: \(error.localizedDescription)")
             return false
         }
     }
@@ -178,9 +180,9 @@ final class CloudSaveSyncService {
                 try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
             }
             serverBatteryId = saveId
-            print("[CloudSync] negotiate down: battery (\(data.count) bytes)")
+            logger.info("Negotiate down: battery (\(data.count) bytes)")
         } catch {
-            print("[CloudSync] negotiate battery download failed (id=\(saveId)): \(error.localizedDescription)")
+            logger.error("Negotiate battery download failed (id=\(saveId)): \(error.localizedDescription)")
         }
     }
 
@@ -199,9 +201,9 @@ final class CloudSaveSyncService {
             // Preserve server mtime so subsequent local-vs-server compares are
             // not skewed by device clock drift after the write-to-disk timestamp.
             try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
-            print("[CloudSync] battery pulled (\(data.count) bytes)")
+            logger.info("Battery pulled (\(data.count) bytes)")
         } catch {
-            print("[CloudSync] battery pull failed: \(error.localizedDescription)")
+            logger.error("Battery pull failed: \(error.localizedDescription)")
         }
     }
 
@@ -242,7 +244,7 @@ final class CloudSaveSyncService {
                 realSlots.insert(nextSlot)
             }
             if overflow > 0 {
-                print("[CloudSync] \(overflow) server state(s) skipped: no free slot (max \(maxSlot + 1))")
+                logger.warning("\(overflow) server state(s) skipped: no free slot (max \(maxSlot + 1))")
             }
 
             for s in states {
@@ -255,10 +257,10 @@ final class CloudSaveSyncService {
                 let data = try await downloadStateUseCase.execute(id: s.id)
                 try saveStore.writeState(romId: config.romId, slot: slot, data: data)
                 try? saveStore.setStateModifiedAt(romId: config.romId, slot: slot, date: s.updatedAt)
-                print("[CloudSync] state slot \(slot) pulled (\(data.count) bytes)")
+                logger.info("State slot \(slot) pulled (\(data.count) bytes)")
             }
         } catch {
-            print("[CloudSync] states pull failed: \(error.localizedDescription)")
+            logger.error("States pull failed: \(error.localizedDescription)")
         }
     }
 
@@ -290,9 +292,9 @@ final class CloudSaveSyncService {
                     )
                 }
                 await self.recordBatteryId(result.id)
-                print("[CloudSync] battery pushed id=\(result.id)")
+                self.logger.info("Battery pushed id=\(result.id)")
             } catch {
-                print("[CloudSync] battery push failed: \(error.localizedDescription)")
+                self.logger.error("Battery push failed: \(error.localizedDescription)")
             }
         }
     }
@@ -323,9 +325,9 @@ final class CloudSaveSyncService {
                     )
                 }
                 await self.recordStateId(slot: slot, id: result.id)
-                print("[CloudSync] state slot \(slot) pushed id=\(result.id)")
+                self.logger.info("State slot \(slot) pushed id=\(result.id)")
             } catch {
-                print("[CloudSync] state slot \(slot) push failed: \(error.localizedDescription)")
+                self.logger.error("State slot \(slot) push failed: \(error.localizedDescription)")
             }
         }
     }

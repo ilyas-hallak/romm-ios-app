@@ -1,19 +1,19 @@
 //
-//  SyncDeviceService.swift
+//  SyncDeviceRepository.swift
 //  romm
 //
 //  Owns this app instance's RomM sync device identity. Registers the device
-//  once (RomM 5.0+) and persists its id so the negotiate flow can reference it.
+//  once (RomM 4.9+) and persists its id so the negotiate flow can reference it.
 //  See issue #48.
 //
 
 import Foundation
 import UIKit
 
-@MainActor
-final class SyncDeviceService: PSyncDeviceService {
-    static let shared = SyncDeviceService()
+final class SyncDeviceRepository: PSyncDeviceRepository {
+    static let shared = SyncDeviceRepository()
 
+    private let logger = Logger.sync
     private let apiClient: PRommAPIClient
     private let userDefaults: UserDefaults
     private let heartbeat: PHeartbeatRepository
@@ -65,10 +65,10 @@ final class SyncDeviceService: PSyncDeviceService {
             do {
                 let device = try await apiClient.registerDevice(request)
                 userDefaults.set(device.id, forKey: deviceIdKey)
-                print("[SyncDevice] registered device id=\(device.id)")
+                self.logger.info("Registered sync device id=\(device.id)")
                 return device.id
             } catch {
-                print("[SyncDevice] registration failed: \(error.localizedDescription)")
+                self.logger.error("Device registration failed: \(error.localizedDescription)")
                 return nil
             }
         }
@@ -81,7 +81,7 @@ final class SyncDeviceService: PSyncDeviceService {
     // MARK: - Version compare
 
     /// Minimal semantic-version compare; mirrors HeartbeatRepository's logic so
-    /// this service stays self-contained.
+    /// this repository stays self-contained.
     private static func compareVersions(_ a: String, _ b: String) -> Int {
         if a == "development" { return 1 }
         if b == "development" { return -1 }

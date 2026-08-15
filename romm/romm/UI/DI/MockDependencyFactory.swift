@@ -321,7 +321,7 @@ class MockDependencyFactory: PDependencyFactory {
     }
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
-    @MainActor lazy var syncDeviceService: PSyncDeviceService = SyncDeviceService(
+    lazy var syncDeviceRepository: PSyncDeviceRepository = SyncDeviceRepository(
         apiClient: apiClient,
         heartbeat: heartbeatRepository
     )
@@ -359,7 +359,7 @@ class MockDependencyFactory: PDependencyFactory {
             updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
             downloadStateUseCase: DownloadStateUseCase(repository: statesRepository),
             apiClient: apiClient,
-            syncDevice: syncDeviceService
+            syncDevice: syncDeviceRepository
         )
     }
 

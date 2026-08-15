@@ -400,7 +400,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var statesRepository: PStatesRepository = StatesRepository()
     lazy var fileSystemService: PFileSystemService = DefaultFileSystemService()
     lazy var viewModePreferenceRepository: PViewModePreferenceRepository = UserDefaultsViewModePreferenceStore()
-    @MainActor lazy var syncDeviceService: PSyncDeviceService = SyncDeviceService(
+    lazy var syncDeviceRepository: PSyncDeviceRepository = SyncDeviceRepository(
         apiClient: apiClient,
         heartbeat: heartbeatRepository
     )
@@ -434,7 +434,7 @@ class DefaultDependencyFactory: PDependencyFactory {
             updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
             downloadStateUseCase: DownloadStateUseCase(repository: statesRepository),
             apiClient: apiClient,
-            syncDevice: syncDeviceService
+            syncDevice: syncDeviceRepository
         )
     }
 
