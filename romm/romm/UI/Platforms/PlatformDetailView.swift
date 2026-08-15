@@ -163,7 +163,6 @@ struct PlatformDetailView: View {
                 }
             }
         }
-        .toolbar(.hidden, for: .tabBar)
         .sheet(isPresented: $showingSortSheet) {
             let currentRoms = getCurrentRoms()
             let filterOptions = getAvailableFilterOptions(from: currentRoms)
