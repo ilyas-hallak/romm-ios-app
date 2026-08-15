@@ -97,6 +97,10 @@ protocol PRommAPIClient {
     func updateState(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema
     func downloadState(id: Int) async throws -> Data
     func deleteStates(ids: [Int]) async throws
+
+    // Save-sync API (RomM 5.0+)
+    func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema
+    func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse
 }
 
 enum APIClientError: LocalizedError {

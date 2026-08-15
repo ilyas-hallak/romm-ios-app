@@ -321,6 +321,10 @@ class MockDependencyFactory: PDependencyFactory {
     }
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
+    lazy var syncDeviceRepository: PSyncDeviceRepository = SyncDeviceRepository(
+        apiClient: apiClient,
+        heartbeat: heartbeatRepository
+    )
 
     func makeGetDownloadedROMUseCase() -> PGetDownloadedROMUseCase {
         GetDownloadedROMUseCase(localROMRepository: localROMRepository)
@@ -353,7 +357,9 @@ class MockDependencyFactory: PDependencyFactory {
             listStatesUseCase: ListServerStatesUseCase(repository: statesRepository),
             uploadStateUseCase: UploadStateUseCase(repository: statesRepository),
             updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
-            downloadStateUseCase: DownloadStateUseCase(repository: statesRepository)
+            downloadStateUseCase: DownloadStateUseCase(repository: statesRepository),
+            apiClient: apiClient,
+            syncDevice: syncDeviceRepository
         )
     }
 
