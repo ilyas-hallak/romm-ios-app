@@ -18,6 +18,10 @@ final class SyncSaveViewModel {
     var isUploadingBattery = false
     var errorMessage: String?
     var pendingUpload: PendingUpload?
+    var lastSyncMeta: SyncMetadata?
+
+    private let recordSyncUseCase: PRecordSyncUseCase
+    private let getLastSyncUseCase: PGetLastSyncUseCase
 
     // Export
     var exportItem: ExportSaveItem?
@@ -44,7 +48,9 @@ final class SyncSaveViewModel {
         updateSaveUseCase: PUpdateSaveUseCase,
         uploadStateUseCase: PUploadStateUseCase,
         updateStateUseCase: PUpdateStateUseCase,
-        saveStore: PSaveStore
+        saveStore: PSaveStore,
+        recordSyncUseCase: PRecordSyncUseCase,
+        getLastSyncUseCase: PGetLastSyncUseCase
     ) {
         self.rom = rom
         self.listSavesUseCase = listSavesUseCase
@@ -56,6 +62,8 @@ final class SyncSaveViewModel {
         self.uploadStateUseCase = uploadStateUseCase
         self.updateStateUseCase = updateStateUseCase
         self.saveStore = saveStore
+        self.recordSyncUseCase = recordSyncUseCase
+        self.getLastSyncUseCase = getLastSyncUseCase
     }
 
     // MARK: - Load
@@ -75,6 +83,12 @@ final class SyncSaveViewModel {
         localStates = (try? saveStore.listStates(romId: rom.id)) ?? []
         localBatteryDate = saveStore.batteryModifiedAt(romId: rom.id)
         hasLocalBattery = localBatteryDate != nil
+        lastSyncMeta = getLastSyncUseCase.execute(romId: rom.id)
+    }
+
+    private func recordManualSync() {
+        recordSyncUseCase.execute(romId: rom.id, trigger: .manual)
+        lastSyncMeta = SyncMetadata(date: Date(), trigger: .manual)
     }
 
     // MARK: - Download
@@ -94,6 +108,7 @@ final class SyncSaveViewModel {
                 let slot = slotFromFileName(state.fileName) ?? 0
                 try saveStore.writeState(romId: rom.id, slot: slot, data: data)
                 localStates = (try? saveStore.listStates(romId: rom.id)) ?? []
+                recordManualSync()
             } catch {
                 errorMessage = "Download failed: \(error.localizedDescription)"
             }
@@ -114,6 +129,7 @@ final class SyncSaveViewModel {
                 guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
                 try saveStore.writeBattery(romId: rom.id, data: data)
                 hasLocalBattery = true
+                recordManualSync()
             } catch {
                 errorMessage = "Download failed: \(error.localizedDescription)"
             }
@@ -159,6 +175,7 @@ final class SyncSaveViewModel {
                         let uploaded = try await uploadStateUseCase.execute(romId: rom.id, emulator: nil, fileName: fileName, fileData: data, screenshotData: thumbnail)
                         serverStates.append(uploaded)
                     }
+                    recordManualSync()
                 } catch {
                     errorMessage = "Upload failed: \(error.localizedDescription)"
                 }
@@ -177,6 +194,7 @@ final class SyncSaveViewModel {
                         let uploaded = try await uploadSaveUseCase.execute(romId: rom.id, emulator: nil, slot: nil, fileName: fileName, fileData: data, screenshotData: nil)
                         serverSaves.append(uploaded)
                     }
+                    recordManualSync()
                 } catch {
                     errorMessage = "Upload failed: \(error.localizedDescription)"
                 }

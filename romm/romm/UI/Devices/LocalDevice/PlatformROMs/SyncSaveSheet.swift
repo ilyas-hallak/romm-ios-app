@@ -32,6 +32,9 @@ struct SyncSaveSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
+                        if let meta = viewModel.lastSyncMeta {
+                            syncStatusHeader(meta)
+                        }
                         serverSection
                         localSection
                     }
@@ -75,6 +78,26 @@ struct SyncSaveSheet: View {
     }
 
     // MARK: - Sections
+
+    @ViewBuilder
+    private func syncStatusHeader(_ meta: SyncMetadata) -> some View {
+        Section {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.title3)
+                    .foregroundStyle(meta.trigger == .automatic ? .green : .orange)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Last synced \(meta.date.relativeAbbreviated())")
+                        .font(.subheadline.weight(.semibold))
+                    Text(meta.trigger == .automatic ? "Automatic, on launch or save" : "Manual sync")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
 
     @ViewBuilder
     private var serverSection: some View {

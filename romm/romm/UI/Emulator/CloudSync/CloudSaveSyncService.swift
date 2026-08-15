@@ -31,6 +31,7 @@ final class CloudSaveSyncService {
     private let updateStateUseCase: PUpdateStateUseCase
     private let downloadStateUseCase: PDownloadStateUseCase
     private let settings: CloudSaveSyncSettings
+    private let recordSyncUseCase: PRecordSyncUseCase
     private let apiClient: PRommAPIClient
     private let syncDevice: PSyncDeviceRepository
 
@@ -49,6 +50,7 @@ final class CloudSaveSyncService {
         updateStateUseCase: PUpdateStateUseCase,
         downloadStateUseCase: PDownloadStateUseCase,
         settings: CloudSaveSyncSettings = .shared,
+        recordSyncUseCase: PRecordSyncUseCase? = nil,
         apiClient: PRommAPIClient = RommAPIClient.shared,
         syncDevice: PSyncDeviceRepository = SyncDeviceRepository.shared
     ) {
@@ -63,6 +65,7 @@ final class CloudSaveSyncService {
         self.updateStateUseCase = updateStateUseCase
         self.downloadStateUseCase = downloadStateUseCase
         self.settings = settings
+        self.recordSyncUseCase = recordSyncUseCase ?? RecordSyncUseCase(store: settings)
         self.apiClient = apiClient
         self.syncDevice = syncDevice
     }
@@ -86,6 +89,7 @@ final class CloudSaveSyncService {
             await pullBattery()
         }
         await pullStates()
+        recordSyncUseCase.execute(romId: config.romId, trigger: .automatic)
     }
 
     // MARK: - Negotiated pull (RomM 5.0+)
@@ -292,6 +296,7 @@ final class CloudSaveSyncService {
                     )
                 }
                 await self.recordBatteryId(result.id)
+                await self.recordAutoSync()
                 self.logger.info("Battery pushed id=\(result.id)")
             } catch {
                 self.logger.error("Battery push failed: \(error.localizedDescription)")
@@ -325,6 +330,7 @@ final class CloudSaveSyncService {
                     )
                 }
                 await self.recordStateId(slot: slot, id: result.id)
+                await self.recordAutoSync()
                 self.logger.info("State slot \(slot) pushed id=\(result.id)")
             } catch {
                 self.logger.error("State slot \(slot) push failed: \(error.localizedDescription)")
@@ -334,6 +340,7 @@ final class CloudSaveSyncService {
 
     private func recordBatteryId(_ id: Int) { serverBatteryId = id }
     private func recordStateId(slot: Int, id: Int) { serverStateIdBySlot[slot] = id }
+    private func recordAutoSync() { recordSyncUseCase.execute(romId: config.romId, trigger: .automatic) }
 
     // MARK: - Filename helpers
 

@@ -15,10 +15,12 @@ class LocalDeviceDetailViewModel {
 
     private let repository: PLocalROMRepository
     private let getPlatformsUseCase: GetPlatformsUseCase
+    private let getLastSyncUseCase: PGetLastSyncUseCase
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.repository = factory.localROMRepository
         self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
+        self.getLastSyncUseCase = factory.makeGetLastSyncUseCase()
     }
 
     func displayName(forPlatformName platformName: String) -> String {
@@ -134,5 +136,11 @@ class LocalDeviceDetailViewModel {
 
     var hasDownloadedROMs: Bool {
         !downloadedROMs.isEmpty
+    }
+
+    // MARK: - Sync metadata
+
+    func lastSync(romId: Int) -> SyncMetadata? {
+        getLastSyncUseCase.execute(romId: romId)
     }
 }

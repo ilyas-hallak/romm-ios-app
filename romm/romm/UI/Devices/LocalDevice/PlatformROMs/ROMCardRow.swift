@@ -7,6 +7,7 @@ struct ROMCardRow: View {
     let isDisabled: Bool
     let hasSaveGame: Bool
     let hasSaveState: Bool
+    let lastSync: SyncMetadata?
     let onPlay: () -> Void
     let onSync: () -> Void
     let onDetails: () -> Void
@@ -62,6 +63,10 @@ struct ROMCardRow: View {
                             }
                         }
                     }
+
+                    if let lastSync {
+                        SyncStatusLine(meta: lastSync)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -80,7 +85,7 @@ struct ROMCardRow: View {
                     .frame(maxWidth: .infinity, minHeight: 36)
                     .background(Color.green.opacity(0.85))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                } else {
+                } else if isPlayable {
                     CardActionButton(
                         title: "Play",
                         systemImage: "play.fill",
@@ -88,8 +93,18 @@ struct ROMCardRow: View {
                         filled: true,
                         action: onPlay
                     )
-                    .disabled(!isPlayable || isDisabled)
-                    .opacity((!isPlayable || isDisabled) ? 0.5 : 1)
+                    .disabled(isDisabled)
+                    .opacity(isDisabled ? 0.5 : 1)
+                } else {
+                    // Platform has no on-device core — show a distinct, calm
+                    // "unavailable" state instead of a greyed-out Play button so
+                    // it reads as an intentional limitation, not a broken button.
+                    CardActionLabel(
+                        title: "Not playable",
+                        systemImage: "play.slash.fill",
+                        tint: Color(.tertiaryLabel)
+                    )
+                    .accessibilityLabel("Not playable on this device")
                 }
 
                 Button(action: onDetails) {
@@ -105,9 +120,45 @@ struct ROMCardRow: View {
                     action: onSync
                 )
             }
+
+            if !isPlayable {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                    Text("This system can't be emulated on your device yet, so it can't be played here. You can still sync saves and view details.")
+                        .font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundColor(.secondary)
+            }
         }
         .padding(.vertical, 4)
         .opacity(isLaunching ? 0.7 : 1)
+    }
+}
+
+struct SyncStatusLine: View {
+    let meta: SyncMetadata
+
+    private var tint: Color { meta.trigger == .automatic ? .green : .orange }
+
+    private var relative: String { meta.date.relativeAbbreviated() }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.caption2)
+            Text("Synced \(relative)")
+                .font(.caption2)
+            Text(meta.trigger == .automatic ? "Auto" : "Manual")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(tint.opacity(0.15)))
+                .foregroundColor(tint)
+        }
+        .foregroundColor(.secondary)
+        .lineLimit(1)
     }
 }
 
