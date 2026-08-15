@@ -29,6 +29,7 @@ final class CloudSaveSyncService {
     private let downloadStateUseCase: PDownloadStateUseCase
     private let settings: CloudSaveSyncSettings
     private let recordSyncUseCase: PRecordSyncUseCase
+    private let logger = Logger.sync
 
     private var serverBatteryId: Int?
     private var serverStateIdBySlot: [Int: Int] = [:]
@@ -90,9 +91,9 @@ final class CloudSaveSyncService {
             // Preserve server mtime so subsequent local-vs-server compares are
             // not skewed by device clock drift after the write-to-disk timestamp.
             try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
-            print("[CloudSync] battery pulled (\(data.count) bytes)")
+            logger.info("Battery pulled (\(data.count) bytes)")
         } catch {
-            print("[CloudSync] battery pull failed: \(error.localizedDescription)")
+            logger.error("Battery pull failed: \(error.localizedDescription)")
         }
     }
 
@@ -133,7 +134,7 @@ final class CloudSaveSyncService {
                 realSlots.insert(nextSlot)
             }
             if overflow > 0 {
-                print("[CloudSync] \(overflow) server state(s) skipped: no free slot (max \(maxSlot + 1))")
+                logger.warning("\(overflow) server state(s) skipped: no free slot (max \(maxSlot + 1))")
             }
 
             for s in states {
@@ -146,10 +147,10 @@ final class CloudSaveSyncService {
                 let data = try await downloadStateUseCase.execute(id: s.id)
                 try saveStore.writeState(romId: config.romId, slot: slot, data: data)
                 try? saveStore.setStateModifiedAt(romId: config.romId, slot: slot, date: s.updatedAt)
-                print("[CloudSync] state slot \(slot) pulled (\(data.count) bytes)")
+                logger.info("State slot \(slot) pulled (\(data.count) bytes)")
             }
         } catch {
-            print("[CloudSync] states pull failed: \(error.localizedDescription)")
+            logger.error("States pull failed: \(error.localizedDescription)")
         }
     }
 
@@ -182,9 +183,9 @@ final class CloudSaveSyncService {
                 }
                 await self.recordBatteryId(result.id)
                 await self.recordAutoSync()
-                print("[CloudSync] battery pushed id=\(result.id)")
+                logger.info("Battery pushed id=\(result.id)")
             } catch {
-                print("[CloudSync] battery push failed: \(error.localizedDescription)")
+                logger.error("Battery push failed: \(error.localizedDescription)")
             }
         }
     }
@@ -216,9 +217,9 @@ final class CloudSaveSyncService {
                 }
                 await self.recordStateId(slot: slot, id: result.id)
                 await self.recordAutoSync()
-                print("[CloudSync] state slot \(slot) pushed id=\(result.id)")
+                logger.info("State slot \(slot) pushed id=\(result.id)")
             } catch {
-                print("[CloudSync] state slot \(slot) push failed: \(error.localizedDescription)")
+                logger.error("State slot \(slot) push failed: \(error.localizedDescription)")
             }
         }
     }
