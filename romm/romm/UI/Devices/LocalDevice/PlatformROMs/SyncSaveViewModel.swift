@@ -77,8 +77,9 @@ final class SyncSaveViewModel {
     }
 
     private func recordManualSync() {
-        syncSettings.recordSync(romId: rom.id, trigger: .manual)
-        lastSyncMeta = syncSettings.lastSync(romId: rom.id)
+        let now = Date()
+        syncSettings.recordSync(romId: rom.id, trigger: .manual, date: now)
+        lastSyncMeta = SyncMetadata(date: now, trigger: .manual)
     }
 
     // MARK: - Download

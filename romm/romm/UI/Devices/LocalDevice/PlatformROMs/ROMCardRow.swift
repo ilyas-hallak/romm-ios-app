@@ -142,11 +142,7 @@ struct SyncStatusLine: View {
 
     private var tint: Color { meta.trigger == .automatic ? .green : .orange }
 
-    private var relative: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: meta.date, relativeTo: Date())
-    }
+    private var relative: String { meta.date.relativeAbbreviated() }
 
     var body: some View {
         HStack(spacing: 5) {

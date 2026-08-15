@@ -135,4 +135,10 @@ class LocalDeviceDetailViewModel {
     var hasDownloadedROMs: Bool {
         !downloadedROMs.isEmpty
     }
+
+    // MARK: - Sync metadata
+
+    func lastSync(romId: Int) -> SyncMetadata? {
+        CloudSaveSyncSettings.shared.lastSync(romId: romId)
+    }
 }

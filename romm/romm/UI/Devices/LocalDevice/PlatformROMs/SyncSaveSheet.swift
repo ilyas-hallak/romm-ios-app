@@ -85,7 +85,7 @@ struct SyncSaveSheet: View {
                     .foregroundStyle(meta.trigger == .automatic ? .green : .orange)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Last synced \(SyncSaveSheet.relativeString(meta.date))")
+                    Text("Last synced \(meta.date.relativeAbbreviated())")
                         .font(.subheadline.weight(.semibold))
                     Text(meta.trigger == .automatic ? "Automatic, on launch or save" : "Manual sync")
                         .font(.caption)
@@ -94,12 +94,6 @@ struct SyncSaveSheet: View {
             }
             .padding(.vertical, 2)
         }
-    }
-
-    static func relativeString(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     @ViewBuilder

@@ -47,7 +47,7 @@ struct PlatformROMsListView: View {
                     isDisabled: launchingRomId != nil && launchingRomId != rom.id,
                     hasSaveGame: hasSaveGame(romId: rom.id),
                     hasSaveState: hasSaveState(romId: rom.id),
-                    lastSync: CloudSaveSyncSettings.shared.lastSync(romId: rom.id),
+                    lastSync: viewModel.lastSync(romId: rom.id),
                     onPlay: {
                         guard isPlatformSupported(rom.platformSlug), launchingRomId == nil else { return }
                         if hasSaveState(romId: rom.id) {
