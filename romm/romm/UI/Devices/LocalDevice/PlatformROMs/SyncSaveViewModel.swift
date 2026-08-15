@@ -19,6 +19,11 @@ final class SyncSaveViewModel {
     var errorMessage: String?
     var pendingUpload: PendingUpload?
 
+    // Export
+    var exportItem: ExportSaveItem?
+    var exportingServerSaveIds: Set<Int> = []
+    private var exportTempURL: URL?
+
     private let listSavesUseCase: PListServerSavesUseCase
     private let listStatesUseCase: PListServerStatesUseCase
     private let downloadSaveUseCase: PDownloadSaveUseCase
@@ -179,6 +184,64 @@ final class SyncSaveViewModel {
         }
     }
 
+    // MARK: - Export
+
+    /// Export local battery save via share sheet as .srm (RetroArch/libretro format).
+    /// .srm and .sav are identical raw SRAM images — only the extension differs.
+    func exportLocalBattery() {
+        guard let data = try? saveStore.readBattery(romId: rom.id), !data.isEmpty else {
+            errorMessage = "No local battery save found."
+            return
+        }
+        presentExport(data: data, baseName: rom.name)
+    }
+
+    /// Download a server battery save and export it via share sheet as .srm.
+    func exportServerSave(_ save: SaveSchema) {
+        guard !exportingServerSaveIds.contains(save.id) else { return }
+        if save.missingFromFs {
+            errorMessage = "File missing on server — upload it again."
+            return
+        }
+        exportingServerSaveIds.insert(save.id)
+        Task {
+            defer { exportingServerSaveIds.remove(save.id) }
+            do {
+                let data = try await downloadSaveUseCase.execute(id: save.id)
+                guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
+                presentExport(data: data, baseName: save.fileNameNoExt)
+            } catch {
+                errorMessage = "Export failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func cleanupExportTemp() {
+        if let url = exportTempURL {
+            try? FileManager.default.removeItem(at: url)
+            exportTempURL = nil
+        }
+        exportItem = nil
+    }
+
+    private func presentExport(data: Data, baseName: String) {
+        cleanupExportTemp()
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let safeName = baseName
+            .components(separatedBy: .init(charactersIn: "/\\:*?\"<>|"))
+            .joined(separator: "_")
+        let fileURL = tmpDir.appendingPathComponent("\(safeName).srm")
+        do {
+            try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+            try data.write(to: fileURL, options: .atomic)
+            exportTempURL = tmpDir
+            exportItem = ExportSaveItem(url: fileURL)
+        } catch {
+            errorMessage = "Could not prepare export: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Helpers
 
     func slotFromFileName(_ name: String) -> Int? {
@@ -186,4 +249,11 @@ final class SyncSaveViewModel {
         guard stem.hasPrefix("slot") else { return nil }
         return Int(stem.dropFirst("slot".count))
     }
+}
+
+// MARK: - Export model
+
+struct ExportSaveItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }

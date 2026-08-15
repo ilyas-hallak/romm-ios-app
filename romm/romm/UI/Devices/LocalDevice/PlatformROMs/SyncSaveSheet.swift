@@ -53,6 +53,9 @@ struct SyncSaveSheet: View {
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
+            .sheet(item: $viewModel.exportItem, onDismiss: { viewModel.cleanupExportTemp() }) { item in
+                ShareSheet(activityItems: [item.url])
+            }
             .confirmationDialog(
                 "Already on Server",
                 isPresented: Binding(
@@ -101,7 +104,9 @@ struct SyncSaveSheet: View {
                         sizeBytes: save.fileSizeBytes,
                         isBusy: viewModel.downloadingSaveIds.contains(save.id),
                         actionIcon: "arrow.down.circle.fill",
-                        action: { viewModel.downloadServerSave(save) }
+                        action: { viewModel.downloadServerSave(save) },
+                        exportBusy: viewModel.exportingServerSaveIds.contains(save.id),
+                        onExport: { viewModel.exportServerSave(save) }
                     )
                 }
             }
@@ -138,7 +143,9 @@ struct SyncSaveSheet: View {
                         sizeBytes: nil,
                         isBusy: viewModel.isUploadingBattery,
                         actionIcon: "icloud.and.arrow.up",
-                        action: { viewModel.uploadLocalBattery() }
+                        action: { viewModel.uploadLocalBattery() },
+                        exportBusy: false,
+                        onExport: { viewModel.exportLocalBattery() }
                     )
                 }
             }
@@ -149,7 +156,11 @@ struct SyncSaveSheet: View {
 
     // MARK: - Row helper
 
-    private func syncRow(icon: String, tint: Color, label: String, date: Date?, sizeBytes: Int?, isBusy: Bool, actionIcon: String, action: @escaping () -> Void) -> some View {
+    private func syncRow(
+        icon: String, tint: Color, label: String, date: Date?, sizeBytes: Int?,
+        isBusy: Bool, actionIcon: String, action: @escaping () -> Void,
+        exportBusy: Bool = false, onExport: (() -> Void)? = nil
+    ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
@@ -173,12 +184,26 @@ struct SyncSaveSheet: View {
             if isBusy {
                 ProgressView().scaleEffect(0.8)
             } else {
-                Button(action: action) {
-                    Image(systemName: actionIcon)
-                        .font(.title3)
-                        .foregroundStyle(.tint)
+                HStack(spacing: 4) {
+                    if let onExport {
+                        if exportBusy {
+                            ProgressView().scaleEffect(0.8)
+                        } else {
+                            Button(action: onExport) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    Button(action: action) {
+                        Image(systemName: actionIcon)
+                            .font(.title3)
+                            .foregroundStyle(.tint)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(.vertical, 2)
