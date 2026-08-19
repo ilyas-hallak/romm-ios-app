@@ -116,6 +116,8 @@ protocol PDependencyFactory {
     var libretroAspectRatioPreference: PLibretroAspectRatioPreference { get }
     var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference { get }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
+    var externalDisplayPreference: PExternalDisplayPreference { get }
+    var screenBrightness: PScreenBrightness { get }
     func makePlatformEngineSupport() -> PPlatformEngineSupport
 
     // SFTP ViewModels
@@ -385,6 +387,8 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = UserDefaultsLibretroAspectRatioPreferenceStore()
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = UserDefaultsEmulatorScreenPositionPreferenceStore()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
+    lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
+    lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 
     func makePlatformEngineSupport() -> PPlatformEngineSupport {
         PlatformEngineSupport()

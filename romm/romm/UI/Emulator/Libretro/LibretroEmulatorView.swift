@@ -7,8 +7,6 @@ struct LibretroEmulatorView: View {
     @SwiftUI.State private var isQuitting = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @ObservedObject private var screenBlanker = PhoneScreenBlanker.shared
-    @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
 
     private let resumeSlot: Int?
 
@@ -43,54 +41,19 @@ struct LibretroEmulatorView: View {
                 EmulatorMenuButtonOverlay { showMenu = true }
                     .transition(.opacity)
             }
-            if screenBlanker.isBlanked {
-                // Covers everything including the menu button, so the only way
-                // out is the tap, which is also the most obvious one.
-                Color.black
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture { screenBlanker.noteActivity() }
-                    .overlay(alignment: .bottom) {
-                        Text("Tap to turn the screen back on")
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.2))
-                            .padding(.bottom, 40)
-                    }
-                    .transition(.opacity)
-            }
         }
         .animation(.easeOut(duration: 0.2), value: viewModel.controlsHidden)
         .animation(.easeOut(duration: 0.25), value: viewModel.isLoading)
-        // Dim on its own only while the game really is on the TV and the player
-        // has a controller, so the phone is genuinely not being looked at.
-        .onChange(of: externalDisplay.isActive) { _, _ in updateAutoDim() }
-        .onChange(of: viewModel.controlsHidden) { _, _ in updateAutoDim() }
-        .onChange(of: showMenu) { _, presented in
-            // The menu is touch operated, dimming underneath it would be absurd.
-            if presented { screenBlanker.setAutoDimAllowed(false) } else { updateAutoDim() }
-        }
+        .playOnTV(areTouchControlsHidden: viewModel.controlsHidden, isMenuOpen: showMenu)
         .onAppear {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.onMenuRequested = { showMenu = true }
             viewModel.bootstrap(resumeSlot: resumeSlot)
-            // Only take over an external display while a game is on screen.
-            // Anchored here rather than in the view controller because a sheet
-            // does not disturb this view's lifecycle.
-            ExternalDisplayManager.shared.beginSession()
-            // Playing with a controller means nobody touches the phone, so auto
-            // lock would otherwise background the app and stop emulation.
-            UIApplication.shared.isIdleTimerDisabled = true
-            updateAutoDim()
         }
         .onDisappear {
             viewModel.teardown()
-            ExternalDisplayManager.shared.endSession()
-            UIApplication.shared.isIdleTimerDisabled = false
-            screenBlanker.setAutoDimAllowed(false)
         }
         .onChange(of: scenePhase) { _, phase in
-            // Leaving the app must never strand the user with a dark panel.
-            if phase != .active { screenBlanker.restore() }
             // Gate on session presence: after teardown the session is nil,
             // and a stray .background firing here would otherwise reach the
             // singleton frontend with stale state.
@@ -124,14 +87,6 @@ struct LibretroEmulatorView: View {
             )
             .preferredColorScheme(.dark)
         }
-    }
-
-    /// Auto dimming is allowed exactly when the game is being shown on the TV and
-    /// the touch controls are gone, which is the app's signal for "a physical
-    /// controller is in use".
-    private func updateAutoDim() {
-        let allowed = externalDisplay.isActive && viewModel.controlsHidden && !showMenu
-        screenBlanker.setAutoDimAllowed(allowed)
     }
 }
 

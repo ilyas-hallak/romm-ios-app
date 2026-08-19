@@ -14,7 +14,7 @@ struct ExternalDisplayControls: View {
 
     @ObservedObject private var display = ExternalDisplayManager.shared
 
-    @SwiftUI.State private var playOnTV: Bool = ExternalDisplayPreferences.isEnabled
+    @SwiftUI.State private var playOnTV: Bool = ExternalDisplayManager.shared.isPlayOnTVEnabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -27,7 +27,7 @@ struct ExternalDisplayControls: View {
                     Toggle("", isOn: $playOnTV)
                         .labelsHidden()
                         .onChange(of: playOnTV) { _, newValue in
-                            display.setEnabled(newValue)
+                            display.setPlayOnTVEnabled(newValue)
                         }
                 } else {
                     Text("Not connected")

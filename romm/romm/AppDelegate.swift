@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         AppBootstrap.run()
         // A previous run may have been killed while the screen was blanked for
         // TV play, which would leave the panel dark at brightness 0.
-        PhoneScreenBlanker.recoverIfNeeded()
+        PhoneScreenBlanker.shared.recoverIfNeeded()
         return true
     }
 

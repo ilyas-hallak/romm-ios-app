@@ -21,6 +21,10 @@ final class LibretroSession: NSObject {
 
     let viewController: LibretroGameViewController
 
+    /// Owned here so the display manager can hold it weakly: the target must not
+    /// outlive the session it paints from.
+    private var externalRenderTarget: LibretroExternalRenderTarget?
+
     // MARK: - Physical controller input bridge
     private let controllerInput: LibretroControllerInput
     /// The controller currently wired to the input bridge, if any.
@@ -43,6 +47,7 @@ final class LibretroSession: NSObject {
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
         self.cloudSync = cloudSync
+        self.externalRenderTarget = nil
         self.viewController = LibretroGameViewController(
             core: core,
             gameURL: gameURL,
@@ -97,6 +102,12 @@ final class LibretroSession: NSObject {
     func start(resumeSlot: Int? = nil) {
         let videoView = viewController.videoView
         frontend.videoSink = videoView
+
+        // Feed an external display the same frames. The manager decides when,
+        // this only says how.
+        let target = LibretroExternalRenderTarget(videoView: videoView)
+        externalRenderTarget = target
+        ExternalDisplayManager.shared.setRenderTarget(target)
 
         Task { [weak self] in
             guard let self else { return }
@@ -191,9 +202,11 @@ final class LibretroSession: NSObject {
         // clearAllButtons() runs while the frontend is still live.
         controllerInput.detach(from: attachedController)
         attachedController = nil
-        // Unwire the sink BEFORE tearing down the core: pcsx_rearmed can emit a
+        // Unwire both sinks BEFORE tearing down the core: pcsx_rearmed can emit a
         // final video frame during retro_unload_game / retro_deinit, and after
         // dlclose() any CGImage backed by core memory would crash on render.
+        ExternalDisplayManager.shared.setRenderTarget(nil)
+        externalRenderTarget = nil
         frontend.videoSink = nil
         frontend.stop()
         flushBatteryFromSaveDir()
@@ -381,10 +394,6 @@ final class LibretroGameViewController: UIViewController {
         view.addSubview(videoView)
         applyAspectConstraints()
         view.addGestureRecognizer(screenPanRecognizer)
-
-        // Feed an external display (AirPlay or wired) the same frames. Wiring is
-        // unconditional, the manager decides whether the layer is on screen.
-        videoView.mirrorLayer = ExternalDisplayManager.shared.videoLayer
 
         controllerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(controllerView)
