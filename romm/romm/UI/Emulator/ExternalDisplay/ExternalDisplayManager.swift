@@ -44,6 +44,11 @@ final class ExternalDisplayManager: ObservableObject {
     /// mirrors the phone as usual.
     @Published private(set) var isActive = false
 
+    /// Pixel size of the attached display, for the status line in the in-game
+    /// menu. iOS exposes no name for an external screen, so the resolution is
+    /// the only concrete thing we can show.
+    @Published private(set) var displayResolution: String?
+
     /// Set while an emulator session is on screen. Outside a session we leave
     /// the display alone, mirroring the library UI is the sensible default there.
     private var isSessionRunning = false
@@ -59,6 +64,8 @@ final class ExternalDisplayManager: ObservableObject {
         print("[ExternalDisplay] scene connected, \(Int(scene.screen.bounds.width))x\(Int(scene.screen.bounds.height))")
         self.scene = scene
         isConnected = true
+        let px = scene.screen.nativeBounds.size
+        displayResolution = "\(Int(px.width)) × \(Int(px.height))"
         syncWindow()
     }
 
@@ -69,6 +76,7 @@ final class ExternalDisplayManager: ObservableObject {
         self.scene = nil
         isConnected = false
         isActive = false
+        displayResolution = nil
     }
 
     // MARK: - Session lifecycle (called from the emulator view controllers)

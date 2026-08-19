@@ -129,8 +129,6 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
-    @SwiftUI.State private var playOnTV: Bool = ExternalDisplayPreferences.isEnabled
-    @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
 
     // 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
@@ -273,7 +271,7 @@ private struct LibretroMenuSheet: View {
                     session?.reloadAspectRatio()
                 }
             }
-            externalDisplaySection
+            ExternalDisplayControls(onRequestDismiss: onResume)
             HStack {
                 Text("Release Haptics")
                     .font(.subheadline)
@@ -295,56 +293,6 @@ private struct LibretroMenuSheet: View {
             EmulatorControllerDebugToggle()
             #endif
         }
-    }
-
-    /// Hands the external display between "we draw the game on it" and "the
-    /// system mirrors the phone". Kept visible even with nothing attached, so it
-    /// is obvious whether iOS has actually offered us the display.
-    private var externalDisplaySection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Play on TV")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
-                Spacer()
-                Toggle("", isOn: $playOnTV)
-                    .labelsHidden()
-                    .disabled(!externalDisplay.isConnected)
-                    .onChange(of: playOnTV) { _, newValue in
-                        externalDisplay.setEnabled(newValue)
-                    }
-            }
-            Text(externalDisplayStatus)
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.45))
-                .fixedSize(horizontal: false, vertical: true)
-            // Only useful once the TV actually shows the game and the player has
-            // a controller in hand, otherwise it just hides the game.
-            if externalDisplay.isActive, EmulatorControllerState.isConnected {
-                Button {
-                    onResume()
-                    PhoneScreenBlanker.shared.blank()
-                } label: {
-                    Label("Turn off phone screen", systemImage: "iphone.slash")
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .foregroundColor(.white)
-                }
-                .padding(.top, 4)
-            }
-        }
-    }
-
-    private var externalDisplayStatus: String {
-        guard externalDisplay.isConnected else {
-            return "No external display detected. Turn on AirPlay mirroring or plug in an HDMI adapter."
-        }
-        return externalDisplay.isActive
-            ? "The game is drawn on the display at its own resolution."
-            : "The display is mirroring this screen."
     }
 
     @ViewBuilder
