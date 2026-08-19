@@ -9,6 +9,7 @@ struct EmulatorMenuSheet: View {
     @SwiftUI.State private var statusMessage: String?
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var showQuitConfirmation = false
+    @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
 
     // Slots are 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`). Slot 0 is a real, usable slot.
@@ -36,6 +37,14 @@ struct EmulatorMenuSheet: View {
                     actionButtons
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
+                    // Unlike the libretro menu this sheet is a fixed stack, not a
+                    // scroll view, so the section only appears once there really
+                    // is a display. Settings carries the discoverability.
+                    if externalDisplay.isConnected {
+                        Divider().background(Color.white.opacity(0.1))
+                        ExternalDisplayControls(onRequestDismiss: onResume)
+                            .padding(16)
+                    }
                     if let preference = session?.screenPositionPreference,
                        EmulatorControllerState.isConnected {
                         Divider().background(Color.white.opacity(0.1))

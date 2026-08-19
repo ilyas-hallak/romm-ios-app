@@ -1,4 +1,4 @@
-import UIKit
+import Foundation
 import Combine
 
 /// Blanks the phone's own screen while a game runs on a TV, so the handset can
@@ -10,28 +10,39 @@ import Combine
 /// phones use, black pixels are switched off, so this lands very close to a
 /// dark screen in both looks and power draw.
 ///
-/// The brightness is a system-wide setting that survives the app, so the
-/// original value is persisted immediately. If the app is killed while blanked,
-/// `recoverIfNeeded()` puts it back on the next launch instead of leaving the
-/// user with a phone that seems broken.
+/// Deliberately mechanical: it does not decide *whether* dimming is appropriate,
+/// that is `ExternalDisplayPolicy`'s job and the caller's to apply. This only
+/// runs the countdown and moves the brightness.
+///
+/// A singleton for the same reason the display manager is one, the recovery path
+/// runs from `AppDelegate` before any view exists. Its collaborators are
+/// injected, so the countdown and the recovery can be tested without a device.
 @MainActor
 final class PhoneScreenBlanker: ObservableObject {
 
-    static let shared = PhoneScreenBlanker()
+    static let shared = PhoneScreenBlanker(
+        brightness: DefaultDependencyFactory.shared.screenBrightness,
+        preference: DefaultDependencyFactory.shared.externalDisplayPreference
+    )
 
     @Published private(set) var isBlanked = false
-
-    private static let savedBrightnessKey = "phoneScreenBlanker.savedBrightness"
 
     /// Grace period before dimming on its own. Long enough to reach the menu
     /// button after starting a game, short enough not to sit there glowing.
     private static let autoDimDelay: TimeInterval = 8
 
+    private let brightness: PScreenBrightness
+    private let preference: PExternalDisplayPreference
+
     private var autoDimTimer: Timer?
-    /// True while the conditions hold: game on the TV, controller in hand.
+    /// True while the caller says the conditions hold: game on the TV, controller
+    /// in hand, no menu open.
     private var autoDimAllowed = false
 
-    private init() {}
+    init(brightness: PScreenBrightness, preference: PExternalDisplayPreference) {
+        self.brightness = brightness
+        self.preference = preference
+    }
 
     // MARK: - Automatic dimming
 
@@ -57,7 +68,7 @@ final class PhoneScreenBlanker: ObservableObject {
 
     private func armAutoDim() {
         cancelAutoDim()
-        guard autoDimAllowed, ExternalDisplayPreferences.autoDimPhone else { return }
+        guard autoDimAllowed else { return }
         autoDimTimer = Timer.scheduledTimer(withTimeInterval: Self.autoDimDelay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.blank() }
         }
@@ -68,11 +79,16 @@ final class PhoneScreenBlanker: ObservableObject {
         autoDimTimer = nil
     }
 
+    // MARK: - Brightness
+
     func blank() {
         guard !isBlanked else { return }
-        let current = UIScreen.main.brightness
-        UserDefaults.standard.set(current, forKey: Self.savedBrightnessKey)
-        UIScreen.main.brightness = 0
+        let current = brightness.level
+        // Persisted before the change, not after: brightness is a system wide
+        // setting that outlives the app, so a crash from here on must still be
+        // recoverable.
+        preference.blankedPhoneBrightness = current
+        brightness.level = 0
         isBlanked = true
         print("[PhoneScreen] blanked, saved brightness \(String(format: "%.2f", current))")
     }
@@ -86,19 +102,17 @@ final class PhoneScreenBlanker: ObservableObject {
 
     /// Called on launch: if a previous run was killed while blanked, the saved
     /// brightness is still on disk and the panel is still dark.
-    static func recoverIfNeeded() {
-        guard UserDefaults.standard.object(forKey: savedBrightnessKey) != nil else { return }
+    func recoverIfNeeded() {
+        guard preference.blankedPhoneBrightness != nil else { return }
         print("[PhoneScreen] recovering brightness after an unclean exit")
-        MainActor.assumeIsolated { shared.applySavedBrightness() }
+        applySavedBrightness()
     }
 
     private func applySavedBrightness() {
-        let defaults = UserDefaults.standard
-        guard defaults.object(forKey: Self.savedBrightnessKey) != nil else { return }
-        let saved = defaults.double(forKey: Self.savedBrightnessKey)
+        guard let saved = preference.blankedPhoneBrightness else { return }
         // A saved value of 0 would mean restoring to black, which can only be a
         // bad read. Fall back to something clearly usable.
-        UIScreen.main.brightness = saved > 0.05 ? CGFloat(saved) : 0.5
-        defaults.removeObject(forKey: Self.savedBrightnessKey)
+        brightness.level = saved > 0.05 ? saved : 0.5
+        preference.blankedPhoneBrightness = nil
     }
 }

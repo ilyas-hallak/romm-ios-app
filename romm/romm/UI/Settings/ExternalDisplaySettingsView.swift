@@ -4,9 +4,9 @@ import SwiftUI
 /// for changing them mid-session, this is where they can be set up beforehand.
 struct ExternalDisplaySettingsView: View {
 
-    @SwiftUI.State private var playOnTV = ExternalDisplayPreferences.isEnabled
-    @SwiftUI.State private var autoDim = ExternalDisplayPreferences.autoDimPhone
     @ObservedObject private var display = ExternalDisplayManager.shared
+    @SwiftUI.State private var playOnTV = ExternalDisplayManager.shared.isPlayOnTVEnabled
+    @SwiftUI.State private var autoDim = ExternalDisplayManager.shared.isAutoDimPhoneEnabled
 
     var body: some View {
         List {
@@ -39,7 +39,7 @@ struct ExternalDisplaySettingsView: View {
                     }
                 }
                 .onChange(of: playOnTV) { _, newValue in
-                    ExternalDisplayManager.shared.setEnabled(newValue)
+                    display.setPlayOnTVEnabled(newValue)
                 }
 
                 Toggle(isOn: $autoDim) {
@@ -51,7 +51,7 @@ struct ExternalDisplaySettingsView: View {
                     }
                 }
                 .onChange(of: autoDim) { _, newValue in
-                    ExternalDisplayPreferences.autoDimPhone = newValue
+                    display.setAutoDimPhoneEnabled(newValue)
                 }
             } header: {
                 Text("Options")

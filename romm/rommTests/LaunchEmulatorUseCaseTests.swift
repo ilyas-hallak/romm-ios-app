@@ -13,6 +13,7 @@ private final class StubSupport: PPlatformEngineSupport {
     func preferred(for platformSlug: String) -> EmulatorEngine {
         engines.contains(.web) ? .web : .native
     }
+    func isEmulationAvailable(for platformSlug: String) -> Bool { !engines.isEmpty }
 }
 
 private final class StubTokenProvider: PTokenProvider {
