@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import AVFoundation
+import Combine
 import DeltaCore
 import GBADeltaCore
 import GameController
@@ -151,6 +152,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     let viewController: GameViewController
 
+    /// The extra game view rendering to the TV, present only while we own the
+    /// display.
+    private var externalScreen: ExternalGameScreenView?
+    private var externalDisplayObserver: AnyCancellable?
+
     // MARK: - GameViewControllerDelegate
 
     func gameViewController(_ gameViewController: GameViewController, handleMenuInputFrom gameController: GameController) {
@@ -216,6 +222,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             self.viewController.startEmulation()
             self.attachExternalControllers()
             self.observeControllerConnections()
+            self.observeExternalDisplay()
             guard let slot = resumeSlot else { return }
             try? await Task.sleep(nanoseconds: 600_000_000)
             self.viewController.pauseEmulation()
@@ -247,8 +254,51 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.pauseEmulation()
         flushBattery()
         detachExternalControllers()
+        // Before `core.stop()`: the core must not be torn down while a view of
+        // ours is still registered as one of its render targets.
+        externalDisplayObserver = nil
+        detachExternalScreen()
         NotificationCenter.default.removeObserver(self)
         emulatorCore?.stop()
+    }
+
+    // MARK: - External display
+
+    /// Follows the manager's take-over state rather than merely being connected:
+    /// while the display is back on plain mirroring there is nothing of ours on
+    /// it, so the core should not be rendering a second view at all.
+    ///
+    /// `@Published` replays its current value on subscribe, so a display that was
+    /// already active when the game launched is picked up here too.
+    private func observeExternalDisplay() {
+        externalDisplayObserver = ExternalDisplayManager.shared.$isActive
+            .sink { [weak self] isActive in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if isActive {
+                        self.attachExternalScreen()
+                    } else {
+                        self.detachExternalScreen()
+                    }
+                }
+            }
+    }
+
+    private func attachExternalScreen() {
+        guard externalScreen == nil, let core = emulatorCore else { return }
+        let screen = ExternalGameScreenView()
+        screen.renderingSize = core.preferredRenderingSize
+        core.add(screen.gameView)
+        ExternalDisplayManager.shared.setContent(screen)
+        externalScreen = screen
+        print("[Native] rendering to the external display at \(Int(core.preferredRenderingSize.width))x\(Int(core.preferredRenderingSize.height))")
+    }
+
+    private func detachExternalScreen() {
+        guard let screen = externalScreen else { return }
+        emulatorCore?.remove(screen.gameView)
+        ExternalDisplayManager.shared.setContent(nil)
+        externalScreen = nil
     }
 
     // MARK: - External Controllers

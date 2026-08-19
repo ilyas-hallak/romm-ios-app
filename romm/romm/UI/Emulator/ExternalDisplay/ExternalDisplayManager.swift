@@ -22,20 +22,22 @@ final class ExternalDisplayManager: ObservableObject {
 
     static let shared = ExternalDisplayManager()
 
-    /// Layer the renderers push their frames into. It exists independently of
-    /// whether a display is attached right now, so a renderer can wire it up
-    /// once in `viewDidLoad` and never think about connection state again. While
-    /// nothing is attached the layer is not in any hierarchy and assigning
-    /// `contents` is close to free.
-    let videoLayer: CALayer = {
-        let layer = CALayer()
-        layer.backgroundColor = UIColor.black.cgColor
-        // Nearest keeps the pixel art crisp when blown up to a TV, resizeAspect
-        // does the letterboxing for us whatever the panel's ratio is.
-        layer.magnificationFilter = .nearest
-        layer.contentsGravity = .resizeAspect
-        return layer
-    }()
+    /// Fills the display whenever we own it. Exists independently of whether one
+    /// is attached, so a renderer wires itself up once and never thinks about
+    /// connection state again.
+    let contentView = ExternalDisplayContentView()
+
+    /// Layer the software blit renderer pushes its frames into. While no display
+    /// is attached the layer is not on screen and assigning `contents` is close
+    /// to free, which is why libretro can set it unconditionally per frame.
+    var videoLayer: CALayer { contentView.videoLayer }
+
+    /// For renderers that draw through a view of their own instead of a layer we
+    /// feed, which is how DeltaCore works: it hands a frame to every `GameView`
+    /// registered with its `VideoManager`.
+    func setContent(_ view: UIView?) {
+        contentView.setContent(view)
+    }
 
     /// True while iOS has handed us an external display scene.
     @Published private(set) var isConnected = false
@@ -118,7 +120,7 @@ final class ExternalDisplayManager: ObservableObject {
 
     private func setupWindow() {
         guard window == nil, let scene else { return }
-        let controller = ExternalDisplayViewController(videoLayer: videoLayer)
+        let controller = ExternalDisplayViewController(contentView: contentView)
         let window = UIWindow(windowScene: scene)
         window.rootViewController = controller
         window.isHidden = false
@@ -136,14 +138,60 @@ final class ExternalDisplayManager: ObservableObject {
     }
 }
 
-/// Black full-bleed host for `videoLayer`. Non-interactive by definition of the
-/// scene role, so there is nothing to wire up beyond the layer's frame.
+/// The picture surface itself, kept apart from the window so it survives the
+/// display being handed back and forth between us and plain mirroring. Both
+/// renderers reach it: libretro assigns `CGImage`s to `videoLayer`, DeltaCore
+/// installs a view via `setContent`.
+final class ExternalDisplayContentView: UIView {
+
+    let videoLayer: CALayer = {
+        let layer = CALayer()
+        layer.backgroundColor = UIColor.black.cgColor
+        // Nearest keeps the pixel art crisp when blown up to a TV, resizeAspect
+        // does the letterboxing for us whatever the panel's ratio is.
+        layer.magnificationFilter = .nearest
+        layer.contentsGravity = .resizeAspect
+        return layer
+    }()
+
+    private weak var installedContent: UIView?
+
+    init() {
+        super.init(frame: .zero)
+        backgroundColor = .black
+        layer.addSublayer(videoLayer)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) not implemented") }
+
+    func setContent(_ view: UIView?) {
+        installedContent?.removeFromSuperview()
+        installedContent = view
+        guard let view else { return }
+        view.frame = bounds
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(view)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // No animation: this is re-framed on resize and an implicit fade would
+        // smear a live game picture.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        videoLayer.frame = bounds
+        CATransaction.commit()
+    }
+}
+
+/// Black full-bleed host for the content view. Non-interactive by definition of
+/// the scene role, so there is nothing to wire up beyond the layout.
 private final class ExternalDisplayViewController: UIViewController {
 
-    private let videoLayer: CALayer
+    private let contentView: ExternalDisplayContentView
 
-    init(videoLayer: CALayer) {
-        self.videoLayer = videoLayer
+    init(contentView: ExternalDisplayContentView) {
+        self.contentView = contentView
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -152,17 +200,9 @@ private final class ExternalDisplayViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        view.layer.addSublayer(videoLayer)
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        // No animation: the layer is re-framed on rotation/resize and an implicit
-        // fade would smear a live game picture.
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        videoLayer.frame = view.bounds
-        CATransaction.commit()
+        contentView.frame = view.bounds
+        contentView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(contentView)
     }
 }
 
