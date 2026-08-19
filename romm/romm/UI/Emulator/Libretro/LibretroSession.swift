@@ -187,9 +187,11 @@ final class LibretroSession: NSObject {
 
     #if DEBUG
     /// Latency measuring aid, see `LibretroVideoView.startFlashTest`.
-    func setLatencyFlashTest(_ enabled: Bool) {
+    /// `onFlash` fires the moment the white frame reaches the layers.
+    func setLatencyFlashTest(_ enabled: Bool, interval: TimeInterval = 2.0, onFlash: (() -> Void)? = nil) {
+        viewController.videoView.onFlashShown = onFlash
         if enabled {
-            viewController.videoView.startFlashTest()
+            viewController.videoView.startFlashTest(interval: interval)
         } else {
             viewController.videoView.stopFlashTest()
         }

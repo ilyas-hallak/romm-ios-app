@@ -111,6 +111,10 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
     private var isFlashing = false
     private var flashTimer: Timer?
 
+    /// Fired the instant the white frame is pushed into the layers, so a probe
+    /// can time a tap against it.
+    var onFlashShown: (() -> Void)?
+
     /// White for three frames, roughly 50 ms. A single frame risks being dropped
     /// by the video encoder, while the leading edge stays just as sharp to read.
     private static let flashFrameCount = 3
@@ -134,7 +138,10 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
     private func handleFlashFrame() -> Bool {
         if flashFramesRemaining > 0 {
             flashFramesRemaining -= 1
-            if !isFlashing { setFlash(true) }
+            if !isFlashing {
+                setFlash(true)
+                onFlashShown?()
+            }
             return true
         }
         if isFlashing { setFlash(false) }
