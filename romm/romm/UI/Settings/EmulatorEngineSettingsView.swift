@@ -2,7 +2,9 @@ import SwiftUI
 
 struct EmulatorEngineSettingsView: View {
     @State private var selection: EmulatorEngine
+    @State private var menuShortcut: EmulatorMenuShortcut
     private let preference: PEmulatorEnginePreference
+    private let menuShortcutPreference: PEmulatorMenuShortcutPreference
 
     #if DEBUG
     @State private var simulateController = EmulatorControllerState.simulateConnected
@@ -10,7 +12,9 @@ struct EmulatorEngineSettingsView: View {
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.preference = factory.enginePreference
+        self.menuShortcutPreference = factory.emulatorMenuShortcutPreference
         _selection = State(wrappedValue: factory.enginePreference.current)
+        _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
     }
 
     var body: some View {
@@ -36,6 +40,17 @@ struct EmulatorEngineSettingsView: View {
 
             Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it — handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
 
+            Section(
+                header: Text("Controller"),
+                footer: Text("Optional button combination that opens the in-game menu from a physical controller. The on-screen menu button stays available either way.")
+            ) {
+                Picker("Menu shortcut", selection: $menuShortcut) {
+                    Text("Off").tag(EmulatorMenuShortcut.none)
+                    Text("L3 + R3").tag(EmulatorMenuShortcut.l3r3)
+                    Text("L1 + R1").tag(EmulatorMenuShortcut.l1r1)
+                }
+            }
+
             #if DEBUG
             Section(
                 header: Text("Debug"),
@@ -50,5 +65,6 @@ struct EmulatorEngineSettingsView: View {
         }
         .navigationTitle("Emulator")
         .onChange(of: selection) { _, new in preference.current = new }
+        .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
     }
 }

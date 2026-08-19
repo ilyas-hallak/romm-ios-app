@@ -21,6 +21,11 @@ final class LibretroSession: NSObject {
 
     let viewController: LibretroGameViewController
 
+    // MARK: - Physical controller input bridge
+    private let controllerInput: LibretroControllerInput
+    /// The controller currently wired to the input bridge, if any.
+    private var attachedController: GCController?
+
     init(
         gameURL: URL,
         core: LibretroCore,
@@ -28,6 +33,7 @@ final class LibretroSession: NSObject {
         saveStates: PEmulatorSaveStatesUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference,
+        menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -43,6 +49,13 @@ final class LibretroSession: NSObject {
             aspectRatioPreference: aspectRatioPreference,
             screenPositionPreference: screenPositionPreference
         )
+        // controllerInput must be created before super.init() because stored
+        // properties must be initialised before the instance escapes.
+        // onMenuRequested is wired after super.init() once self is available.
+        self.controllerInput = LibretroControllerInput(
+            frontend: LibretroFrontend.shared,
+            menuShortcutPreference: menuShortcutPreference
+        )
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in
             self?.onMenuRequested?()
@@ -50,6 +63,28 @@ final class LibretroSession: NSObject {
         self.viewController.onControlsHiddenChanged = { [weak self] hidden in
             self?.onControlsHiddenChanged?(hidden)
         }
+
+        // Forward menu requests from the optional controller shortcut combo.
+        controllerInput.onMenuRequested = { [weak self] in
+            self?.onMenuRequested?()
+        }
+
+        // Wire connect/disconnect so the input bridge stays in sync.
+        var names: [NSNotification.Name] = [.GCControllerDidConnect, .GCControllerDidDisconnect]
+        #if DEBUG
+        names.append(.emulatorSimulatedControllerChanged)
+        #endif
+        for name in names {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleControllerConnectionChanged),
+                name: name,
+                object: nil
+            )
+        }
+
+        // Attach to any controller that is already connected at launch.
+        attachControllerIfPresent()
     }
 
     // MARK: - Lifecycle
@@ -128,11 +163,33 @@ final class LibretroSession: NSObject {
     func pause() { frontend.pause() }
     func resume() { frontend.resume() }
 
+    // MARK: - Physical controller input
+
+    @objc private func handleControllerConnectionChanged() {
+        // Release every button that might be latched on the outgoing controller
+        // before re-evaluating; prevents permanently-stuck inputs across
+        // connect/disconnect events.
+        controllerInput.detach(from: attachedController)
+        attachedController = nil
+        attachControllerIfPresent()
+    }
+
+    private func attachControllerIfPresent() {
+        guard let controller = GCController.controllers().first else { return }
+        attachedController = controller
+        controllerInput.attach(to: controller)
+        print("[Libretro] physical controller attached: \(controller.vendorName ?? "unknown")")
+    }
+
     func reloadAspectRatio() {
         viewController.applyAspectConstraints()
     }
 
     func stop() {
+        // Detach the physical controller before tearing down the frontend so
+        // clearAllButtons() runs while the frontend is still live.
+        controllerInput.detach(from: attachedController)
+        attachedController = nil
         // Unwire the sink BEFORE tearing down the core: pcsx_rearmed can emit a
         // final video frame during retro_unload_game / retro_deinit, and after
         // dlclose() any CGImage backed by core memory would crash on render.
@@ -247,6 +304,10 @@ final class LibretroSession: NSObject {
 
     private func documentsDirectory() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }
 
