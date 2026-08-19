@@ -251,8 +251,8 @@ final class LibretroFrontend {
         guard elapsed >= 3 else { return }
         let measured = Double(frameRateWindowCount) / elapsed
         print(String(
-            format: "[Libretro] pacing: %.2f fps measured, %.2f expected, audio buffered %.0f ms",
-            measured, coreFPS, audioBufferedMilliseconds()
+            format: "[Libretro] pacing: %.2f fps measured, %.2f expected, audio buffered %.0f ms, underruns %d",
+            measured, coreFPS, audioBufferedMilliseconds(), Self.audioUnderruns
         ))
         frameRateWindowStart = now
         frameRateWindowCount = 0
