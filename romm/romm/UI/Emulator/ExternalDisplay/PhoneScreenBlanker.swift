@@ -23,7 +23,50 @@ final class PhoneScreenBlanker: ObservableObject {
 
     private static let savedBrightnessKey = "phoneScreenBlanker.savedBrightness"
 
+    /// Grace period before dimming on its own. Long enough to reach the menu
+    /// button after starting a game, short enough not to sit there glowing.
+    private static let autoDimDelay: TimeInterval = 8
+
+    private var autoDimTimer: Timer?
+    /// True while the conditions hold: game on the TV, controller in hand.
+    private var autoDimAllowed = false
+
     private init() {}
+
+    // MARK: - Automatic dimming
+
+    /// Driven by the emulator view as the situation changes. Turning it off also
+    /// brings the screen back, so leaving the TV never strands a dark phone.
+    func setAutoDimAllowed(_ allowed: Bool) {
+        guard allowed != autoDimAllowed else { return }
+        autoDimAllowed = allowed
+        if allowed {
+            armAutoDim()
+        } else {
+            cancelAutoDim()
+            restore()
+        }
+    }
+
+    /// Any touch counts as "the player is looking at the phone": undim and start
+    /// the countdown over, the same bargain as the system's own auto lock.
+    func noteActivity() {
+        restore()
+        armAutoDim()
+    }
+
+    private func armAutoDim() {
+        cancelAutoDim()
+        guard autoDimAllowed, ExternalDisplayPreferences.autoDimPhone else { return }
+        autoDimTimer = Timer.scheduledTimer(withTimeInterval: Self.autoDimDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.blank() }
+        }
+    }
+
+    private func cancelAutoDim() {
+        autoDimTimer?.invalidate()
+        autoDimTimer = nil
+    }
 
     func blank() {
         guard !isBlanked else { return }
@@ -35,6 +78,7 @@ final class PhoneScreenBlanker: ObservableObject {
     }
 
     func restore() {
+        cancelAutoDim()
         guard isBlanked else { return }
         applySavedBrightness()
         isBlanked = false

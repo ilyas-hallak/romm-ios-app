@@ -171,13 +171,26 @@ private final class ExternalDisplayViewController: UIViewController {
 /// only the manager reads it. Defaults to on: once a TV is attached, a portrait
 /// phone screen with black bars is never what the player wanted.
 enum ExternalDisplayPreferences {
-    private static let key = "externalDisplay.enabled"
+    private static let enabledKey = "externalDisplay.enabled"
+    private static let autoDimKey = "externalDisplay.autoDimPhone"
 
     static var isEnabled: Bool {
-        get {
-            guard UserDefaults.standard.object(forKey: key) != nil else { return true }
-            return UserDefaults.standard.bool(forKey: key)
-        }
-        set { UserDefaults.standard.set(newValue, forKey: key) }
+        get { boolOrTrue(enabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
+    }
+
+    /// Dim the handset on its own once the game is on the TV and a controller is
+    /// in use. On by default: in that situation nobody is looking at the phone,
+    /// and having to reach for a menu button to darken it defeats the point.
+    static var autoDimPhone: Bool {
+        get { boolOrTrue(autoDimKey) }
+        set { UserDefaults.standard.set(newValue, forKey: autoDimKey) }
+    }
+
+    /// `UserDefaults.bool` returns false for a missing key, which would make
+    /// both of these default to off.
+    private static func boolOrTrue(_ key: String) -> Bool {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return true }
+        return UserDefaults.standard.bool(forKey: key)
     }
 }

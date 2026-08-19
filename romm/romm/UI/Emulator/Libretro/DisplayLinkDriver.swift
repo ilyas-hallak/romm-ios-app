@@ -23,15 +23,17 @@ final class DisplayLinkDriver: NSObject {
 
     private var link: CADisplayLink?
 
-    init(preferredFPS: Double, onTick: @escaping (CFTimeInterval) -> Void) {
+    init(onTick: @escaping (CFTimeInterval) -> Void) {
         self.onTick = onTick
         super.init()
+        // No preferredFrameRateRange on purpose. Only divisors of the panel rate
+        // are available (120, 60, 40, 30, 24 on ProMotion), so pinning the range
+        // to a core rate such as 59.94 asks for something unachievable and the
+        // system silently picks another rate, which then starves the core and
+        // drags the audio out of sync. Running at the panel's own rate and
+        // letting the caller's accumulator do the pacing is both correct and
+        // finer grained.
         let link = CADisplayLink(target: self, selector: #selector(tick(_:)))
-        // Asking for the core's rate keeps ProMotion from running the callback at
-        // 120 Hz just to have most ticks do nothing. The caller's accumulator
-        // still copes if the system picks something else.
-        let fps = Float(preferredFPS)
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: fps, maximum: fps, preferred: fps)
         self.link = link
     }
 

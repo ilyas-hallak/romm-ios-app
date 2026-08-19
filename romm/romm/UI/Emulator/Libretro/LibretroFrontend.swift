@@ -190,7 +190,9 @@ final class LibretroFrontend {
 
     func startRunLoop() {
         frameAccumulator = 0
-        let driver = DisplayLinkDriver(preferredFPS: coreFPS) { [weak self] displayFrameDuration in
+        frameRateWindowStart = 0
+        frameRateWindowCount = 0
+        let driver = DisplayLinkDriver { [weak self] displayFrameDuration in
             MainActor.assumeIsolated {
                 self?.stepEmulation(displayFrameDuration: displayFrameDuration)
             }
@@ -210,19 +212,50 @@ final class LibretroFrontend {
         let coreInterval = 1.0 / coreFPS
         frameAccumulator += displayFrameDuration
 
-        // Capped: after a stall (a load, a resume) the backlog would otherwise be
-        // burned off in one burst, fast-forwarding the game instead of recovering.
+        // Capped so that after a stall (a load, a resume) the backlog is not
+        // burned off in one burst, which would fast-forward the game.
         var runs = 0
-        while frameAccumulator >= coreInterval && runs < 2 {
+        while frameAccumulator >= coreInterval && runs < 4 {
             retro_run?()
             frameAccumulator -= coreInterval
             runs += 1
         }
-        // Anything still left after the cap is a real stall, not drift. Keeping it
-        // would make the next ticks run hot, so drop it.
-        if frameAccumulator > coreInterval {
-            frameAccumulator = 0
+
+        // Only drop the backlog when it is far beyond what pacing produces, and
+        // even then keep the sub-frame remainder. Clearing it outright would leak
+        // a slice of time on every busy tick and run the core permanently slow,
+        // which is what pulled the audio out of sync.
+        if frameAccumulator > coreInterval * 4 {
+            frameAccumulator = frameAccumulator.truncatingRemainder(dividingBy: coreInterval)
         }
+
+        countFrames(ran: runs)
+    }
+
+    // MARK: - Pacing diagnostics
+
+    private var frameRateWindowStart: CFTimeInterval = 0
+    private var frameRateWindowCount = 0
+
+    /// Reports the rate the core actually achieves versus what it asked for. A
+    /// gap here is the first thing to look at when audio drifts, since the core
+    /// produces its samples per frame.
+    private func countFrames(ran: Int) {
+        frameRateWindowCount += ran
+        let now = CACurrentMediaTime()
+        if frameRateWindowStart == 0 {
+            frameRateWindowStart = now
+            return
+        }
+        let elapsed = now - frameRateWindowStart
+        guard elapsed >= 3 else { return }
+        let measured = Double(frameRateWindowCount) / elapsed
+        print(String(
+            format: "[Libretro] pacing: %.2f fps measured, %.2f expected, audio buffered %.0f ms",
+            measured, coreFPS, audioBufferedMilliseconds()
+        ))
+        frameRateWindowStart = now
+        frameRateWindowCount = 0
     }
 
     func stop() {

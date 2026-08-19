@@ -175,6 +175,13 @@ struct SettingsView: View {
                             }
                         }
 
+                        NavigationLink(destination: ExternalDisplaySettingsView()) {
+                            HStack {
+                                Image(systemName: "tv")
+                                Text("Play on TV")
+                            }
+                        }
+
                         Toggle(isOn: $cloudSyncSettings.isEnabled) {
                             HStack {
                                 Image(systemName: "icloud.and.arrow.up")
