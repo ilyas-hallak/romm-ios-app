@@ -7,6 +7,7 @@ struct LibretroEmulatorView: View {
     @SwiftUI.State private var isQuitting = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var screenBlanker = PhoneScreenBlanker.shared
 
     private let resumeSlot: Int?
 
@@ -41,6 +42,21 @@ struct LibretroEmulatorView: View {
                 EmulatorMenuButtonOverlay { showMenu = true }
                     .transition(.opacity)
             }
+            if screenBlanker.isBlanked {
+                // Covers everything including the menu button, so the only way
+                // out is the tap, which is also the most obvious one.
+                Color.black
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { screenBlanker.restore() }
+                    .overlay(alignment: .bottom) {
+                        Text("Tap to turn the screen back on")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.2))
+                            .padding(.bottom, 40)
+                    }
+                    .transition(.opacity)
+            }
         }
         .animation(.easeOut(duration: 0.2), value: viewModel.controlsHidden)
         .animation(.easeOut(duration: 0.25), value: viewModel.isLoading)
@@ -52,12 +68,19 @@ struct LibretroEmulatorView: View {
             // Anchored here rather than in the view controller because a sheet
             // does not disturb this view's lifecycle.
             ExternalDisplayManager.shared.beginSession()
+            // Playing with a controller means nobody touches the phone, so auto
+            // lock would otherwise background the app and stop emulation.
+            UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
             viewModel.teardown()
             ExternalDisplayManager.shared.endSession()
+            UIApplication.shared.isIdleTimerDisabled = false
+            screenBlanker.restore()
         }
         .onChange(of: scenePhase) { _, phase in
+            // Leaving the app must never strand the user with a dark panel.
+            if phase != .active { screenBlanker.restore() }
             // Gate on session presence: after teardown the session is nil,
             // and a stray .background firing here would otherwise reach the
             // singleton frontend with stale state.
@@ -295,6 +318,23 @@ private struct LibretroMenuSheet: View {
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.45))
                 .fixedSize(horizontal: false, vertical: true)
+            // Only useful once the TV actually shows the game and the player has
+            // a controller in hand, otherwise it just hides the game.
+            if externalDisplay.isActive, EmulatorControllerState.isConnected {
+                Button {
+                    onResume()
+                    PhoneScreenBlanker.shared.blank()
+                } label: {
+                    Label("Turn off phone screen", systemImage: "iphone.slash")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .foregroundColor(.white)
+                }
+                .padding(.top, 4)
+            }
         }
     }
 
