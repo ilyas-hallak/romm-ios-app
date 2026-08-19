@@ -151,6 +151,10 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     let viewController: GameViewController
 
+    /// Owned here so the display manager can hold it weakly: the target must not
+    /// outlive the core it renders from.
+    private var externalRenderTarget: DeltaCoreExternalRenderTarget?
+
     // MARK: - GameViewControllerDelegate
 
     func gameViewController(_ gameViewController: GameViewController, handleMenuInputFrom gameController: GameController) {
@@ -216,6 +220,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             self.viewController.startEmulation()
             self.attachExternalControllers()
             self.observeControllerConnections()
+            self.registerExternalRenderTarget()
             guard let slot = resumeSlot else { return }
             try? await Task.sleep(nanoseconds: 600_000_000)
             self.viewController.pauseEmulation()
@@ -247,8 +252,23 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.pauseEmulation()
         flushBattery()
         detachExternalControllers()
+        // Before `core.stop()`: the core must not be torn down while a view of
+        // ours is still registered as one of its render targets.
+        ExternalDisplayManager.shared.setRenderTarget(nil)
+        externalRenderTarget = nil
         NotificationCenter.default.removeObserver(self)
         emulatorCore?.stop()
+    }
+
+    // MARK: - External display
+
+    /// Registered once the core exists. Whether it actually paints is the display
+    /// manager's call, so there is nothing to observe here.
+    private func registerExternalRenderTarget() {
+        guard let core = emulatorCore else { return }
+        let target = DeltaCoreExternalRenderTarget(core: core)
+        externalRenderTarget = target
+        ExternalDisplayManager.shared.setRenderTarget(target)
     }
 
     // MARK: - External Controllers

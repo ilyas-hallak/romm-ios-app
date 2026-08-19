@@ -2,8 +2,8 @@ import UIKit
 import Combine
 
 /// Owns the window we put on an external display (AirPlay or a USB-C/HDMI
-/// adapter) so a running game can be shown there directly instead of letting
-/// the system mirror the whole phone UI.
+/// adapter) so a running game can be shown there directly instead of letting the
+/// system mirror the whole phone UI.
 ///
 /// How the system side works: while AirPlaying or wired up, iOS offers the app a
 /// scene with the `windowExternalDisplayNonInteractive` role. As long as we
@@ -17,25 +17,21 @@ import Combine
 /// game is rendered at the TV's own resolution and aspect, so no portrait phone
 /// screen with black bars, and only the game picture has to be encoded instead
 /// of the entire animated UI.
+///
+/// Scope of this class: scene and window plumbing, plus the observable state the
+/// UI binds to. The *decision* lives in `ExternalDisplayPolicy` and the painting
+/// in a `PExternalRenderTarget`, so neither is entangled with UIKit lifecycle.
+///
+/// A singleton because UIKit instantiates `ExternalDisplaySceneDelegate` itself
+/// and hands it a scene, so there is no call site to inject into. The same reason
+/// `LibretroFrontend` is one. Its collaborators are injected, so it can be built
+/// and driven in a test without a display.
 @MainActor
 final class ExternalDisplayManager: ObservableObject {
 
-    static let shared = ExternalDisplayManager()
-
-    /// Layer the renderers push their frames into. It exists independently of
-    /// whether a display is attached right now, so a renderer can wire it up
-    /// once in `viewDidLoad` and never think about connection state again. While
-    /// nothing is attached the layer is not in any hierarchy and assigning
-    /// `contents` is close to free.
-    let videoLayer: CALayer = {
-        let layer = CALayer()
-        layer.backgroundColor = UIColor.black.cgColor
-        // Nearest keeps the pixel art crisp when blown up to a TV, resizeAspect
-        // does the letterboxing for us whatever the panel's ratio is.
-        layer.magnificationFilter = .nearest
-        layer.contentsGravity = .resizeAspect
-        return layer
-    }()
+    static let shared = ExternalDisplayManager(
+        preference: DefaultDependencyFactory.shared.externalDisplayPreference
+    )
 
     /// True while iOS has handed us an external display scene.
     @Published private(set) var isConnected = false
@@ -49,6 +45,13 @@ final class ExternalDisplayManager: ObservableObject {
     /// the only concrete thing we can show.
     @Published private(set) var displayResolution: String?
 
+    private let preference: PExternalDisplayPreference
+
+    /// Fills the display whenever we own it. Exists independently of whether one
+    /// is attached, so a render target can be handed it and forget about
+    /// connection state.
+    private let contentView = ExternalDisplayContentView()
+
     /// Set while an emulator session is on screen. Outside a session we leave
     /// the display alone, mirroring the library UI is the sensible default there.
     private var isSessionRunning = false
@@ -56,7 +59,12 @@ final class ExternalDisplayManager: ObservableObject {
     private weak var scene: UIWindowScene?
     private var window: UIWindow?
 
-    private init() {}
+    /// Weak: the running session owns its render target and outlives no session.
+    private weak var renderTarget: PExternalRenderTarget?
+
+    init(preference: PExternalDisplayPreference) {
+        self.preference = preference
+    }
 
     // MARK: - Scene lifecycle (called from ExternalDisplaySceneDelegate)
 
@@ -66,59 +74,89 @@ final class ExternalDisplayManager: ObservableObject {
         isConnected = true
         let px = scene.screen.nativeBounds.size
         displayResolution = "\(Int(px.width)) × \(Int(px.height))"
-        syncWindow()
+        sync()
     }
 
     func sceneDidDisconnect(_ scene: UIWindowScene) {
         guard self.scene === scene else { return }
         print("[ExternalDisplay] scene disconnected")
-        teardownWindow()
         self.scene = nil
         isConnected = false
-        isActive = false
         displayResolution = nil
+        sync()
     }
 
-    // MARK: - Session lifecycle (called from the emulator view controllers)
+    // MARK: - Session lifecycle (called from the emulator views)
 
     func beginSession() {
         isSessionRunning = true
-        syncWindow()
+        sync()
     }
 
     func endSession() {
         isSessionRunning = false
-        syncWindow()
+        sync()
+    }
+
+    /// Registered by the running emulator session. Setting it while we already
+    /// own the display starts it right away, which is the case when a game is
+    /// launched with a TV already attached.
+    func setRenderTarget(_ target: PExternalRenderTarget?) {
+        if let previous = renderTarget, previous !== target {
+            previous.stopRendering()
+        }
+        renderTarget = target
+        syncRendering()
     }
 
     // MARK: - User control
 
+    var isPlayOnTVEnabled: Bool { preference.isPlayOnTVEnabled }
+
     /// Lets the player hand the display back to plain mirroring and take it over
-    /// again, from the in-game menu.
-    func setEnabled(_ enabled: Bool) {
-        ExternalDisplayPreferences.isEnabled = enabled
-        syncWindow()
+    /// again, from the in-game menu or from Settings.
+    func setPlayOnTVEnabled(_ enabled: Bool) {
+        preference.isPlayOnTVEnabled = enabled
+        sync()
     }
 
-    var isEnabled: Bool { ExternalDisplayPreferences.isEnabled }
+    var isAutoDimPhoneEnabled: Bool { preference.isAutoDimPhoneEnabled }
+
+    func setAutoDimPhoneEnabled(_ enabled: Bool) {
+        preference.isAutoDimPhoneEnabled = enabled
+    }
 
     // MARK: - Window plumbing
 
-    /// Single place that decides whether our window should be up, so every entry
-    /// point above just changes state and calls this.
-    private func syncWindow() {
-        let shouldShow = isConnected && isSessionRunning && ExternalDisplayPreferences.isEnabled
-        if shouldShow {
+    /// Single place that acts on the policy's verdict, so every entry point above
+    /// just changes state and calls this.
+    private func sync() {
+        let shouldRender = ExternalDisplayPolicy.shouldRenderExternally(
+            isDisplayConnected: isConnected,
+            isSessionRunning: isSessionRunning,
+            isPlayOnTVEnabled: preference.isPlayOnTVEnabled
+        )
+        if shouldRender {
             setupWindow()
         } else {
             teardownWindow()
         }
         isActive = window != nil
+        syncRendering()
+    }
+
+    private func syncRendering() {
+        guard let renderTarget else { return }
+        if isActive {
+            renderTarget.startRendering(into: contentView)
+        } else {
+            renderTarget.stopRendering()
+        }
     }
 
     private func setupWindow() {
         guard window == nil, let scene else { return }
-        let controller = ExternalDisplayViewController(videoLayer: videoLayer)
+        let controller = ExternalDisplayViewController(contentView: contentView)
         let window = UIWindow(windowScene: scene)
         window.rootViewController = controller
         window.isHidden = false
@@ -136,14 +174,58 @@ final class ExternalDisplayManager: ObservableObject {
     }
 }
 
-/// Black full-bleed host for `videoLayer`. Non-interactive by definition of the
-/// scene role, so there is nothing to wire up beyond the layer's frame.
+/// The picture surface itself, kept apart from the window so it survives the
+/// display being handed back and forth between us and plain mirroring.
+final class ExternalDisplayContentView: UIView, PExternalDisplaySurface {
+
+    let videoLayer: CALayer = {
+        let layer = CALayer()
+        layer.backgroundColor = UIColor.black.cgColor
+        // Nearest keeps the pixel art crisp when blown up to a TV, resizeAspect
+        // does the letterboxing for us whatever the panel's ratio is.
+        layer.magnificationFilter = .nearest
+        layer.contentsGravity = .resizeAspect
+        return layer
+    }()
+
+    private weak var installedContent: UIView?
+
+    init() {
+        super.init(frame: .zero)
+        backgroundColor = .black
+        layer.addSublayer(videoLayer)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) not implemented") }
+
+    func setContent(_ view: UIView?) {
+        installedContent?.removeFromSuperview()
+        installedContent = view
+        guard let view else { return }
+        view.frame = bounds
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(view)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // No animation: this is re-framed on resize and an implicit fade would
+        // smear a live game picture.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        videoLayer.frame = bounds
+        CATransaction.commit()
+    }
+}
+
+/// Black full-bleed host for the content view. Non-interactive by definition of
+/// the scene role, so there is nothing to wire up beyond the layout.
 private final class ExternalDisplayViewController: UIViewController {
 
-    private let videoLayer: CALayer
+    private let contentView: ExternalDisplayContentView
 
-    init(videoLayer: CALayer) {
-        self.videoLayer = videoLayer
+    init(contentView: ExternalDisplayContentView) {
+        self.contentView = contentView
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -152,45 +234,8 @@ private final class ExternalDisplayViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        view.layer.addSublayer(videoLayer)
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        // No animation: the layer is re-framed on rotation/resize and an implicit
-        // fade would smear a live game picture.
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        videoLayer.frame = view.bounds
-        CATransaction.commit()
-    }
-}
-
-/// Persisted opt-out, kept next to the other lightweight emulator toggles
-/// (see `HapticsPreferences`) rather than going through the DI container, since
-/// only the manager reads it. Defaults to on: once a TV is attached, a portrait
-/// phone screen with black bars is never what the player wanted.
-enum ExternalDisplayPreferences {
-    private static let enabledKey = "externalDisplay.enabled"
-    private static let autoDimKey = "externalDisplay.autoDimPhone"
-
-    static var isEnabled: Bool {
-        get { boolOrTrue(enabledKey) }
-        set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
-    }
-
-    /// Dim the handset on its own once the game is on the TV and a controller is
-    /// in use. On by default: in that situation nobody is looking at the phone,
-    /// and having to reach for a menu button to darken it defeats the point.
-    static var autoDimPhone: Bool {
-        get { boolOrTrue(autoDimKey) }
-        set { UserDefaults.standard.set(newValue, forKey: autoDimKey) }
-    }
-
-    /// `UserDefaults.bool` returns false for a missing key, which would make
-    /// both of these default to off.
-    private static func boolOrTrue(_ key: String) -> Bool {
-        guard UserDefaults.standard.object(forKey: key) != nil else { return true }
-        return UserDefaults.standard.bool(forKey: key)
+        contentView.frame = view.bounds
+        contentView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(contentView)
     }
 }

@@ -42,6 +42,7 @@ struct NativeEmulatorView: View {
         }
         .animation(.easeOut(duration: 0.2), value: viewModel.controlsHidden)
         .animation(.easeOut(duration: 0.25), value: viewModel.isLoading)
+        .playOnTV(areTouchControlsHidden: viewModel.controlsHidden, isMenuOpen: showMenu)
         .onAppear {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.bootstrap(resumeSlot: resumeSlot)

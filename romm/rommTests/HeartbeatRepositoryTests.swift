@@ -18,14 +18,16 @@ struct HeartbeatRepositoryTests {
 
     // MARK: - isVersionCompatible: normale Releases
 
+    // Derived from the repository's own bounds rather than hard coded: the
+    // supported range moves with every server release these tests should survive.
     @Test func minSupportedVersionIsCompatible() {
         let repo = HeartbeatRepository()
-        #expect(repo.isVersionCompatible("4.1.0") == true)
+        #expect(repo.isVersionCompatible(repo.minSupportedServerVersion) == true)
     }
 
     @Test func maxSupportedVersionIsCompatible() {
         let repo = HeartbeatRepository()
-        #expect(repo.isVersionCompatible("4.8.1") == true)
+        #expect(repo.isVersionCompatible(repo.maxSupportedServerVersion) == true)
     }
 
     @Test func versionBelowMinIsNotCompatible() {
@@ -35,7 +37,7 @@ struct HeartbeatRepositoryTests {
 
     @Test func versionAboveMaxIsNotCompatible() {
         let repo = HeartbeatRepository()
-        #expect(repo.isVersionCompatible("4.9.0") == false)
+        #expect(repo.isVersionCompatible("99.0.0") == false)
     }
 
     @Test func prereleaseVersionStripsCorrectly() {
