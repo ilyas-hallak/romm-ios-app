@@ -190,8 +190,10 @@ final class LibretroFrontend {
 
     func startRunLoop() {
         frameAccumulator = 0
+        #if DEBUG
         frameRateWindowStart = 0
         frameRateWindowCount = 0
+        #endif
         let driver = DisplayLinkDriver { [weak self] displayFrameDuration in
             MainActor.assumeIsolated {
                 self?.stepEmulation(displayFrameDuration: displayFrameDuration)
@@ -229,17 +231,21 @@ final class LibretroFrontend {
             frameAccumulator = frameAccumulator.truncatingRemainder(dividingBy: coreInterval)
         }
 
+        #if DEBUG
         countFrames(ran: runs)
+        #endif
     }
 
+    #if DEBUG
     // MARK: - Pacing diagnostics
 
     private var frameRateWindowStart: CFTimeInterval = 0
     private var frameRateWindowCount = 0
 
-    /// Reports the rate the core actually achieves versus what it asked for. A
-    /// gap here is the first thing to look at when audio drifts, since the core
-    /// produces its samples per frame.
+    /// Reports the rate the core actually achieves versus what it asked for, plus
+    /// how much audio is queued and how often the render callback ran dry. A gap
+    /// between measured and expected is the first thing to look at when audio
+    /// drifts, since the core produces its samples per frame.
     private func countFrames(ran: Int) {
         frameRateWindowCount += ran
         let now = CACurrentMediaTime()
@@ -257,6 +263,7 @@ final class LibretroFrontend {
         frameRateWindowStart = now
         frameRateWindowCount = 0
     }
+    #endif
 
     func stop() {
         guard handle != nil else { return }

@@ -185,18 +185,6 @@ final class LibretroSession: NSObject {
         viewController.applyAspectConstraints()
     }
 
-    #if DEBUG
-    /// Latency measuring aid, see `LibretroVideoView.startFlashTest`.
-    /// `onFlash` fires the moment the white frame reaches the layers.
-    func setLatencyFlashTest(_ enabled: Bool, interval: TimeInterval = 2.0, onFlash: (() -> Void)? = nil) {
-        viewController.videoView.onFlashShown = onFlash
-        if enabled {
-            viewController.videoView.startFlashTest(interval: interval)
-        } else {
-            viewController.videoView.stopFlashTest()
-        }
-    }
-    #endif
 
     func stop() {
         // Detach the physical controller before tearing down the frontend so

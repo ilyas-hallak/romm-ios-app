@@ -9,9 +9,6 @@ struct LibretroEmulatorView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var screenBlanker = PhoneScreenBlanker.shared
     @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
-    #if DEBUG
-    @SwiftUI.StateObject private var latencyProbe = LatencyProbe()
-    #endif
 
     private let resumeSlot: Int?
 
@@ -46,9 +43,6 @@ struct LibretroEmulatorView: View {
                 EmulatorMenuButtonOverlay { showMenu = true }
                     .transition(.opacity)
             }
-            #if DEBUG
-            latencyProbeOverlay
-            #endif
             if screenBlanker.isBlanked {
                 // Covers everything including the menu button, so the only way
                 // out is the tap, which is also the most obvious one.
@@ -126,12 +120,6 @@ struct LibretroEmulatorView: View {
                     isQuitting = true
                     showMenu = false
                     dismiss()
-                },
-                onMeasureLatency: {
-                    #if DEBUG
-                    showMenu = false
-                    startLatencyProbe()
-                    #endif
                 }
             )
             .preferredColorScheme(.dark)
@@ -145,47 +133,6 @@ struct LibretroEmulatorView: View {
         let allowed = externalDisplay.isActive && viewModel.controlsHidden && !showMenu
         screenBlanker.setAutoDimAllowed(allowed)
     }
-
-    #if DEBUG
-    /// Sits on top of the game and collects the taps. Deliberately almost
-    /// transparent: the flash has to stay clearly visible, it is what the player
-    /// is reacting to.
-    @ViewBuilder
-    private var latencyProbeOverlay: some View {
-        if latencyProbe.phase != .idle {
-            VStack {
-                Spacer()
-                Text(latencyProbe.instruction)
-                    .font(.callout.weight(.medium))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.white)
-                    .padding(14)
-                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 24)
-                if !latencyProbe.isRunning {
-                    Button("Done") { stopLatencyProbe() }
-                        .buttonStyle(.borderedProminent)
-                        .padding(.top, 10)
-                }
-                Spacer().frame(height: 60)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { latencyProbe.tapped() }
-        }
-    }
-
-    private func startLatencyProbe() {
-        latencyProbe.start()
-        viewModel.session?.setLatencyFlashTest(true) {
-            latencyProbe.flashDidShow()
-        }
-    }
-
-    private func stopLatencyProbe() {
-        viewModel.session?.setLatencyFlashTest(false)
-        latencyProbe.cancel()
-    }
-    #endif
 }
 
 private struct LibretroMenuSheet: View {
@@ -193,9 +140,6 @@ private struct LibretroMenuSheet: View {
     let aspectRatioPreference: PLibretroAspectRatioPreference
     let onResume: () -> Void
     let onQuit: () -> Void
-    /// Closes the menu and hands control to the latency probe overlay. Only
-    /// wired up in debug builds, where the measuring UI exists.
-    var onMeasureLatency: () -> Void = {}
 
     @SwiftUI.State private var selectedSlot: Int
     @SwiftUI.State private var statusMessage: String?
@@ -203,9 +147,6 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
-    #if DEBUG
-    @SwiftUI.State private var latencyFlashOn = false
-    #endif
 
     // 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
@@ -215,14 +156,12 @@ private struct LibretroMenuSheet: View {
         session: LibretroSession?,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         onResume: @escaping () -> Void,
-        onQuit: @escaping () -> Void,
-        onMeasureLatency: @escaping () -> Void = {}
+        onQuit: @escaping () -> Void
     ) {
         self.session = session
         self.aspectRatioPreference = aspectRatioPreference
         self.onResume = onResume
         self.onQuit = onQuit
-        self.onMeasureLatency = onMeasureLatency
         self._aspectRatio = SwiftUI.State(initialValue: aspectRatioPreference.psx)
         // Pre-select the most recently touched slot so existing saves are
         // immediately visible and loadable after the 1→0 slot renumbering (PR #57).
@@ -370,48 +309,9 @@ private struct LibretroMenuSheet: View {
             }
             #if DEBUG
             EmulatorControllerDebugToggle()
-            latencyFlashToggle
             #endif
         }
     }
-
-    #if DEBUG
-    /// Flashes the picture white every two seconds so the phone and the TV can be
-    /// filmed together in slow motion, and the frames between the two flashes
-    /// counted. Rides the same layer as the game, so it measures the real path.
-    private var latencyFlashToggle: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text("Latency Flash Test")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
-                Spacer()
-                Toggle("", isOn: $latencyFlashOn)
-                    .labelsHidden()
-                    .onChange(of: latencyFlashOn) { _, newValue in
-                        session?.setLatencyFlashTest(newValue)
-                    }
-            }
-            Text("Whites out the picture every 2s. Film both screens at 240fps and count frames.")
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.4))
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Measure AirPlay latency") {
-                onMeasureLatency()
-            }
-            .font(.subheadline)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(Color.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .foregroundColor(.white)
-            Text("No camera needed. You tap on the flashes twice, once watching the phone and once the TV, and the difference is the AirPlay delay.")
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.4))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-    #endif
 
     @ViewBuilder
     private var previewArea: some View {
