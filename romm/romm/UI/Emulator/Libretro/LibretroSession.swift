@@ -185,6 +185,7 @@ final class LibretroSession: NSObject {
         viewController.applyAspectConstraints()
     }
 
+
     func stop() {
         // Detach the physical controller before tearing down the frontend so
         // clearAllButtons() runs while the frontend is still live.
@@ -380,6 +381,10 @@ final class LibretroGameViewController: UIViewController {
         view.addSubview(videoView)
         applyAspectConstraints()
         view.addGestureRecognizer(screenPanRecognizer)
+
+        // Feed an external display (AirPlay or wired) the same frames. Wiring is
+        // unconditional, the manager decides whether the layer is on screen.
+        videoView.mirrorLayer = ExternalDisplayManager.shared.videoLayer
 
         controllerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(controllerView)

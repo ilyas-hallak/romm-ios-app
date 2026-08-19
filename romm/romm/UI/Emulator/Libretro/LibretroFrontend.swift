@@ -27,8 +27,10 @@ final class LibretroFrontend {
     var pixelFormat: LibretroABI.PixelFormat = .rgb1555
     var systemDir: String = ""
     var saveDir: String = ""
-    private var runTimer: DispatchSourceTimer?
-    private var runTimerSuspended: Bool = false
+    private var displayLink: DisplayLinkDriver?
+    /// Carries leftover display time between ticks so a core whose rate differs
+    /// from the screen's still runs at its own speed.
+    private var frameAccumulator: Double = 0
     var frameCount: UInt64 = 0
 
     // Symbols
@@ -187,26 +189,86 @@ final class LibretroFrontend {
     }
 
     func startRunLoop() {
-        let fps = avInfo.timing.fps > 0 ? avInfo.timing.fps : 60
-        let interval = 1.0 / fps
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: interval)
-        timer.setEventHandler { [weak self] in
-            self?.retro_run?()
+        frameAccumulator = 0
+        #if DEBUG
+        frameRateWindowStart = 0
+        frameRateWindowCount = 0
+        #endif
+        let driver = DisplayLinkDriver { [weak self] displayFrameDuration in
+            MainActor.assumeIsolated {
+                self?.stepEmulation(displayFrameDuration: displayFrameDuration)
+            }
         }
-        timer.resume()
-        self.runTimer = timer
-        self.runTimerSuspended = false
+        displayLink = driver
+        driver.start()
     }
+
+    private var coreFPS: Double {
+        avInfo.timing.fps > 0 ? avInfo.timing.fps : 60
+    }
+
+    /// Runs as many core frames as the elapsed display time calls for. Usually
+    /// exactly one; zero on a 120 Hz panel every other tick, and two when the
+    /// core is 60 Hz on a 50 Hz output.
+    private func stepEmulation(displayFrameDuration: Double) {
+        let coreInterval = 1.0 / coreFPS
+        frameAccumulator += displayFrameDuration
+
+        // Capped so that after a stall (a load, a resume) the backlog is not
+        // burned off in one burst, which would fast-forward the game.
+        var runs = 0
+        while frameAccumulator >= coreInterval && runs < 4 {
+            retro_run?()
+            frameAccumulator -= coreInterval
+            runs += 1
+        }
+
+        // Only drop the backlog when it is far beyond what pacing produces, and
+        // even then keep the sub-frame remainder. Clearing it outright would leak
+        // a slice of time on every busy tick and run the core permanently slow,
+        // which is what pulled the audio out of sync.
+        if frameAccumulator > coreInterval * 4 {
+            frameAccumulator = frameAccumulator.truncatingRemainder(dividingBy: coreInterval)
+        }
+
+        #if DEBUG
+        countFrames(ran: runs)
+        #endif
+    }
+
+    #if DEBUG
+    // MARK: - Pacing diagnostics
+
+    private var frameRateWindowStart: CFTimeInterval = 0
+    private var frameRateWindowCount = 0
+
+    /// Reports the rate the core actually achieves versus what it asked for, plus
+    /// how much audio is queued and how often the render callback ran dry. A gap
+    /// between measured and expected is the first thing to look at when audio
+    /// drifts, since the core produces its samples per frame.
+    private func countFrames(ran: Int) {
+        frameRateWindowCount += ran
+        let now = CACurrentMediaTime()
+        if frameRateWindowStart == 0 {
+            frameRateWindowStart = now
+            return
+        }
+        let elapsed = now - frameRateWindowStart
+        guard elapsed >= 3 else { return }
+        let measured = Double(frameRateWindowCount) / elapsed
+        print(String(
+            format: "[Libretro] pacing: %.2f fps measured, %.2f expected, audio buffered %.0f ms, underruns %d",
+            measured, coreFPS, audioBufferedMilliseconds(), Self.audioUnderruns
+        ))
+        frameRateWindowStart = now
+        frameRateWindowCount = 0
+    }
+    #endif
 
     func stop() {
         guard handle != nil else { return }
-        if let timer = runTimer {
-            // DispatchSourceTimer crasht beim cancel() im suspendierten Zustand.
-            if runTimerSuspended { timer.resume(); runTimerSuspended = false }
-            timer.cancel()
-        }
-        runTimer = nil
+        displayLink?.invalidate()
+        displayLink = nil
         stopAudio()
         clearAllButtons()
         writeSRAMToDisk()
@@ -234,9 +296,8 @@ final class LibretroFrontend {
 
     func pause() {
         guard handle != nil else { return }
-        guard !runTimerSuspended, let timer = runTimer else { return }
-        timer.suspend()
-        runTimerSuspended = true
+        guard let link = displayLink, !link.isPaused else { return }
+        link.isPaused = true
         clearAllButtons()
         pauseAudio()
         writeSRAMToDisk()
@@ -245,9 +306,11 @@ final class LibretroFrontend {
     func resume() {
         guard handle != nil else { return }
         resumeAudio()
-        guard runTimerSuspended, let timer = runTimer else { return }
-        timer.resume()
-        runTimerSuspended = false
+        guard let link = displayLink, link.isPaused else { return }
+        // Start from a clean slate: the time spent paused is not a backlog of
+        // frames the core owes us.
+        frameAccumulator = 0
+        link.isPaused = false
     }
 
     // MARK: - Save / Load state

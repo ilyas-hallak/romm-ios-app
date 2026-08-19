@@ -18,11 +18,50 @@ extension LibretroFrontend {
     )
     nonisolated(unsafe) static var audioWriteIdx: Int = 0
     nonisolated(unsafe) static var audioReadIdx: Int = 0
+    /// The core's actual rate, needed to turn a sample count into a duration.
+    nonisolated(unsafe) static var audioActiveSampleRate: Double = 44_100
+
+    /// Trim window. The fill level sawtooths between target and threshold, so the
+    /// average latency is roughly their midpoint and both numbers matter.
+    ///
+    /// Kept deliberately tight: the core hands over one block of about 16.7 ms per
+    /// frame, so a target of 50 ms still holds three blocks in reserve against
+    /// frame jitter. Going lower starts to risk underruns, which `audioUnderruns`
+    /// counts so the trade-off can be checked rather than guessed at.
+    private static let audioTrimThresholdMs: Double = 80
+    private static let audioTrimTargetMs: Double = 50
+
+    /// Incremented whenever the render callback runs out of samples and has to
+    /// emit silence. Anything above zero during steady play means the trim window
+    /// is too tight.
+    nonisolated(unsafe) static var audioUnderruns: Int = 0
+
+    /// How much audio is waiting to be played. This, not the ring's size, is the
+    /// audio latency: the ring is 2 seconds deep, what matters is how full it is.
+    func audioBufferedMilliseconds() -> Double {
+        Self.audioRingLock.lock()
+        let queued = (Self.audioWriteIdx - Self.audioReadIdx + Self.audioRing.count) % Self.audioRing.count
+        Self.audioRingLock.unlock()
+        return Double(queued) / Double(Self.audioChannelCount) / Self.audioActiveSampleRate * 1000
+    }
 
     func startAudio(sampleRate: Double) {
+        Self.audioActiveSampleRate = sampleRate > 0 ? sampleRate : Double(Self.audioSampleRateHz)
+        Self.audioUnderruns = 0
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default, options: [])
+        // Ask for a short hardware buffer. The default under .playback is around
+        // 20 ms, chosen for power rather than latency, and every millisecond here
+        // is a millisecond between the core producing a sample and it being
+        // heard. The render callback only copies out of a ring, so it can
+        // comfortably run this often. The system may grant less than asked, and
+        // over AirPlay it usually ignores this entirely, hence the log below.
+        try? session.setPreferredIOBufferDuration(0.005)
         try? session.setActive(true, options: [])
+        print(String(
+            format: "[Libretro] audio out: io buffer %.1f ms, route latency %.1f ms",
+            session.ioBufferDuration * 1000, session.outputLatency * 1000
+        ))
 
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
         let node = AVAudioSourceNode { _, _, frameCount, audioBufferList in
@@ -80,6 +119,24 @@ extension LibretroFrontend {
                 Self.audioReadIdx = (Self.audioReadIdx + 1) % Self.audioRing.count
             }
         }
+
+        // Trimmed inside the same critical section: the render callback contends
+        // for this lock on the audio thread, so taking it again just to check a
+        // level would risk the dropouts we are trying to avoid.
+        //
+        // Why trim at all: if the core produces even slightly faster than the
+        // engine consumes, the fill level creeps up and the sound ends up
+        // permanently behind the picture, until the ring wraps and jumps. One
+        // small discontinuity is far less noticeable than a growing offset.
+        let samplesPerMs = Self.audioActiveSampleRate / 1000 * Double(Self.audioChannelCount)
+        let threshold = Int(Self.audioTrimThresholdMs * samplesPerMs)
+        let target = Int(Self.audioTrimTargetMs * samplesPerMs)
+        let queued = (Self.audioWriteIdx - Self.audioReadIdx + Self.audioRing.count) % Self.audioRing.count
+        if queued > threshold {
+            // Advance the reader rather than rewinding the writer: the newest
+            // audio is the part that belongs with the picture on screen now.
+            Self.audioReadIdx = (Self.audioWriteIdx - target + Self.audioRing.count) % Self.audioRing.count
+        }
         Self.audioRingLock.unlock()
     }
 
@@ -97,6 +154,7 @@ extension LibretroFrontend {
                 audioReadIdx = (audioReadIdx + 1) % audioRing.count
                 i += 1
             }
+            if i < needed { audioUnderruns += 1 }
             while i < needed { left[i] = 0; i += 1 }
         } else {
             var fi = 0
@@ -108,6 +166,7 @@ extension LibretroFrontend {
                 audioReadIdx = (audioReadIdx + 1) % audioRing.count
                 fi += 1
             }
+            if fi < frameCount { audioUnderruns += 1 }
             while fi < frameCount { left[fi] = 0; right![fi] = 0; fi += 1 }
         }
         audioRingLock.unlock()
