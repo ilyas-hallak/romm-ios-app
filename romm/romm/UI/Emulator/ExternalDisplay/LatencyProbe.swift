@@ -27,7 +27,10 @@ final class LatencyProbe: ObservableObject {
         case result(phoneMs: Double, tvMs: Double)
     }
 
-    static let samplesPerRound = 6
+    /// Ten rather than a handful: reaction time scatters by a few tens of
+    /// milliseconds, which is the same order as the gains we want to detect in
+    /// the phone-only round, so the median needs enough samples to settle.
+    static let samplesPerRound = 10
 
     @Published private(set) var phase: Phase = .idle
 

@@ -27,8 +27,10 @@ final class LibretroFrontend {
     var pixelFormat: LibretroABI.PixelFormat = .rgb1555
     var systemDir: String = ""
     var saveDir: String = ""
-    private var runTimer: DispatchSourceTimer?
-    private var runTimerSuspended: Bool = false
+    private var displayLink: DisplayLinkDriver?
+    /// Carries leftover display time between ticks so a core whose rate differs
+    /// from the screen's still runs at its own speed.
+    private var frameAccumulator: Double = 0
     var frameCount: UInt64 = 0
 
     // Symbols
@@ -187,26 +189,46 @@ final class LibretroFrontend {
     }
 
     func startRunLoop() {
-        let fps = avInfo.timing.fps > 0 ? avInfo.timing.fps : 60
-        let interval = 1.0 / fps
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: interval)
-        timer.setEventHandler { [weak self] in
-            self?.retro_run?()
+        frameAccumulator = 0
+        let driver = DisplayLinkDriver(preferredFPS: coreFPS) { [weak self] displayFrameDuration in
+            MainActor.assumeIsolated {
+                self?.stepEmulation(displayFrameDuration: displayFrameDuration)
+            }
         }
-        timer.resume()
-        self.runTimer = timer
-        self.runTimerSuspended = false
+        displayLink = driver
+        driver.start()
+    }
+
+    private var coreFPS: Double {
+        avInfo.timing.fps > 0 ? avInfo.timing.fps : 60
+    }
+
+    /// Runs as many core frames as the elapsed display time calls for. Usually
+    /// exactly one; zero on a 120 Hz panel every other tick, and two when the
+    /// core is 60 Hz on a 50 Hz output.
+    private func stepEmulation(displayFrameDuration: Double) {
+        let coreInterval = 1.0 / coreFPS
+        frameAccumulator += displayFrameDuration
+
+        // Capped: after a stall (a load, a resume) the backlog would otherwise be
+        // burned off in one burst, fast-forwarding the game instead of recovering.
+        var runs = 0
+        while frameAccumulator >= coreInterval && runs < 2 {
+            retro_run?()
+            frameAccumulator -= coreInterval
+            runs += 1
+        }
+        // Anything still left after the cap is a real stall, not drift. Keeping it
+        // would make the next ticks run hot, so drop it.
+        if frameAccumulator > coreInterval {
+            frameAccumulator = 0
+        }
     }
 
     func stop() {
         guard handle != nil else { return }
-        if let timer = runTimer {
-            // DispatchSourceTimer crasht beim cancel() im suspendierten Zustand.
-            if runTimerSuspended { timer.resume(); runTimerSuspended = false }
-            timer.cancel()
-        }
-        runTimer = nil
+        displayLink?.invalidate()
+        displayLink = nil
         stopAudio()
         clearAllButtons()
         writeSRAMToDisk()
@@ -234,9 +256,8 @@ final class LibretroFrontend {
 
     func pause() {
         guard handle != nil else { return }
-        guard !runTimerSuspended, let timer = runTimer else { return }
-        timer.suspend()
-        runTimerSuspended = true
+        guard let link = displayLink, !link.isPaused else { return }
+        link.isPaused = true
         clearAllButtons()
         pauseAudio()
         writeSRAMToDisk()
@@ -245,9 +266,11 @@ final class LibretroFrontend {
     func resume() {
         guard handle != nil else { return }
         resumeAudio()
-        guard runTimerSuspended, let timer = runTimer else { return }
-        timer.resume()
-        runTimerSuspended = false
+        guard let link = displayLink, link.isPaused else { return }
+        // Start from a clean slate: the time spent paused is not a backlog of
+        // frames the core owes us.
+        frameAccumulator = 0
+        link.isPaused = false
     }
 
     // MARK: - Save / Load state
