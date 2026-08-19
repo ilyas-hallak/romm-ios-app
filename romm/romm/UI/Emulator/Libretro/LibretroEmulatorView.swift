@@ -129,6 +129,9 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
+    #if DEBUG
+    @SwiftUI.State private var latencyFlashOn = false
+    #endif
 
     // 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
@@ -291,9 +294,35 @@ private struct LibretroMenuSheet: View {
             }
             #if DEBUG
             EmulatorControllerDebugToggle()
+            latencyFlashToggle
             #endif
         }
     }
+
+    #if DEBUG
+    /// Flashes the picture white every two seconds so the phone and the TV can be
+    /// filmed together in slow motion, and the frames between the two flashes
+    /// counted. Rides the same layer as the game, so it measures the real path.
+    private var latencyFlashToggle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Latency Flash Test")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+                Spacer()
+                Toggle("", isOn: $latencyFlashOn)
+                    .labelsHidden()
+                    .onChange(of: latencyFlashOn) { _, newValue in
+                        session?.setLatencyFlashTest(newValue)
+                    }
+            }
+            Text("Whites out the picture every 2s. Film both screens at 240fps and count frames.")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.4))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var previewArea: some View {

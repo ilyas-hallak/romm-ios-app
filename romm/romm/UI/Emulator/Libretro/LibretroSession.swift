@@ -185,6 +185,17 @@ final class LibretroSession: NSObject {
         viewController.applyAspectConstraints()
     }
 
+    #if DEBUG
+    /// Latency measuring aid, see `LibretroVideoView.startFlashTest`.
+    func setLatencyFlashTest(_ enabled: Bool) {
+        if enabled {
+            viewController.videoView.startFlashTest()
+        } else {
+            viewController.videoView.stopFlashTest()
+        }
+    }
+    #endif
+
     func stop() {
         // Detach the physical controller before tearing down the frontend so
         // clearAllButtons() runs while the frontend is still live.
