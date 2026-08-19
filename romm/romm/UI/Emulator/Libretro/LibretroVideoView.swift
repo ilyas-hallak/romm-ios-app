@@ -8,6 +8,12 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
 
     override class var layerClass: AnyClass { CALayer.self }
 
+    /// Second layer that receives the same frame, used to paint an external
+    /// display (AirPlay or wired). Wired up once and left in place: while no
+    /// display is attached the layer sits outside any hierarchy and assigning
+    /// `contents` costs next to nothing.
+    weak var mirrorLayer: CALayer?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black
@@ -79,6 +85,7 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
         ) else { return }
 
         layer.contents = image
+        mirrorLayer?.contents = image
         lastCGImage = image
     }
 

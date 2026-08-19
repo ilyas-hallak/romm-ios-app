@@ -23,6 +23,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         OrientationLock.currentMask
     }
 
+    /// Claims the external-display scene so a running game can be shown on a TV
+    /// directly instead of mirroring the phone. Every other role is left to
+    /// SwiftUI, which owns the app's own window.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
+            let config = UISceneConfiguration(name: "External Display", sessionRole: connectingSceneSession.role)
+            config.delegateClass = ExternalDisplaySceneDelegate.self
+            return config
+        }
+        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+    }
+
     // Handle URL callbacks (client token pairing)
     func application(
         _ app: UIApplication,

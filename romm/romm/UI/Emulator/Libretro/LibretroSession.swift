@@ -381,6 +381,10 @@ final class LibretroGameViewController: UIViewController {
         applyAspectConstraints()
         view.addGestureRecognizer(screenPanRecognizer)
 
+        // Feed an external display (AirPlay or wired) the same frames. Wiring is
+        // unconditional, the manager decides whether the layer is on screen.
+        videoView.mirrorLayer = ExternalDisplayManager.shared.videoLayer
+
         controllerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(controllerView)
         NSLayoutConstraint.activate([

@@ -48,8 +48,15 @@ struct LibretroEmulatorView: View {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.onMenuRequested = { showMenu = true }
             viewModel.bootstrap(resumeSlot: resumeSlot)
+            // Only take over an external display while a game is on screen.
+            // Anchored here rather than in the view controller because a sheet
+            // does not disturb this view's lifecycle.
+            ExternalDisplayManager.shared.beginSession()
         }
-        .onDisappear { viewModel.teardown() }
+        .onDisappear {
+            viewModel.teardown()
+            ExternalDisplayManager.shared.endSession()
+        }
         .onChange(of: scenePhase) { _, phase in
             // Gate on session presence: after teardown the session is nil,
             // and a stray .background firing here would otherwise reach the
@@ -99,6 +106,8 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
+    @SwiftUI.State private var playOnTV: Bool = ExternalDisplayPreferences.isEnabled
+    @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
 
     // 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
@@ -241,6 +250,7 @@ private struct LibretroMenuSheet: View {
                     session?.reloadAspectRatio()
                 }
             }
+            externalDisplaySection
             HStack {
                 Text("Release Haptics")
                     .font(.subheadline)
@@ -262,6 +272,39 @@ private struct LibretroMenuSheet: View {
             EmulatorControllerDebugToggle()
             #endif
         }
+    }
+
+    /// Hands the external display between "we draw the game on it" and "the
+    /// system mirrors the phone". Kept visible even with nothing attached, so it
+    /// is obvious whether iOS has actually offered us the display.
+    private var externalDisplaySection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Play on TV")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+                Spacer()
+                Toggle("", isOn: $playOnTV)
+                    .labelsHidden()
+                    .disabled(!externalDisplay.isConnected)
+                    .onChange(of: playOnTV) { _, newValue in
+                        externalDisplay.setEnabled(newValue)
+                    }
+            }
+            Text(externalDisplayStatus)
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.45))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var externalDisplayStatus: String {
+        guard externalDisplay.isConnected else {
+            return "No external display detected. Turn on AirPlay mirroring or plug in an HDMI adapter."
+        }
+        return externalDisplay.isActive
+            ? "The game is drawn on the display at its own resolution."
+            : "The display is mirroring this screen."
     }
 
     @ViewBuilder
