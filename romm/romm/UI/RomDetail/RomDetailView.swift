@@ -13,6 +13,9 @@ struct RomDetailView: View {
     @State private var viewModel = RomDetailViewModel()
 
     @EnvironmentObject private var appData: AppData
+    /// Observed so the Play button appears as soon as the in-app emulator is
+    /// switched on in Settings, without needing a fresh push of this screen.
+    @ObservedObject private var experimentalSettings = ExperimentalFeatureSettings.shared
     @State private var downloadButtonFrame: CGRect = .zero
     /// Mirrors the native tab-bar minimize (which has no readable state): true
     /// once the scroll view has moved down far enough that the bar collapses.
@@ -27,7 +30,7 @@ struct RomDetailView: View {
     @State private var showingCollectionPicker = false
     @State private var showingFullScreenPDF = false
     @State private var selectedGameDataTab: GameDataTabType = .states
-    
+
     enum DetailTab: String, CaseIterable {
         case details = "DETAILS"
         case manual = "MANUAL"
@@ -241,6 +244,15 @@ struct RomDetailView: View {
                     print(scrollOffset)
                 }
             }
+            .fullScreenCover(item: $viewModel.launchDecision, onDismiss: {
+                viewModel.emulatorPresentationDidEnd()
+                OrientationLock.set(.portrait, rotateTo: .portrait)
+                // A session may have written a new save state or battery save.
+                Task { await viewModel.loadRomDetails(romId: rom.id) }
+            }) { decision in
+                EmulatorRouterView(decision: decision)
+                    .ignoresSafeArea()
+            }
             .onAppear {
                 Task {
                     await viewModel.loadRomDetails(romId: rom.id)
@@ -377,71 +389,107 @@ struct RomDetailView: View {
                 .accessibility(hint: Text(viewModel.romCollectionsCount > 0 ? "Manage ROM collections" : "Add this ROM to a collection"))
             }
             
-            // Primary action: queue a download to this device.
-            // Playing happens in the Downloads tab (ROMCardRow), not here.
+            // Primary action: queue a download to this device. Once the ROM is on
+            // the device a compact Play button joins the same row, so users don't
+            // have to detour through the Downloads tab to start a game.
             let downloadState = viewModel.downloadButtonState(forRomId: currentSelectedRom.id)
-            Button(action: {
-                appData.launchDownloadFlight(
-                    coverURL: currentSelectedRom.urlCover,
-                    from: downloadButtonFrame,
-                    // No public API exposes the tab-bar's minimized state, so
-                    // derive it from the live scroll offset (see onScrollGeometryChange).
-                    tabBarMinimized: tabBarMinimized
-                )
-                viewModel.downloadROM(rom: currentSelectedRom)
-            }) {
-                HStack(spacing: 8) {
-                    switch downloadState {
-                    case .queued:
-                        ProgressView().progressViewStyle(.circular).tint(.white)
-                        Text("Queued").font(.headline)
-                    case .downloading(let progress):
-                        if let progress {
-                            ProgressView(value: progress)
-                                .progressViewStyle(.linear)
-                                .tint(.white)
-                                .frame(maxWidth: 140)
-                                .animation(.easeOut(duration: 0.4), value: progress)
-                            Text("\(Int((progress * 100).rounded()))%")
-                                .font(.headline)
-                                .contentTransition(.numericText())
-                                .animation(.easeOut(duration: 0.4), value: progress)
-                        } else {
+            HStack(spacing: 12) {
+                Button(action: {
+                    appData.launchDownloadFlight(
+                        coverURL: currentSelectedRom.urlCover,
+                        from: downloadButtonFrame,
+                        // No public API exposes the tab-bar's minimized state, so
+                        // derive it from the live scroll offset (see onScrollGeometryChange).
+                        tabBarMinimized: tabBarMinimized
+                    )
+                    viewModel.downloadROM(rom: currentSelectedRom)
+                }) {
+                    HStack(spacing: 8) {
+                        switch downloadState {
+                        case .queued:
                             ProgressView().progressViewStyle(.circular).tint(.white)
-                            Text("Downloading…").font(.headline)
+                            Text("Queued").font(.headline)
+                        case .downloading(let progress):
+                            if let progress {
+                                ProgressView(value: progress)
+                                    .progressViewStyle(.linear)
+                                    .tint(.white)
+                                    .frame(maxWidth: 140)
+                                    .animation(.easeOut(duration: 0.4), value: progress)
+                                Text("\(Int((progress * 100).rounded()))%")
+                                    .font(.headline)
+                                    .contentTransition(.numericText())
+                                    .animation(.easeOut(duration: 0.4), value: progress)
+                            } else {
+                                ProgressView().progressViewStyle(.circular).tint(.white)
+                                Text("Downloading…").font(.headline)
+                            }
+                        case .downloaded:
+                            Label("Downloaded", systemImage: "checkmark.circle.fill")
+                                .font(.headline)
+                        case .failed:
+                            Label("Retry Download", systemImage: "arrow.clockwise.circle.fill")
+                                .font(.headline)
+                        case .idle:
+                            Label("Download", systemImage: "arrow.down.circle.fill")
+                                .font(.headline)
                         }
-                    case .downloaded:
-                        Label("Downloaded", systemImage: "checkmark.circle.fill")
-                            .font(.headline)
-                    case .failed:
-                        Label("Retry Download", systemImage: "arrow.clockwise.circle.fill")
-                            .font(.headline)
-                    case .idle:
-                        Label("Download", systemImage: "arrow.down.circle.fill")
-                            .font(.headline)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(downloadState == .downloaded ? Color.green : Color.accentColor)
+                    )
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(downloadState == .downloaded ? Color.green : Color.accentColor)
-                )
-                .foregroundColor(.white)
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-            }
-            .disabled({
-                switch downloadState {
-                case .idle, .failed: return false
-                case .queued, .downloading, .downloaded: return true
+                .disabled({
+                    switch downloadState {
+                    case .idle, .failed: return false
+                    case .queued, .downloading, .downloaded: return true
+                    }
+                }())
+                .accessibility(hint: Text(downloadState == .downloaded ? "Already downloaded to this device" : "Download this ROM to this device"))
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .global)
+                } action: { newFrame in
+                    downloadButtonFrame = newFrame
                 }
-            }())
-            .accessibility(hint: Text(downloadState == .downloaded ? "Already downloaded to this device" : "Download this ROM to this device"))
-            .onGeometryChange(for: CGRect.self) { proxy in
-                proxy.frame(in: .global)
-            } action: { newFrame in
-                downloadButtonFrame = newFrame
+
+                // Only offered for a ROM that is already on the device, on a
+                // platform we can emulate, and with the in-app emulator switched
+                // on, so it never leads to a dead end.
+                if downloadState == .downloaded
+                    && viewModel.canPlayEmulator
+                    && experimentalSettings.isEmulatorEnabled {
+                    Button(action: {
+                        Task { await viewModel.launchEmulator(rom: currentSelectedRom) }
+                    }) {
+                        Group {
+                            if viewModel.isLaunchingEmulator {
+                                ProgressView().progressViewStyle(.circular).tint(.white)
+                            } else {
+                                Image(systemName: "play.fill")
+                                    .font(.headline)
+                            }
+                        }
+                        .frame(width: 52)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.accentColor)
+                        )
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                    }
+                    .disabled(viewModel.isLaunchingEmulator)
+                    .accessibilityLabel("Play")
+                    .accessibility(hint: Text("Play this ROM on this device"))
+                    .transition(.scale.combined(with: .opacity))
+                }
             }
+            .animation(.easeOut(duration: 0.25), value: downloadState == .downloaded)
 
             // Secondary actions: open the downloaded file in another app, or send it to a device.
             HStack(spacing: 12) {
