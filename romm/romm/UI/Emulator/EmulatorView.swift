@@ -414,30 +414,36 @@ struct EmulatorWebView: UIViewRepresentable {
             }
         }
 
-        private func injectFullscreenCSS(_ webView: WKWebView) {
-            // CSS to hide RomM UI elements and make the emulator fullscreen.
-            // Two rule blocks cover both server generations simultaneously —
-            // a selector that matches nothing is a no-op, so both can be
-            // active at once without a version check.
-            let css = """
-                /* RomM 4.x (Vuetify-based layout) */
-                header.v-toolbar,
-                header.v-bottom-navigation,
-                nav.v-navigation-drawer,
-                .v-toolbar,
-                .v-navigation-drawer,
-                .v-bottom-navigation,
-                div.my-4,
-                div.mt-4.align-center > div:first-child,
-                div.sticky-bottom {
-                    display: none !important;
-                    visibility: hidden !important;
-                }
+        /// Selectors for the RomM web chrome that is hidden so the emulator
+        /// fills the screen. Single source of truth, the CSS rule and the
+        /// match count are both derived from this list. A selector that
+        /// matches nothing is a no-op, so both server generations stay
+        /// covered at once without a version check.
+        private static let hiddenUISelectors: [String] =
+            // RomM 4.x, Vuetify-based layout
+            [
+                "header.v-toolbar",
+                "header.v-bottom-navigation",
+                "nav.v-navigation-drawer",
+                ".v-toolbar",
+                ".v-navigation-drawer",
+                ".v-bottom-navigation",
+                "div.my-4",
+                "div.mt-4.align-center > div:first-child",
+                "div.sticky-bottom",
+            ]
+            // RomM 5.x, v2 shell: AppNav top bar, BottomNav floating pill, UserMenu chip
+            + [
+                ".r-v2-nav-bar",
+                ".r-v2-bottom-nav-anchor",
+                ".r-v2-user",
+            ]
 
-                /* RomM 5.x (v2 shell — AppNav top bar, BottomNav floating pill, UserMenu chip) */
-                .r-v2-nav-bar,
-                .r-v2-bottom-nav-anchor,
-                .r-v2-user {
+        private func injectFullscreenCSS(_ webView: WKWebView) {
+            let selectorList = Self.hiddenUISelectors.joined(separator: ", ")
+
+            let css = """
+                \(selectorList) {
                     display: none !important;
                     visibility: hidden !important;
                 }
@@ -446,16 +452,6 @@ struct EmulatorWebView: UIViewRepresentable {
             // After injecting the styles, count how many elements were
             // actually hidden. Zero matches means the server layout has
             // changed again and the selectors need updating.
-            let selectorList = [
-                // 4.x selectors
-                "header.v-toolbar", "header.v-bottom-navigation",
-                "nav.v-navigation-drawer", ".v-toolbar",
-                ".v-navigation-drawer", ".v-bottom-navigation",
-                "div.my-4", "div.sticky-bottom",
-                // 5.x selectors
-                ".r-v2-nav-bar", ".r-v2-bottom-nav-anchor", ".r-v2-user",
-            ].joined(separator: ", ")
-
             let javascript = """
                 (function() {
                     try {
@@ -463,8 +459,7 @@ struct EmulatorWebView: UIViewRepresentable {
                         style.textContent = `\(css)`;
                         document.head.appendChild(style);
 
-                        var matched = document.querySelectorAll('\(selectorList)').length;
-                        return matched;
+                        return document.querySelectorAll('\(selectorList)').length;
                     } catch(e) {
                         console.error('❌ CSS injection failed:', e);
                         return -1;
@@ -478,7 +473,7 @@ struct EmulatorWebView: UIViewRepresentable {
                 } else if let count = result as? Int {
                     if count == 0 {
                         self.logger.warning(
-                            "⚠️ CSS injected but no UI elements matched — RomM layout may have changed"
+                            "⚠️ CSS injected but no UI elements matched, RomM layout may have changed"
                         )
                     } else {
                         self.logger.info("✅ CSS injected, \(count) UI element(s) hidden")
