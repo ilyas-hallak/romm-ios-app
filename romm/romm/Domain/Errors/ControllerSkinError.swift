@@ -1,9 +1,10 @@
 import Foundation
 
-enum ControllerSkinError: Error, LocalizedError {
+enum ControllerSkinError: Error, LocalizedError, Equatable {
     case invalidURL
     case downloadFailed(statusCode: Int?)
     case notASkinFile
+    case noSkinsOnPage
     case unsupportedGameType(String)
 
     var errorDescription: String? {
@@ -16,7 +17,9 @@ enum ControllerSkinError: Error, LocalizedError {
             }
             return "The download failed. Check the link and your connection."
         case .notASkinFile:
-            return "This file isn't a Delta controller skin. Make sure the link points straight at a .deltaskin file, not at a web page."
+            return "This file isn't a Delta controller skin."
+        case .noSkinsOnPage:
+            return "That page doesn't link to any .deltaskin files. Open a single skin's download link and paste that instead."
         case .unsupportedGameType(let gameType):
             return "This skin is made for a system the app can't emulate (\(gameType))."
         }

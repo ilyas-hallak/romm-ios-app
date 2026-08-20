@@ -8,6 +8,13 @@ final class ControllerSkinsSettingsViewModel: ObservableObject {
     @Published var urlText = ""
     @Published var errorMessage: String?
 
+    // MARK: - Catalog-picker state
+
+    @Published var skinChoices: [ControllerSkinLink] = []
+    @Published var showChoicesSheet = false
+    /// Per-link import state, keyed by the link's URL.
+    @Published var skinImportStates: [URL: SkinLinkImportState] = [:]
+
     struct Section: Identifiable {
         let gameType: DeltaGameType
         var skins: [ControllerSkinInfo]
@@ -38,10 +45,18 @@ final class ControllerSkinsSettingsViewModel: ObservableObject {
         isAdding = true
         defer { isAdding = false }
         do {
-            let skin = try await useCase.addSkin(from: url)
-            urlText = ""
+            let result = try await useCase.importSkin(from: url)
             errorMessage = nil
-            activate(skin)
+            switch result {
+            case .imported(let skin):
+                urlText = ""
+                activate(skin)
+            case .choices(let links):
+                // Do not clear urlText yet - the user hasn't imported anything.
+                skinChoices = links
+                skinImportStates = [:]
+                showChoicesSheet = true
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -74,10 +89,43 @@ final class ControllerSkinsSettingsViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Catalog-sheet actions
+
+    func importLink(_ link: ControllerSkinLink) async {
+        // Allow importing if not yet attempted, if ready, or if a previous attempt failed
+        // (so the user can retry). Block only while loading or after a successful import.
+        switch skinImportStates[link.url] {
+        case nil, .ready, .failed:
+            break
+        case .loading, .imported:
+            return
+        }
+        skinImportStates[link.url] = .loading
+        do {
+            let skin = try await useCase.addSkin(from: link)
+            skinImportStates[link.url] = .imported(skin)
+        } catch {
+            skinImportStates[link.url] = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Called when the catalog sheet is dismissed.
+    func onChoicesSheetDismissed() {
+        let anyImported = skinImportStates.values.contains {
+            if case .imported = $0 { return true }
+            return false
+        }
+        if anyImported {
+            urlText = ""
+        }
+        refresh()
+        skinChoices = []
+        skinImportStates = [:]
+    }
+
     // MARK: - Private
 
-    /// Someone who just imported a skin wants to use it, so a fresh import
-    /// becomes the active one for its system right away.
+    /// A freshly imported single skin becomes the active one right away.
     private func activate(_ skin: ControllerSkinInfo) {
         useCase.select(skin, forGameType: skin.gameTypeIdentifier)
         refresh()
@@ -101,4 +149,13 @@ final class ControllerSkinsSettingsViewModel: ObservableObject {
             }
             .sorted { $0.gameType.displayName < $1.gameType.displayName }
     }
+}
+
+// MARK: - Per-link import state
+
+enum SkinLinkImportState: Equatable {
+    case ready
+    case loading
+    case imported(ControllerSkinInfo)
+    case failed(String)
 }

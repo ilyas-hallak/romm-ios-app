@@ -40,13 +40,16 @@ struct ControllerSkinsSettingsView: View {
             guard let url = try? result.get().first else { return }
             viewModel.addFromFile(url)
         }
+        .sheet(isPresented: $viewModel.showChoicesSheet, onDismiss: viewModel.onChoicesSheetDismissed) {
+            SkinChoicesSheet(viewModel: viewModel)
+        }
     }
 
     // MARK: - Sections
 
     private var addSection: some View {
         SwiftUI.Section("Add a Skin") {
-            TextField("https://.../skin.deltaskin", text: $viewModel.urlText)
+            TextField("Skin URL or catalog page", text: $viewModel.urlText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
@@ -130,6 +133,7 @@ struct ControllerSkinsSettingsView: View {
     private var footerText: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("A skin change takes effect the next time you start a game.")
+            Text("Paste a direct .deltaskin link to import a single skin, or paste the URL of a skin catalog page to browse and pick from all the skins it lists.")
             Text("Skins apply only to the native Delta cores: Game Boy / Color, GBA, NES, SNES, N64, Nintendo DS, and Sega Genesis. PlayStation and PC Engine run via libretro with their own touch controls and are not affected.")
             Text("You can also drop .deltaskin files directly into Documents/ControllerSkins via the Files app.")
             Text("Some skin sites block direct downloads. If \"Add from Link\" fails, open the link in Safari, save the file, and use Import from Files.")

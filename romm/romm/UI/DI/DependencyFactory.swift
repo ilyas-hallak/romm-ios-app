@@ -397,12 +397,14 @@ class DefaultDependencyFactory: PDependencyFactory {
     private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)
     private lazy var controllerSkinDownloader: PControllerSkinDownloader = ControllerSkinDownloadService()
     private lazy var controllerSkinPreference: PControllerSkinPreference = UserDefaultsControllerSkinPreferenceStore()
+    private lazy var controllerSkinLinkParser: PControllerSkinLinkParser = HTMLControllerSkinLinkParser()
 
     func makeControllerSkinsUseCase() -> PControllerSkinsUseCase {
         ControllerSkinsUseCase(
             repository: controllerSkinRepository,
             preference: controllerSkinPreference,
-            downloader: controllerSkinDownloader
+            downloader: controllerSkinDownloader,
+            linkParser: controllerSkinLinkParser
         )
     }
 

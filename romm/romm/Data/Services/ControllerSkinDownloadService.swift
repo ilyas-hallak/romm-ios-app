@@ -1,7 +1,7 @@
 import Foundation
 
-/// Downloads a `.deltaskin` file from a remote URL into a temporary file the
-/// caller owns.
+/// Downloads whatever a remote URL points at and classifies it as either a
+/// `.deltaskin` archive or a web page listing skins to pick from.
 ///
 /// A desktop Safari User-Agent is sent because several skin sites (e.g.
 /// deltastyles.com) return 403 to non-browser requests.
@@ -13,7 +13,7 @@ final class ControllerSkinDownloadService: PControllerSkinDownloader {
         self.session = session
     }
 
-    func download(from url: URL) async throws -> URL {
+    func download(from url: URL) async throws -> ControllerSkinDownload {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
             throw ControllerSkinError.invalidURL
         }
@@ -31,20 +31,39 @@ final class ControllerSkinDownloadService: PControllerSkinDownloader {
             throw ControllerSkinError.downloadFailed(statusCode: http.statusCode)
         }
 
-        // A `.deltaskin` is a ZIP archive. Rejecting non-ZIP payloads here turns
-        // the common mistake of pasting a link to a skin's web page into a clear
-        // error instead of a confusing parse failure later on.
-        guard data.prefix(2).elementsEqual([0x50, 0x4B]) else {
-            throw ControllerSkinError.notASkinFile
+        // ZIP magic bytes: a `.deltaskin` is a ZIP archive.
+        if data.prefix(2).elementsEqual([0x50, 0x4B]) {
+            let fileName = url.lastPathComponent.isEmpty ? "skin.deltaskin" : url.lastPathComponent
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+            try? FileManager.default.removeItem(at: tempURL)
+            try data.write(to: tempURL)
+            return .skin(fileURL: tempURL)
         }
 
-        let fileName = url.lastPathComponent.isEmpty ? "skin.deltaskin" : url.lastPathComponent
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        // Detect HTML by Content-Type header or by the document's leading bytes.
+        let contentType = (response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Type") ?? ""
+        let looksLikeHTML = contentType.lowercased().contains("text/html")
+            || isHTMLPrefix(data)
 
-        // Overwrite any leftover file from a previous failed attempt.
-        try? FileManager.default.removeItem(at: tempURL)
-        try data.write(to: tempURL)
+        if looksLikeHTML {
+            let html = String(data: data, encoding: .utf8)
+                ?? String(data: data, encoding: .isoLatin1)
+                ?? ""
+            return .webPage(html: html)
+        }
 
-        return tempURL
+        throw ControllerSkinError.notASkinFile
+    }
+
+    // MARK: - Private
+
+    private func isHTMLPrefix(_ data: Data) -> Bool {
+        // Check the first 512 bytes; real HTML almost always starts within that range.
+        let prefix = data.prefix(512)
+        guard let text = String(data: prefix, encoding: .utf8)
+            ?? String(data: prefix, encoding: .isoLatin1) else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.hasPrefix("<!doctype") || trimmed.hasPrefix("<html")
     }
 }
