@@ -59,7 +59,7 @@ struct RomMapper {
             platformId: apiRom.platformId,
             urlCover: apiRom.urlCover,
             releaseYear: releaseYear,
-            isFavourite: apiRom.romUser.rating > 0 || apiRom.romUser.nowPlaying,
+            isFavourite: false, // Resolved separately via the Favourites collection
             hasRetroAchievements: apiRom.raId != nil,
             isPlayable: !apiRom.missingFromFs,
             sizeBytes: apiRom.fsSizeBytes,
