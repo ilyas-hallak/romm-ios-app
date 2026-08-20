@@ -15,6 +15,13 @@ final class RommGameViewController: GameViewController {
     /// Screen placement preference (drag-to-move + height). Set before `loadViewIfNeeded()`.
     var screenPositionPreference: PEmulatorScreenPositionPreference?
 
+    /// Custom controller skin picked in Settings, or `nil` for the core's
+    /// built-in one. Whether a skin can render depends on the current traits,
+    /// which only exist once the view has a window and change on every
+    /// rotation, so the decision is re-made on every skin pass rather than
+    /// once at setup.
+    var customControllerSkin: ControllerSkin?
+
     /// `verticalOffset` captured at the start of a drag, so the whole gesture is
     /// applied relative to it.
     private var basePanOffset: Double?
@@ -128,9 +135,34 @@ final class RommGameViewController: GameViewController {
     /// systems (e.g. Nintendo DS). Setting `controllerSkin` posts the change
     /// notification that triggers `GameViewController.updateGameViews()`,
     /// which `updateControllerSkin()` alone does not do.
+    ///
+    /// This is also where a custom skin wins or loses: it is only kept while it
+    /// can actually render for the current traits, otherwise we swap back to the
+    /// core's built-in skin. A skin that only ships portrait artwork must not
+    /// leave the player with an invisible overlay after rotating.
     private func reapplyControllerSkin() {
-        guard let cv = controllerView, let skin = cv.controllerSkin else { return }
+        guard let cv = controllerView else { return }
+        guard let skin = resolvedControllerSkin(for: cv) else { return }
         cv.controllerSkin = skin
+    }
+
+    private func resolvedControllerSkin(for cv: ControllerView) -> ControllerSkinProtocol? {
+        if let custom = customControllerSkin, canRender(custom, in: cv) { return custom }
+        guard let gameType = game?.type,
+              let standard = ControllerSkin.standardControllerSkin(for: gameType) else {
+            // No standard skin to fall back to: keep whatever is loaded rather
+            // than clearing the controls entirely.
+            return cv.controllerSkin
+        }
+        return standard
+    }
+
+    /// A skin without artwork for the current traits renders as an invisible
+    /// overlay, which would look like the controls simply vanished.
+    private func canRender(_ skin: ControllerSkin, in cv: ControllerView) -> Bool {
+        guard let traits = cv.controllerSkinTraits,
+              let supported = skin.supportedTraits(for: traits) else { return false }
+        return skin.image(for: supported, preferredSize: cv.controllerSkinSize ?? .medium) != nil
     }
 }
 
@@ -165,7 +197,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.emulatorCore
     }
 
-    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, cloudSync: CloudSaveSyncService? = nil) {
+    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, controllerSkinURL: URL? = nil, cloudSync: CloudSaveSyncService? = nil) {
         self.gameURL = gameURL
         self.gameType = gameType
         self.romId = romId
@@ -176,12 +208,32 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         let vc = RommGameViewController()
         vc.screenPositionPreference = screenPositionPreference
         vc.loadViewIfNeeded()
-        let game = Game(fileURL: gameURL, type: gameType)
-        vc.game = game
+        // Setting `game` makes DeltaCore run `prepareForGame()`, which installs
+        // the core's built-in skin. A custom skin is handed to the view
+        // controller instead of assigned here, so it survives that call and gets
+        // re-validated against the current traits on every layout and rotation.
+        vc.game = Game(fileURL: gameURL, type: gameType)
         vc.controllerView?.playerIndex = 0
+        vc.customControllerSkin = Self.loadControllerSkin(at: controllerSkinURL, gameType: gameType)
         self.viewController = vc
         super.init()
         vc.delegate = self
+    }
+
+    /// Loads the `.deltaskin` at `url`, or returns `nil` to stay on the built-in
+    /// skin. A skin the user imported for another system must never be applied,
+    /// since its button layout wouldn't match the running core.
+    private static func loadControllerSkin(at url: URL?, gameType: GameType) -> ControllerSkin? {
+        guard let url else { return nil }
+        guard let skin = ControllerSkin(fileURL: url) else {
+            print("[Native] Controller skin \(url.lastPathComponent) failed to load, using the built-in skin")
+            return nil
+        }
+        guard skin.gameType == gameType else {
+            print("[Native] Controller skin \(url.lastPathComponent) is for \(skin.gameType.rawValue), not \(gameType.rawValue)")
+            return nil
+        }
+        return skin
     }
 
     // MARK: - Slot info
