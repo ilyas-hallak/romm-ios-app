@@ -2,6 +2,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ControllerSkinsSettingsView: View {
+    /// A `String` constant on purpose, not a literal. A literal would bind to the
+    /// `LocalizedStringKey` overload, whose Markdown parser turns a bare URL into
+    /// a link and draws the placeholder in the accent color instead of gray.
+    private static let urlPlaceholder = "https://example.com/skin.deltaskin"
+
     @StateObject private var viewModel: ControllerSkinsSettingsViewModel
     @State private var showingFilePicker = false
 
@@ -49,7 +54,7 @@ struct ControllerSkinsSettingsView: View {
 
     private var addSection: some View {
         SwiftUI.Section {
-            TextField("https://example.com/skin.deltaskin", text: $viewModel.urlText)
+            TextField(Self.urlPlaceholder, text: $viewModel.urlText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
