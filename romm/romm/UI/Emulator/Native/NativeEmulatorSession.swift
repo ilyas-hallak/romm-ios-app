@@ -148,9 +148,6 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// Reports whether the on-screen touch controls are currently hidden, so the
     /// SwiftUI layer can show a standalone menu button in their place.
     var onControlsHiddenChanged: ((Bool) -> Void)?
-    /// Called on the main actor when `startEmulation()` returns false, so the
-    /// view can surface an error instead of silently disappearing.
-    var onLaunchFailed: ((String) -> Void)?
 
     let viewController: GameViewController
 
@@ -220,11 +217,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
             self.loadBatteryIfAvailable()
-            let started = self.viewController.startEmulation()
-            guard started else {
-                self.onLaunchFailed?("Failed to start the emulator. The ROM file may be unsupported or corrupted.")
-                return
-            }
+            self.viewController.startEmulation()
             self.attachExternalControllers()
             self.observeControllerConnections()
             self.registerExternalRenderTarget()
@@ -473,9 +466,13 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     private func flushBattery() {
-        // Only flush when the core actually ran. If the core is still in
-        // .stopped (e.g. the game failed to launch), the bridge's internal
-        // storage is uninitialised and calling save() causes EXC_BAD_ACCESS.
+        // Covers the case where the view disappears before the async start task
+        // even reaches `startEmulation()`: the core is still .stopped, the
+        // bridge never allocated its cart save storage, and save() would
+        // dereference NULL (EXC_BAD_ACCESS in N64/GPGX `saveGameSaveToURL:`).
+        // Does not cover a core that did start but whose bridge failed to set
+        // up that storage, since `EmulatorCore.start()` flips the state to
+        // .running before it calls into the bridge.
         guard let core = emulatorCore, core.state != .stopped else { return }
         core.save()
         let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
