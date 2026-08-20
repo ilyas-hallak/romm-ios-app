@@ -88,6 +88,7 @@ class CollectionsRepository: PCollectionsRepository {
                 name: data.name,
                 description: data.description,
                 isPublic: data.isPublic,
+                isFavorite: false,
                 artwork: data.artworkURL
             )
             

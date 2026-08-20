@@ -61,9 +61,12 @@ protocol PRommAPIClient {
     func getCollection(id: Int) async throws -> CollectionSchema
     func getVirtualCollections(type: String, limit: Int?) async throws -> [VirtualCollectionSchema]
     func getVirtualCollection(id: String) async throws -> VirtualCollectionSchema
-    func createCollection(name: String, description: String, isPublic: Bool, artwork: URL?) async throws -> CollectionSchema
+    func createCollection(name: String, description: String, isPublic: Bool, isFavorite: Bool, artwork: URL?) async throws -> CollectionSchema
     func updateCollection(id: Int, name: String, description: String, isPublic: Bool, romIds: [Int]?, artwork: URL?) async throws -> CollectionSchema
     func deleteCollection(id: Int) async throws -> String
+    func addRomsToCollection(id: Int, romIds: [Int]) async throws -> CollectionSchema
+    func removeRomsFromCollection(id: Int, romIds: [Int]) async throws -> CollectionSchema
+    func getCurrentUser() async throws -> UserSchema
 
     // Platforms API Wrapper methods
     func getPlatforms() async throws -> [PlatformSchema]
