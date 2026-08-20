@@ -148,6 +148,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// Reports whether the on-screen touch controls are currently hidden, so the
     /// SwiftUI layer can show a standalone menu button in their place.
     var onControlsHiddenChanged: ((Bool) -> Void)?
+    /// Called on the main actor when `startEmulation()` returns false, so the
+    /// view can surface an error instead of silently disappearing.
+    var onLaunchFailed: ((String) -> Void)?
 
     let viewController: GameViewController
 
@@ -217,7 +220,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
             self.loadBatteryIfAvailable()
-            self.viewController.startEmulation()
+            let started = self.viewController.startEmulation()
+            guard started else {
+                self.onLaunchFailed?("Failed to start the emulator. The ROM file may be unsupported or corrupted.")
+                return
+            }
             self.attachExternalControllers()
             self.observeControllerConnections()
             self.registerExternalRenderTarget()
@@ -466,7 +473,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     private func flushBattery() {
-        emulatorCore?.save()
+        // Only flush when the core actually ran. If the core is still in
+        // .stopped (e.g. the game failed to launch), the bridge's internal
+        // storage is uninitialised and calling save() causes EXC_BAD_ACCESS.
+        guard let core = emulatorCore, core.state != .stopped else { return }
+        core.save()
         let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
         if let data = try? Data(contentsOf: savURL) {
             try? saveStates.writeBattery(romId: romId, data: data)

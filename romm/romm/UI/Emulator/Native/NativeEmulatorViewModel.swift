@@ -79,6 +79,10 @@ final class NativeEmulatorViewModel {
             session?.onControlsHiddenChanged = { [weak self] hidden in
                 self?.controlsHidden = hidden
             }
+            session?.onLaunchFailed = { [weak self] message in
+                self?.errorMessage = message
+                self?.isLoading = false
+            }
             // The session sequences the resume-load after emulation is live and
             // performs it while paused (see NativeEmulatorSession.start).
             session?.start(resumeSlot: resumeSlot)
