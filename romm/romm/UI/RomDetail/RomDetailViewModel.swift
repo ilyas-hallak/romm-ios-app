@@ -159,8 +159,9 @@ class RomDetailViewModel {
 
                 logger.info("Successfully toggled favorite state")
 
-                // Update the actual favorite status
+                // Update the actual favorite status and the app-wide cache
                 actualFavoriteStatus = newFavoriteState
+                FavouritesStore.shared.setFavourite(romId, isFavourite: newFavoriteState)
 
                 // Also update the romDetails if available
                 if let romDetails = romDetails {

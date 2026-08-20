@@ -33,6 +33,8 @@ struct BigRomCardView: View {
     let rom: Rom
     let platform: Platform?
 
+    private var store: FavouritesStore { FavouritesStore.shared }
+
     // N64 covers are typically taller/narrower, so we use .fit to prevent overflow
     private var coverContentMode: ContentMode {
         rom.platformSlug?.lowercased() == "n64" ? .fit : .fill
@@ -77,7 +79,7 @@ struct BigRomCardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 
                 // Favorite badge - top right
-                if rom.isFavourite {
+                if store.isFavourite(romId: rom.id) {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)

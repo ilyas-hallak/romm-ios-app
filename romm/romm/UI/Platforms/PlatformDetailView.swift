@@ -480,20 +480,21 @@ struct TableRomRowView: View {
 
 struct RomStatusIcons: View {
     let rom: Rom
-    
+    private var store: FavouritesStore { FavouritesStore.shared }
+
     var body: some View {
         HStack(spacing: 4) {
-            if rom.isFavourite {
+            if store.isFavourite(romId: rom.id) {
                 Image(systemName: "heart.fill")
                     .foregroundColor(.red)
                     .font(.caption)
             }
-            
+
             if rom.hasRetroAchievements {
                 Image(systemName: "star.fill")
                     .foregroundColor(.yellow)
                     .font(.caption)
-            }                        
+            }
         }
     }
 }

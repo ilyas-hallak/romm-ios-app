@@ -57,6 +57,11 @@ struct MainTabView: View {
                 .id(flight.id)
             }
         }
+        .onAppear {
+            Task {
+                await FavouritesStore.shared.refresh()
+            }
+        }
     }
 }
 
