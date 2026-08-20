@@ -432,20 +432,41 @@ struct EmulatorWebView: UIViewRepresentable {
                 "div.mt-4.align-center > div:first-child",
                 "div.sticky-bottom",
             ]
-            // RomM 5.x, v2 shell: AppNav top bar, BottomNav floating pill, UserMenu chip
+            // RomM 5.x, v2 shell: AppNav top bar, BottomNav floating pill,
+            // UserMenu chip, toast host and upload progress toast. The last
+            // two can pop up mid-game, the rest is permanent chrome.
             + [
                 ".r-v2-nav-bar",
                 ".r-v2-bottom-nav-anchor",
                 ".r-v2-user",
+                ".r-v2-toasts",
+                ".r-v2-upload",
             ]
 
         private func injectFullscreenCSS(_ webView: WKWebView) {
             let selectorList = Self.hiddenUISelectors.joined(separator: ", ")
 
+            // Hiding the chrome is not enough on RomM 5.x: the EmulatorJS
+            // stage is laid out as `inset: var(--r-nav-h) 0 0 0`, so it
+            // still starts below where the navbar used to be and leaves an
+            // empty strip at the top. Zeroing the variable closes that gap.
+            // RomM declares it on `.r-v2`, a class it toggles on <html>, so
+            // `:root` and `.r-v2` are the same element and !important wins.
+            // Both are listed in case the class ever moves off the root.
+            // This override is deliberately kept out of the selector list
+            // above, it assigns a variable rather than hiding an element and
+            // must not affect the match count.
+            // Upstream has no fullscreen mode or URL parameter for this,
+            // see rommapp/romm#4081.
             let css = """
                 \(selectorList) {
                     display: none !important;
                     visibility: hidden !important;
+                }
+
+                :root,
+                .r-v2 {
+                    --r-nav-h: 0px !important;
                 }
                 """
 
