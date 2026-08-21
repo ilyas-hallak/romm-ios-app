@@ -414,34 +414,44 @@ struct EmulatorWebView: UIViewRepresentable {
             }
         }
 
-        /// Selectors for the RomM web chrome that is hidden so the emulator
-        /// fills the screen. Single source of truth, the CSS rule and the
-        /// match count are both derived from this list. A selector that
-        /// matches nothing is a no-op, so both server generations stay
-        /// covered at once without a version check.
-        private static let hiddenUISelectors: [String] =
-            // RomM 4.x, Vuetify-based layout
-            [
-                "header.v-toolbar",
-                "header.v-bottom-navigation",
-                "nav.v-navigation-drawer",
-                ".v-toolbar",
-                ".v-navigation-drawer",
-                ".v-bottom-navigation",
-                "div.my-4",
-                "div.mt-4.align-center > div:first-child",
-                "div.sticky-bottom",
-            ]
-            // RomM 5.x, v2 shell: AppNav top bar, BottomNav floating pill,
-            // UserMenu chip, toast host and upload progress toast. The last
-            // two can pop up mid-game, the rest is permanent chrome.
-            + [
-                ".r-v2-nav-bar",
-                ".r-v2-bottom-nav-anchor",
-                ".r-v2-user",
-                ".r-v2-toasts",
-                ".r-v2-upload",
-            ]
+        /// RomM 4.x web chrome, Vuetify-based layout.
+        private static let legacyUISelectors: [String] = [
+            "header.v-toolbar",
+            "header.v-bottom-navigation",
+            "nav.v-navigation-drawer",
+            ".v-toolbar",
+            ".v-navigation-drawer",
+            ".v-bottom-navigation",
+            "div.my-4",
+            "div.mt-4.align-center > div:first-child",
+            "div.sticky-bottom",
+        ]
+
+        /// RomM 5.x web chrome: AppNav top bar, BottomNav pill, UserMenu chip,
+        /// toast host and upload progress toast. The last two can pop up
+        /// mid-game, the rest is permanent chrome.
+        ///
+        /// Matched on a class substring rather than an exact class name,
+        /// because the shell decorates these blocks with BEM suffixes and
+        /// renames them between releases: the pill shipped as
+        /// `r-v2-bottom-nav-anchor` at one point and is plain
+        /// `r-v2-bottom-nav` now, wrapping a `r-v2-bottom-nav__group`. An
+        /// exact selector silently stops matching on such a rename, a
+        /// substring survives it.
+        private static let v2UISelectors: [String] = [
+            "[class*=\"r-v2-nav\"]",
+            "[class*=\"r-v2-bottom-nav\"]",
+            "[class*=\"r-v2-user\"]",
+            "[class*=\"r-v2-toast\"]",
+            "[class*=\"r-v2-upload\"]",
+        ]
+
+        /// Every selector that gets hidden. A selector that matches nothing is
+        /// a no-op, so both server generations stay covered at once without a
+        /// version check.
+        private static var hiddenUISelectors: [String] {
+            legacyUISelectors + v2UISelectors
+        }
 
         private func injectFullscreenCSS(_ webView: WKWebView) {
             let selectorList = Self.hiddenUISelectors.joined(separator: ", ")
@@ -470,9 +480,14 @@ struct EmulatorWebView: UIViewRepresentable {
                 }
                 """
 
-            // After injecting the styles, count how many elements were
-            // actually hidden. Zero matches means the server layout has
-            // changed again and the selectors need updating.
+            // After injecting the styles, report the match count per selector
+            // rather than one total. A selector that silently stops matching
+            // after an upstream rename is the failure mode here, and a total
+            // hides it as long as the other selectors still match.
+            let selectorsArray = Self.hiddenUISelectors
+                .map { "'\($0)'" }
+                .joined(separator: ", ")
+
             let javascript = """
                 (function() {
                     try {
@@ -480,10 +495,14 @@ struct EmulatorWebView: UIViewRepresentable {
                         style.textContent = `\(css)`;
                         document.head.appendChild(style);
 
-                        return document.querySelectorAll('\(selectorList)').length;
+                        var counts = {};
+                        [\(selectorsArray)].forEach(function(selector) {
+                            counts[selector] = document.querySelectorAll(selector).length;
+                        });
+                        return counts;
                     } catch(e) {
                         console.error('❌ CSS injection failed:', e);
-                        return -1;
+                        return null;
                     }
                 })();
                 """
@@ -491,16 +510,33 @@ struct EmulatorWebView: UIViewRepresentable {
             webView.evaluateJavaScript(javascript) { result, error in
                 if let error = error {
                     self.logger.error("❌ Failed to inject CSS: \(error.localizedDescription)")
-                } else if let count = result as? Int {
-                    if count == 0 {
-                        self.logger.warning(
-                            "⚠️ CSS injected but no UI elements matched, RomM layout may have changed"
-                        )
-                    } else {
-                        self.logger.info("✅ CSS injected, \(count) UI element(s) hidden")
-                    }
-                } else {
+                    return
+                }
+                guard let raw = result as? [String: Any] else {
                     self.logger.info("✅ CSS injected")
+                    return
+                }
+                let counts = raw.compactMapValues { ($0 as? NSNumber)?.intValue }
+                let hidden = counts.values.reduce(0, +)
+
+                if hidden == 0 {
+                    self.logger.warning(
+                        "⚠️ CSS injected but no UI elements matched, RomM layout may have changed"
+                    )
+                } else {
+                    self.logger.info("✅ CSS injected, \(hidden) UI element(s) hidden")
+                }
+
+                // Only the generation that matched something can have dead
+                // selectors worth reporting, the other one is expected to
+                // match nothing on this server.
+                let v2IsLive = Self.v2UISelectors.contains { (counts[$0] ?? 0) > 0 }
+                let live = v2IsLive ? Self.v2UISelectors : Self.legacyUISelectors
+                let dead = live.filter { (counts[$0] ?? 0) == 0 }
+                if !dead.isEmpty {
+                    self.logger.warning(
+                        "⚠️ Selectors matched nothing: \(dead.joined(separator: ", "))"
+                    )
                 }
             }
         }
