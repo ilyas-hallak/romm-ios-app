@@ -29,16 +29,20 @@ extension RommAPIClient {
         return try await get("api/collections/virtual/\(id)", responseType: VirtualCollectionSchema.self)
     }
 
+    /// Creates a collection. `is_public` and `is_favorite` are query parameters on this
+    /// endpoint rather than multipart fields. `is_favorite` can only be set here, because
+    /// PUT /api/collections/{id} does not accept it.
     func createCollection(
         name: String,
         description: String,
         isPublic: Bool,
+        isFavorite: Bool = false,
         artwork: URL? = nil
     ) async throws -> CollectionSchema {
-        logger.info("🚀 Creating collection - name: '\(name)', isPublic: \(isPublic)")
+        logger.info("🚀 Creating collection - name: '\(name)', isPublic: \(isPublic), isFavorite: \(isFavorite)")
         return try await createOrUpdateCollection(
             method: .post,
-            path: "api/collections",
+            path: "api/collections?is_public=\(isPublic)&is_favorite=\(isFavorite)",
             name: name,
             description: description,
             romIds: nil,
@@ -68,6 +72,29 @@ extension RommAPIClient {
     func deleteCollection(id: Int) async throws -> String {
         let data = try await delete("api/collections/\(id)")
         return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    /// Adds ROMs to a collection without touching the ones already in it. Preferred over
+    /// updateCollection, which replaces the whole ROM list and therefore loses concurrent
+    /// changes made from another client.
+    func addRomsToCollection(id: Int, romIds: [Int]) async throws -> CollectionSchema {
+        logger.info("➕ Adding \(romIds.count) ROM(s) to collection \(id)")
+        return try await makeRequest(
+            path: "api/collections/\(id)/roms",
+            method: .post,
+            body: try JSONEncoder().encode(CollectionRomsPayload(romIds: romIds)),
+            responseType: CollectionSchema.self
+        )
+    }
+
+    func removeRomsFromCollection(id: Int, romIds: [Int]) async throws -> CollectionSchema {
+        logger.info("➖ Removing \(romIds.count) ROM(s) from collection \(id)")
+        return try await makeRequest(
+            path: "api/collections/\(id)/roms",
+            method: .delete,
+            body: try JSONEncoder().encode(CollectionRomsPayload(romIds: romIds)),
+            responseType: CollectionSchema.self
+        )
     }
 
     // MARK: - Private Helper
@@ -137,6 +164,16 @@ extension RommAPIClient {
         } catch {
             throw APIClientError.networkError(error)
         }
+    }
+}
+
+// MARK: - Request Payloads
+
+private struct CollectionRomsPayload: Encodable {
+    let romIds: [Int]
+
+    enum CodingKeys: String, CodingKey {
+        case romIds = "rom_ids"
     }
 }
 

@@ -116,56 +116,20 @@ class RomsRepository: PRomsRepository {
         logger.info("❤️ Toggling favorite for ROM \(romId): \(isFavorite)")
         
         do {
-            // ROM favorites are managed through the Favourites collection (usually ID 2)
-            // First, get the current Favourites collection to get existing ROM IDs
-            logger.debug("📱 Fetching favorites collection...")
-            let favouritesCollection = try await apiClient.get("api/collections/2", responseType: CollectionSchema.self)
-            logger.debug("📱 Got favorites collection with \(favouritesCollection.romIds.count) ROMs")
-            var currentRomIds = Array(favouritesCollection.romIds)
-            
-            // Add or remove the ROM from the favorites collection
-            if isFavorite {
-                if !currentRomIds.contains(romId) {
-                    currentRomIds.append(romId)
-                }
-            } else {
-                currentRomIds.removeAll { $0 == romId }
+            let collection = isFavorite
+                ? try await favouritesCollection()
+                : try await findFavouritesCollection()
+
+            guard let collection else {
+                // Nothing to remove the ROM from, so the desired state is already reached.
+                logger.info("✅ No favourites collection, ROM \(romId) is not a favourite anyway")
+                return
             }
-            
-            // Create multipart form data manually
-            let boundary = "----RommAppBoundary\(UUID().uuidString)"
-            var formData = Data()
-            
-            // Helper function to add form field
-            func addFormField(_ name: String, _ value: String) {
-                formData.append("--\(boundary)\r\n".data(using: .utf8)!)
-                formData.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-                formData.append("\(value)\r\n".data(using: .utf8)!)
-            }
-            
-            // Add form fields
-            addFormField("name", favouritesCollection.name)
-            addFormField("description", favouritesCollection.description ?? "")
-            addFormField("url_cover", favouritesCollection.urlCover ?? "")
-            addFormField("rom_ids", "[\(currentRomIds.map(String.init).joined(separator: ","))]")
-            
-            // Close boundary
-            formData.append("--\(boundary)--\r\n".data(using: .utf8)!)
-            
-            // Make request via the API client with custom multipart data
-            let isPublicValue = favouritesCollection.isPublic ?? false ? "true" : "false"
-            let path = "api/collections/2?is_public=\(isPublicValue)&remove_cover=false"
-            logger.debug("📱 Making multipart request to: \(path)")
-            logger.debug("📱 Sending ROM IDs: [\(currentRomIds.map(String.init).joined(separator: ","))]")
-            
-            _ = try await apiClient.multipartRequest(
-                path: path,
-                method: .put,
-                boundary: boundary,
-                formData: formData,
-                additionalHeaders: nil
-            )
-            
+
+            _ = isFavorite
+                ? try await apiClient.addRomsToCollection(id: collection.id, romIds: [romId])
+                : try await apiClient.removeRomsFromCollection(id: collection.id, romIds: [romId])
+
             logger.info("✅ ROM favorite toggled: \(romId)")
         } catch {
             logger.error("❌ Error toggling ROM favorite: \(error)")
@@ -201,9 +165,11 @@ class RomsRepository: PRomsRepository {
         logger.info("🔍 Checking favorite status for ROM \(romId)")
         
         do {
-            // Get the Favourites collection to check if ROM is included
-            let favouritesCollection = try await apiClient.get("api/collections/2", responseType: CollectionSchema.self)
-            let isFavorite = favouritesCollection.romIds.contains(romId)
+            guard let collection = try await findFavouritesCollection() else {
+                logger.info("ℹ️ No favourites collection yet, treating ROM as not favourite")
+                return false
+            }
+            let isFavorite = collection.romIds.contains(romId)
             
             logger.info("✅ ROM \(romId) favorite status: \(isFavorite)")
             return isFavorite
@@ -257,5 +223,36 @@ class RomsRepository: PRomsRepository {
         
         logger.info("🔍 Legacy Search completed: found \(response.roms.count) ROMs out of \(response.total) total matches")
         return response.roms
+    }
+
+    // MARK: - Favourites Collection
+
+    /// Finds the user's own favourites collection, identified by the `is_favorite` flag.
+    /// The collection has no fixed ID, so it cannot be hardcoded. The owner has to be
+    /// checked as well, because the endpoint also returns other users' public collections
+    /// and writing to one of those fails with a permission error.
+    private func findFavouritesCollection() async throws -> CollectionSchema? {
+        let currentUserId = try await apiClient.getCurrentUser().id
+        let collections = try await apiClient.getCollections(limit: nil, offset: nil)
+        return collections.first { $0.isFavorite == true && $0.userId == currentUserId }
+    }
+
+    /// Same as `findFavouritesCollection`, but creates the collection when it is missing.
+    /// RomM never creates it on its own, neither during setup nor when a user is added, so
+    /// the first favourite has to. The name matches the one the web frontend uses so both
+    /// clients end up on the same collection.
+    private func favouritesCollection() async throws -> CollectionSchema {
+        if let existing = try await findFavouritesCollection() {
+            return existing
+        }
+
+        logger.info("❤️ No favourites collection on the server yet, creating one")
+        return try await apiClient.createCollection(
+            name: "Favorites",
+            description: "",
+            isPublic: false,
+            isFavorite: true,
+            artwork: nil
+        )
     }
 }

@@ -466,7 +466,10 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     private func flushBattery() {
-        emulatorCore?.save()
+        // If the view disappears before startEmulation() runs, the core is still
+        // .stopped and save() dereferences NULL (EXC_BAD_ACCESS in N64/GPGX).
+        guard let core = emulatorCore, core.state != .stopped else { return }
+        core.save()
         let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
         if let data = try? Data(contentsOf: savURL) {
             try? saveStates.writeBattery(romId: romId, data: data)
