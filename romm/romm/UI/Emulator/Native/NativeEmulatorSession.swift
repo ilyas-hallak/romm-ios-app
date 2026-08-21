@@ -466,13 +466,8 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     private func flushBattery() {
-        // Covers the case where the view disappears before the async start task
-        // even reaches `startEmulation()`: the core is still .stopped, the
-        // bridge never allocated its cart save storage, and save() would
-        // dereference NULL (EXC_BAD_ACCESS in N64/GPGX `saveGameSaveToURL:`).
-        // Does not cover a core that did start but whose bridge failed to set
-        // up that storage, since `EmulatorCore.start()` flips the state to
-        // .running before it calls into the bridge.
+        // If the view disappears before startEmulation() runs, the core is still
+        // .stopped and save() dereferences NULL (EXC_BAD_ACCESS in N64/GPGX).
         guard let core = emulatorCore, core.state != .stopped else { return }
         core.save()
         let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
