@@ -119,6 +119,7 @@ protocol PDependencyFactory {
     var externalDisplayPreference: PExternalDisplayPreference { get }
     var screenBrightness: PScreenBrightness { get }
     func makePlatformEngineSupport() -> PPlatformEngineSupport
+    func makeControllerSkinsUseCase() -> PControllerSkinsUseCase
 
     // SFTP ViewModels
     @MainActor func makeSFTPDevicesViewModel() -> SFTPDevicesViewModel
@@ -389,6 +390,23 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
+
+    // MARK: - Controller Skins
+
+    private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
+    private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)
+    private lazy var controllerSkinDownloader: PControllerSkinDownloader = ControllerSkinDownloadService()
+    private lazy var controllerSkinPreference: PControllerSkinPreference = UserDefaultsControllerSkinPreferenceStore()
+    private lazy var controllerSkinLinkParser: PControllerSkinLinkParser = HTMLControllerSkinLinkParser()
+
+    func makeControllerSkinsUseCase() -> PControllerSkinsUseCase {
+        ControllerSkinsUseCase(
+            repository: controllerSkinRepository,
+            preference: controllerSkinPreference,
+            downloader: controllerSkinDownloader,
+            linkParser: controllerSkinLinkParser
+        )
+    }
 
     func makePlatformEngineSupport() -> PPlatformEngineSupport {
         PlatformEngineSupport()

@@ -175,6 +175,13 @@ struct SettingsView: View {
                             }
                         }
 
+                        NavigationLink(destination: ControllerSkinsSettingsView()) {
+                            HStack {
+                                Image(systemName: "paintbrush.fill")
+                                Text("Controller Skins")
+                            }
+                        }
+
                         NavigationLink(destination: ExternalDisplaySettingsView()) {
                             HStack {
                                 Image(systemName: "tv")

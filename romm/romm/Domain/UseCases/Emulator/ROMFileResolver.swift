@@ -2,7 +2,7 @@ import Foundation
 import ZIPFoundation
 import SWCompression
 
-enum DeltaGameType: String {
+enum DeltaGameType: String, CaseIterable {
     case gba
     case snes
     case genesis

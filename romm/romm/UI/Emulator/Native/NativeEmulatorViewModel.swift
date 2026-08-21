@@ -70,10 +70,13 @@ final class NativeEmulatorViewModel {
                 emulator: "delta-ios",
                 batteryFileName: batteryFileName
             )
+            let skinURL = factory.makeControllerSkinsUseCase()
+                .selectedSkinFileURL(forGameType: gameType.gameTypeIdentifier)
             session = NativeEmulatorSession(
                 gameURL: url, gameType: deltaType,
                 romId: rom.id, saveStates: saveStates,
                 screenPositionPreference: factory.emulatorScreenPositionPreference,
+                controllerSkinURL: skinURL,
                 cloudSync: cloudSync
             )
             session?.onControlsHiddenChanged = { [weak self] hidden in

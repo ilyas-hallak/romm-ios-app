@@ -37,6 +37,22 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = InMemoryExternalDisplayPreference()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
+
+    // Controller skins
+    private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
+    private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)
+    private lazy var controllerSkinDownloader: PControllerSkinDownloader = ControllerSkinDownloadService()
+    private lazy var controllerSkinPreference: PControllerSkinPreference = UserDefaultsControllerSkinPreferenceStore()
+    private lazy var controllerSkinLinkParser: PControllerSkinLinkParser = HTMLControllerSkinLinkParser()
+
+    func makeControllerSkinsUseCase() -> PControllerSkinsUseCase {
+        ControllerSkinsUseCase(
+            repository: controllerSkinRepository,
+            preference: controllerSkinPreference,
+            downloader: controllerSkinDownloader,
+            linkParser: controllerSkinLinkParser
+        )
+    }
     
     init(
         authRepository: PAuthRepository? = nil,
