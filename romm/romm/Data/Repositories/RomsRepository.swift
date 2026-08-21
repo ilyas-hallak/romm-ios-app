@@ -116,16 +116,11 @@ class RomsRepository: PRomsRepository {
         logger.info("❤️ Toggling favorite for ROM \(romId): \(isFavorite)")
         
         do {
-            // ROM favorites are managed through the Favourites collection, which is
-            // identified by its is_favorite flag. Its ID is not the same on every
-            // server, so it has to be looked up instead of hardcoded.
-            logger.debug("📱 Fetching collections to find the favorites collection...")
-            let allCollections = try await apiClient.getCollections(limit: nil, offset: nil)
-            guard let favouritesCollection = allCollections.first(where: { $0.isFavorite == true }) else {
-                logger.error("❌ No favorites collection found on the server")
-                throw RomError.networkError
-            }
-            logger.debug("📱 Got favorites collection \(favouritesCollection.id) with \(favouritesCollection.romIds.count) ROMs")
+            // ROM favorites are managed through the Favourites collection (usually ID 2)
+            // First, get the current Favourites collection to get existing ROM IDs
+            logger.debug("📱 Fetching favorites collection...")
+            let favouritesCollection = try await apiClient.get("api/collections/2", responseType: CollectionSchema.self)
+            logger.debug("📱 Got favorites collection with \(favouritesCollection.romIds.count) ROMs")
             var currentRomIds = Array(favouritesCollection.romIds)
             
             // Add or remove the ROM from the favorites collection
@@ -159,7 +154,7 @@ class RomsRepository: PRomsRepository {
             
             // Make request via the API client with custom multipart data
             let isPublicValue = favouritesCollection.isPublic ?? false ? "true" : "false"
-            let path = "api/collections/\(favouritesCollection.id)?is_public=\(isPublicValue)&remove_cover=false"
+            let path = "api/collections/2?is_public=\(isPublicValue)&remove_cover=false"
             logger.debug("📱 Making multipart request to: \(path)")
             logger.debug("📱 Sending ROM IDs: [\(currentRomIds.map(String.init).joined(separator: ","))]")
             
@@ -206,13 +201,8 @@ class RomsRepository: PRomsRepository {
         logger.info("🔍 Checking favorite status for ROM \(romId)")
         
         do {
-            // Get the Favourites collection, again located by its is_favorite flag,
-            // to check if the ROM is included
-            let allCollections = try await apiClient.getCollections(limit: nil, offset: nil)
-            guard let favouritesCollection = allCollections.first(where: { $0.isFavorite == true }) else {
-                logger.warning("⚠️ No favorites collection found, treating ROM as not favorite")
-                return false
-            }
+            // Get the Favourites collection to check if ROM is included
+            let favouritesCollection = try await apiClient.get("api/collections/2", responseType: CollectionSchema.self)
             let isFavorite = favouritesCollection.romIds.contains(romId)
             
             logger.info("✅ ROM \(romId) favorite status: \(isFavorite)")
