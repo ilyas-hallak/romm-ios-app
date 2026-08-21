@@ -19,6 +19,15 @@ enum LaunchDecision: Identifiable {
         case .libretro(let rom, _): return "libretro-\(rom.id)"
         }
     }
+
+    /// EmulatorJS runs on the server, out of the app's reach, so a ROM booting
+    /// there can neither be resumed nor snapshotted.
+    var supportsSaveStates: Bool {
+        switch self {
+        case .web: return false
+        case .native, .libretro: return true
+        }
+    }
 }
 
 enum EmulatorLaunchResult {

@@ -342,12 +342,18 @@ class RomDetailViewModel {
     }
 
     func launchEmulator(rom: Rom) async {
-        print("[RomDetailVM] launchEmulator tapped for rom id=\(rom.id)")
-        // Check if experimental feature is enabled first
+        guard let decision = await resolveLaunch(rom: rom) else { return }
+        present(decision, rom: rom)
+    }
+
+    /// Picks the engine without presenting anything, so callers can tell whether
+    /// offering a resume makes sense at all.
+    func resolveLaunch(rom: Rom) async -> LaunchDecision? {
+        logger.debug("Play tapped for ROM \(rom.id)")
         guard ExperimentalFeatureSettings.shared.isEmulatorEnabled else {
-            print("[RomDetailVM] experimental emulator disabled — showing hint")
+            logger.info("Experimental emulator disabled, showing hint")
             showingEmulatorFeatureHint = true
-            return
+            return nil
         }
 
         isLaunchingEmulator = true
@@ -355,20 +361,24 @@ class RomDetailViewModel {
 
         switch result {
         case .success(let decision):
-            logger.info("Launching emulator for ROM: \(rom.name) — decision: \(String(describing: decision))")
-            self.launchDecision = decision
-            Task { [updateLastPlayedUseCase, logger] in
-                do {
-                    try await updateLastPlayedUseCase.execute(romId: rom.id)
-                } catch {
-                    logger.warning("Failed to update last_played for ROM \(rom.id): \(error)")
-                }
-            }
-
+            return decision
         case .failure(let error):
             logger.error("Failed to launch emulator: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             isLaunchingEmulator = false
+            return nil
+        }
+    }
+
+    func present(_ decision: LaunchDecision, rom: Rom) {
+        logger.info("Launching emulator for ROM: \(rom.name) — decision: \(String(describing: decision))")
+        self.launchDecision = decision
+        Task { [updateLastPlayedUseCase, logger] in
+            do {
+                try await updateLastPlayedUseCase.execute(romId: rom.id)
+            } catch {
+                logger.warning("Failed to update last_played for ROM \(rom.id): \(error)")
+            }
         }
     }
 

@@ -174,6 +174,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let romId: Int
     private let cloudSync: CloudSaveSyncService?
+    private let logger = Logger.ui
     let screenPositionPreference: PEmulatorScreenPositionPreference
 
     var onMenuRequested: (() -> Void)?
@@ -226,11 +227,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private static func loadControllerSkin(at url: URL?, gameType: GameType) -> ControllerSkin? {
         guard let url else { return nil }
         guard let skin = ControllerSkin(fileURL: url) else {
-            print("[Native] Controller skin \(url.lastPathComponent) failed to load, using the built-in skin")
+            Logger.ui.warning("Controller skin \(url.lastPathComponent) failed to load, using the built-in skin")
             return nil
         }
         guard skin.gameType == gameType else {
-            print("[Native] Controller skin \(url.lastPathComponent) is for \(skin.gameType.rawValue), not \(gameType.rawValue)")
+            Logger.ui.warning("Controller skin \(url.lastPathComponent) is for \(skin.gameType.rawValue), not \(gameType.rawValue)")
             return nil
         }
         return skin
@@ -277,9 +278,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             try? await Task.sleep(nanoseconds: 600_000_000)
             self.viewController.pauseEmulation()
             do {
-                try self.loadState(slot: slot)
+                try await self.loadState(slot: slot)
             } catch {
-                print("[Native] resume from slot \(slot) failed: \(error.localizedDescription)")
+                self.logger.error("Resume from slot \(slot) failed: \(error.localizedDescription)")
             }
             self.viewController.resumeEmulation()
         }
@@ -411,26 +412,28 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     // MARK: - Save / Load
 
-    func saveState(slot: Int) throws {
+    func saveState(slot: Int) async throws {
         guard let core = emulatorCore else { return }
-        try saveStates.backupSlotForUndoSave(romId: romId, slot: slot)
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("state-\(UUID().uuidString).dltastate")
         core.saveSaveState(to: tmp)
-        let data = try Data(contentsOf: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let data = try await settledStateData(at: tmp)
+        // Rotate only once the new state is in hand, so a failed capture
+        // cannot destroy what was already there.
+        try saveStates.backupSlotForUndoSave(romId: romId, slot: slot)
         try saveStates.writeState(romId: romId, slot: slot, data: data)
         let thumb = currentThumbnailPNG()
         if let thumb {
             try saveStates.writeThumbnail(romId: romId, slot: slot, data: thumb)
         }
-        try? FileManager.default.removeItem(at: tmp)
         cloudSync?.pushState(slot: slot, data: data, thumbnail: thumb)
     }
 
-    func loadState(slot: Int) throws {
+    func loadState(slot: Int) async throws {
         guard let core = emulatorCore else { return }
         guard let data = try saveStates.readState(romId: romId, slot: slot) else { return }
-        try captureUndoLoadSnapshot(core: core)
+        try await captureUndoLoadSnapshot(core: core)
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("state-\(UUID().uuidString).dltastate")
         try data.write(to: tmp)
@@ -460,14 +463,42 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         return image.pngData()
     }
 
-    private func captureUndoLoadSnapshot(core: EmulatorCore) throws {
+    private func captureUndoLoadSnapshot(core: EmulatorCore) async throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("undoload-\(UUID().uuidString).dltastate")
         core.saveSaveState(to: tmp)
-        let data = try Data(contentsOf: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let data = try await settledStateData(at: tmp)
         let thumb = currentThumbnailPNG()
         try saveStates.writeUndoLoadSnapshot(romId: romId, stateData: data, thumbnailData: thumb)
-        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    /// Mupen64Plus queues the gzip write on a worker thread and reports done
+    /// before the bytes land, so wait for the file to stop growing.
+    private func settledStateData(at url: URL) async throws -> Data {
+        let pollInterval: UInt64 = 50_000_000
+        let deadline = Date().addingTimeInterval(15)
+        var previousSize: UInt64?
+
+        while Date() < deadline {
+            let size = fileSize(at: url)
+            if let size, size > 0, size == previousSize {
+                let data = try Data(contentsOf: url)
+                // A write resuming mid-read would hand back another torso.
+                if fileSize(at: url) == UInt64(data.count) { return data }
+                previousSize = nil
+            } else {
+                previousSize = size
+            }
+            try? await Task.sleep(nanoseconds: pollInterval)
+        }
+
+        throw SaveStateCaptureError.incomplete
+    }
+
+    private func fileSize(at url: URL) -> UInt64? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.uint64Value
     }
 
     // MARK: - Battery
