@@ -277,7 +277,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             try? await Task.sleep(nanoseconds: 600_000_000)
             self.viewController.pauseEmulation()
             do {
-                try self.loadState(slot: slot)
+                try await self.loadState(slot: slot)
             } catch {
                 print("[Native] resume from slot \(slot) failed: \(error.localizedDescription)")
             }
@@ -411,26 +411,28 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     // MARK: - Save / Load
 
-    func saveState(slot: Int) throws {
+    func saveState(slot: Int) async throws {
         guard let core = emulatorCore else { return }
-        try saveStates.backupSlotForUndoSave(romId: romId, slot: slot)
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("state-\(UUID().uuidString).dltastate")
         core.saveSaveState(to: tmp)
-        let data = try Data(contentsOf: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let data = try await settledStateData(at: tmp)
+        // Rotate the old state into the undo slot only once the new one is safely
+        // in hand, so a failed capture cannot destroy what was already there.
+        try saveStates.backupSlotForUndoSave(romId: romId, slot: slot)
         try saveStates.writeState(romId: romId, slot: slot, data: data)
         let thumb = currentThumbnailPNG()
         if let thumb {
             try saveStates.writeThumbnail(romId: romId, slot: slot, data: thumb)
         }
-        try? FileManager.default.removeItem(at: tmp)
         cloudSync?.pushState(slot: slot, data: data, thumbnail: thumb)
     }
 
-    func loadState(slot: Int) throws {
+    func loadState(slot: Int) async throws {
         guard let core = emulatorCore else { return }
         guard let data = try saveStates.readState(romId: romId, slot: slot) else { return }
-        try captureUndoLoadSnapshot(core: core)
+        try await captureUndoLoadSnapshot(core: core)
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("state-\(UUID().uuidString).dltastate")
         try data.write(to: tmp)
@@ -460,14 +462,51 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         return image.pngData()
     }
 
-    private func captureUndoLoadSnapshot(core: EmulatorCore) throws {
+    private func captureUndoLoadSnapshot(core: EmulatorCore) async throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("undoload-\(UUID().uuidString).dltastate")
         core.saveSaveState(to: tmp)
-        let data = try Data(contentsOf: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let data = try await settledStateData(at: tmp)
         let thumb = currentThumbnailPNG()
         try saveStates.writeUndoLoadSnapshot(romId: romId, stateData: data, thumbnailData: thumb)
-        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    /// Reads a state file the core was just asked to write, once it is actually
+    /// complete.
+    ///
+    /// Mupen64Plus hands the real gzip write to an internal worker thread and
+    /// fires its save-complete callback before any of those bytes reach disk
+    /// (`savestates.c`, `queue_work`). Reading straight after `saveSaveState(to:)`
+    /// therefore yielded a state truncated to a multiple of zlib's 16 KB buffer,
+    /// which the core then silently refused to load, so N64 slots looked
+    /// populated, complete with thumbnail, but never resumed. Cores that write
+    /// synchronously settle on the first check and only pay one poll interval.
+    private func settledStateData(at url: URL) async throws -> Data {
+        let pollInterval: UInt64 = 50_000_000
+        let deadline = Date().addingTimeInterval(15)
+        var previousSize: UInt64?
+
+        while Date() < deadline {
+            let size = fileSize(at: url)
+            if let size, size > 0, size == previousSize {
+                let data = try Data(contentsOf: url)
+                // Re-check the size: a write that resumed while we were reading
+                // would otherwise hand back another torso.
+                if fileSize(at: url) == UInt64(data.count) { return data }
+                previousSize = nil
+            } else {
+                previousSize = size
+            }
+            try? await Task.sleep(nanoseconds: pollInterval)
+        }
+
+        throw SaveStateCaptureError.incomplete
+    }
+
+    private func fileSize(at url: URL) -> UInt64? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.uint64Value
     }
 
     // MARK: - Battery

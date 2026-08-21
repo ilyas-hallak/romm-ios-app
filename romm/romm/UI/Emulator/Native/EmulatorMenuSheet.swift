@@ -203,9 +203,12 @@ struct EmulatorMenuSheet: View {
                 filled: true,
                 disabled: session?.hasState(slot: selectedSlot) != true
             ) {
-                perform { try session?.loadState(slot: selectedSlot) }
-                statusMessage = "Slot \(selectedSlot) loaded"
-                onResume()
+                let slot = selectedSlot
+                perform(
+                    success: "Slot \(slot) loaded",
+                    action: { try await session?.loadState(slot: slot) },
+                    onSuccess: { onResume() }
+                )
             }
             stackedButton(
                 title: "Save",
@@ -214,9 +217,12 @@ struct EmulatorMenuSheet: View {
                 filled: false,
                 disabled: false
             ) {
-                perform { try session?.saveState(slot: selectedSlot) }
-                statusMessage = "Slot \(selectedSlot) saved"
-                refreshTick += 1
+                let slot = selectedSlot
+                perform(
+                    success: "Slot \(slot) saved",
+                    action: { try await session?.saveState(slot: slot) },
+                    onSuccess: { refreshTick += 1 }
+                )
             }
             stackedButton(
                 title: "Undo Save",
@@ -225,9 +231,12 @@ struct EmulatorMenuSheet: View {
                 filled: false,
                 disabled: session?.hasUndoSave(slot: selectedSlot) != true
             ) {
-                perform { try session?.undoSave(slot: selectedSlot) }
-                statusMessage = "Save for slot \(selectedSlot) undone"
-                refreshTick += 1
+                let slot = selectedSlot
+                perform(
+                    success: "Save for slot \(slot) undone",
+                    action: { try session?.undoSave(slot: slot) },
+                    onSuccess: { refreshTick += 1 }
+                )
             }
             stackedButton(
                 title: "Undo Load",
@@ -236,9 +245,11 @@ struct EmulatorMenuSheet: View {
                 filled: false,
                 disabled: session?.hasUndoLoad() != true
             ) {
-                perform { try session?.undoLoad() }
-                statusMessage = "Load undone"
-                onResume()
+                perform(
+                    success: "Load undone",
+                    action: { try session?.undoLoad() },
+                    onSuccess: { onResume() }
+                )
             }
         }
     }
@@ -279,11 +290,23 @@ struct EmulatorMenuSheet: View {
         .disabled(disabled)
     }
 
-    private func perform(_ action: () throws -> Void) {
-        do {
-            try action()
-        } catch {
-            statusMessage = "Error: \(error.localizedDescription)"
+    /// Runs a save-state action and reports what actually happened. The success
+    /// message and the follow-up only fire when the action succeeded. They used
+    /// to run unconditionally right after the call, overwriting the error and
+    /// making failed saves look like they had worked.
+    private func perform(
+        success: String,
+        action: @escaping () async throws -> Void,
+        onSuccess: @escaping () -> Void = {}
+    ) {
+        Task {
+            do {
+                try await action()
+                statusMessage = success
+                onSuccess()
+            } catch {
+                statusMessage = "Error: \(error.localizedDescription)"
+            }
         }
     }
 }
