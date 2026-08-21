@@ -290,10 +290,8 @@ struct EmulatorMenuSheet: View {
         .disabled(disabled)
     }
 
-    /// Runs a save-state action and reports what actually happened. The success
-    /// message and the follow-up only fire when the action succeeded. They used
-    /// to run unconditionally right after the call, overwriting the error and
-    /// making failed saves look like they had worked.
+    /// Success message and follow-up only fire on success. They used to run
+    /// unconditionally, overwriting the error and hiding failed saves.
     private func perform(
         success: String,
         action: @escaping () async throws -> Void,

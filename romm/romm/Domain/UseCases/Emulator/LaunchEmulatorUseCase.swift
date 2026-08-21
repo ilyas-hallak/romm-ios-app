@@ -20,9 +20,8 @@ enum LaunchDecision: Identifiable {
         }
     }
 
-    /// Save states are driven by the app around a local core. The web emulator
-    /// runs inside EmulatorJS on the server, out of the app's reach, so a ROM
-    /// booting there can neither be resumed nor snapshotted.
+    /// EmulatorJS runs on the server, out of the app's reach, so a ROM booting
+    /// there can neither be resumed nor snapshotted.
     var supportsSaveStates: Bool {
         switch self {
         case .web: return false

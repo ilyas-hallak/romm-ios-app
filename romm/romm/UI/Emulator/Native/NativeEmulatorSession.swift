@@ -174,6 +174,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let romId: Int
     private let cloudSync: CloudSaveSyncService?
+    private let logger = Logger.ui
     let screenPositionPreference: PEmulatorScreenPositionPreference
 
     var onMenuRequested: (() -> Void)?
@@ -226,11 +227,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private static func loadControllerSkin(at url: URL?, gameType: GameType) -> ControllerSkin? {
         guard let url else { return nil }
         guard let skin = ControllerSkin(fileURL: url) else {
-            print("[Native] Controller skin \(url.lastPathComponent) failed to load, using the built-in skin")
+            Logger.ui.warning("Controller skin \(url.lastPathComponent) failed to load, using the built-in skin")
             return nil
         }
         guard skin.gameType == gameType else {
-            print("[Native] Controller skin \(url.lastPathComponent) is for \(skin.gameType.rawValue), not \(gameType.rawValue)")
+            Logger.ui.warning("Controller skin \(url.lastPathComponent) is for \(skin.gameType.rawValue), not \(gameType.rawValue)")
             return nil
         }
         return skin
@@ -279,7 +280,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             do {
                 try await self.loadState(slot: slot)
             } catch {
-                print("[Native] resume from slot \(slot) failed: \(error.localizedDescription)")
+                self.logger.error("Resume from slot \(slot) failed: \(error.localizedDescription)")
             }
             self.viewController.resumeEmulation()
         }
@@ -418,8 +419,8 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         core.saveSaveState(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
         let data = try await settledStateData(at: tmp)
-        // Rotate the old state into the undo slot only once the new one is safely
-        // in hand, so a failed capture cannot destroy what was already there.
+        // Rotate only once the new state is in hand, so a failed capture
+        // cannot destroy what was already there.
         try saveStates.backupSlotForUndoSave(romId: romId, slot: slot)
         try saveStates.writeState(romId: romId, slot: slot, data: data)
         let thumb = currentThumbnailPNG()
@@ -472,16 +473,8 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         try saveStates.writeUndoLoadSnapshot(romId: romId, stateData: data, thumbnailData: thumb)
     }
 
-    /// Reads a state file the core was just asked to write, once it is actually
-    /// complete.
-    ///
-    /// Mupen64Plus hands the real gzip write to an internal worker thread and
-    /// fires its save-complete callback before any of those bytes reach disk
-    /// (`savestates.c`, `queue_work`). Reading straight after `saveSaveState(to:)`
-    /// therefore yielded a state truncated to a multiple of zlib's 16 KB buffer,
-    /// which the core then silently refused to load, so N64 slots looked
-    /// populated, complete with thumbnail, but never resumed. Cores that write
-    /// synchronously settle on the first check and only pay one poll interval.
+    /// Mupen64Plus queues the gzip write on a worker thread and reports done
+    /// before the bytes land, so wait for the file to stop growing.
     private func settledStateData(at url: URL) async throws -> Data {
         let pollInterval: UInt64 = 50_000_000
         let deadline = Date().addingTimeInterval(15)
@@ -491,8 +484,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             let size = fileSize(at: url)
             if let size, size > 0, size == previousSize {
                 let data = try Data(contentsOf: url)
-                // Re-check the size: a write that resumed while we were reading
-                // would otherwise hand back another torso.
+                // A write resuming mid-read would hand back another torso.
                 if fileSize(at: url) == UInt64(data.count) { return data }
                 previousSize = nil
             } else {

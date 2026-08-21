@@ -346,14 +346,12 @@ class RomDetailViewModel {
         present(decision, rom: rom)
     }
 
-    /// Works out which engine would run this ROM without presenting anything.
-    /// Callers need this up front to decide whether offering a resume makes
-    /// sense at all: only local cores can load a save state.
+    /// Picks the engine without presenting anything, so callers can tell whether
+    /// offering a resume makes sense at all.
     func resolveLaunch(rom: Rom) async -> LaunchDecision? {
-        print("[RomDetailVM] launchEmulator tapped for rom id=\(rom.id)")
-        // Check if experimental feature is enabled first
+        logger.debug("Play tapped for ROM \(rom.id)")
         guard ExperimentalFeatureSettings.shared.isEmulatorEnabled else {
-            print("[RomDetailVM] experimental emulator disabled — showing hint")
+            logger.info("Experimental emulator disabled, showing hint")
             showingEmulatorFeatureHint = true
             return nil
         }

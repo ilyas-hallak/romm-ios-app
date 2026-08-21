@@ -136,9 +136,8 @@ struct PlatformROMsListView: View {
         return false
     }
 
-    /// Resolves the engine before anything is shown: only local cores can load a
-    /// save state, so a ROM that boots into the web emulator skips the resume
-    /// choice and goes straight into a fresh session.
+    /// Resolves the engine first: a ROM booting into the web emulator skips the
+    /// resume choice, since only local cores can load a save state.
     private func startPlay(rom: DownloadedROM) async {
         let start = Date()
         let result = await launchUseCase.execute(rom: rom.toRom())
