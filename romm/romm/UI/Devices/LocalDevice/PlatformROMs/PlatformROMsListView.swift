@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// A ROM whose engine is already resolved, waiting for the user's resume choice.
+private struct PendingLaunch: Identifiable {
+    let rom: DownloadedROM
+    let decision: LaunchDecision
+
+    var id: Int { rom.id }
+}
+
 /// Shows list of ROMs for a specific platform
 struct PlatformROMsListView: View {
     let platformName: String
@@ -18,8 +26,9 @@ struct PlatformROMsListView: View {
     @State private var romPendingDelete: DownloadedROM?
     @State private var romPendingSync: DownloadedROM?
     @State private var detailRom: DownloadedROM?
-    /// ROM awaiting a resume/new-game choice in the pre-launch sheet.
-    @State private var romPendingLaunch: DownloadedROM?
+    /// ROM awaiting a resume/new-game choice in the pre-launch sheet, together
+    /// with the engine already resolved for it.
+    @State private var romPendingLaunch: PendingLaunch?
     /// Slot chosen in the pre-launch sheet; read by the emulator cover builder.
     @State private var pendingResumeSlot: Int?
     private let factory: PDependencyFactory
@@ -50,13 +59,8 @@ struct PlatformROMsListView: View {
                     lastSync: viewModel.lastSync(romId: rom.id),
                     onPlay: {
                         guard isPlatformSupported(rom.platformSlug), launchingRomId == nil else { return }
-                        if hasSaveState(romId: rom.id) {
-                            // Offer resume vs. new game before booting the core.
-                            romPendingLaunch = rom
-                        } else {
-                            launchingRomId = rom.id
-                            Task { await launch(rom: rom, resumeSlot: nil) }
-                        }
+                        launchingRomId = rom.id
+                        Task { await startPlay(rom: rom) }
                     },
                     onSync: { romPendingSync = rom },
                     onDetails: { detailRom = rom }
@@ -86,15 +90,15 @@ struct PlatformROMsListView: View {
             EmulatorRouterView(decision: decision, resumeSlot: pendingResumeSlot)
                 .ignoresSafeArea()
         }
-        .sheet(item: $romPendingLaunch) { rom in
+        .sheet(item: $romPendingLaunch) { pending in
             PreLaunchSheet(
-                romName: rom.name,
-                romId: rom.id,
+                romName: pending.rom.name,
+                romId: pending.rom.id,
                 saveStore: saveStore
             ) { resumeSlot in
                 romPendingLaunch = nil
-                launchingRomId = rom.id
-                Task { await launch(rom: rom, resumeSlot: resumeSlot) }
+                launchingRomId = pending.rom.id
+                present(pending.decision, rom: pending.rom, resumeSlot: resumeSlot)
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -132,23 +136,38 @@ struct PlatformROMsListView: View {
         return false
     }
 
-    private func launch(rom: DownloadedROM, resumeSlot: Int?) async {
+    /// Resolves the engine before anything is shown: only local cores can load a
+    /// save state, so a ROM that boots into the web emulator skips the resume
+    /// choice and goes straight into a fresh session.
+    private func startPlay(rom: DownloadedROM) async {
         let start = Date()
         let result = await launchUseCase.execute(rom: rom.toRom())
+        guard case .success(let decision) = result else {
+            launchingRomId = nil
+            return
+        }
+
+        if decision.supportsSaveStates, hasSaveState(romId: rom.id) {
+            launchingRomId = nil
+            romPendingLaunch = PendingLaunch(rom: rom, decision: decision)
+            return
+        }
+
+        // Keep the card's spinner on screen long enough to read as feedback.
         let elapsed = Date().timeIntervalSince(start)
         let minVisible: TimeInterval = 0.45
         if elapsed < minVisible {
             try? await Task.sleep(nanoseconds: UInt64((minVisible - elapsed) * 1_000_000_000))
         }
-        if case .success(let decision) = result {
-            // Set the slot before the decision so the cover builder reads it.
-            pendingResumeSlot = resumeSlot
-            launchDecision = decision
-            Task { [updateLastPlayedUseCase] in
-                try? await updateLastPlayedUseCase.execute(romId: rom.id)
-            }
-        } else {
-            launchingRomId = nil
+        present(decision, rom: rom, resumeSlot: nil)
+    }
+
+    private func present(_ decision: LaunchDecision, rom: DownloadedROM, resumeSlot: Int?) {
+        // Set the slot before the decision so the cover builder reads it.
+        pendingResumeSlot = resumeSlot
+        launchDecision = decision
+        Task { [updateLastPlayedUseCase] in
+            try? await updateLastPlayedUseCase.execute(romId: rom.id)
         }
     }
 

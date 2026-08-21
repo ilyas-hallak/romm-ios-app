@@ -38,6 +38,9 @@ struct RomDetailView: View {
     /// Distinguishes "user picked a slot" from "user cancelled" once the
     /// pre-launch sheet has dismissed.
     @State private var shouldLaunchAfterPreLaunch = false
+    /// Engine resolved before the pre-launch sheet opened, booted once the
+    /// sheet is gone so the choice and the launch stay consistent.
+    @State private var preLaunchDecision: LaunchDecision?
     private let saveStore: PSaveStore = DefaultDependencyFactory.shared.saveStore
 
     enum DetailTab: String, CaseIterable {
@@ -170,7 +173,7 @@ struct RomDetailView: View {
                             Task {
                                 async let savesTask = viewModel.loadSaves(for: rom.id)
                                 async let statesTask = viewModel.loadStates(for: rom.id)
-                                await (savesTask, statesTask)
+                                _ = await (savesTask, statesTask)
                             }
                         }
                     }
@@ -267,9 +270,15 @@ struct RomDetailView: View {
                 // Boot only once the sheet is fully gone. Presenting the emulator's
                 // full screen cover while the sheet is still dismissing can swallow
                 // the presentation entirely.
-                guard shouldLaunchAfterPreLaunch else { return }
+                let decision = preLaunchDecision
+                preLaunchDecision = nil
+                guard shouldLaunchAfterPreLaunch, let decision else {
+                    // Sheet was swiped away, release the Play button's spinner.
+                    viewModel.emulatorPresentationDidEnd()
+                    return
+                }
                 shouldLaunchAfterPreLaunch = false
-                Task { await viewModel.launchEmulator(rom: currentSelectedRom) }
+                viewModel.present(decision, rom: currentSelectedRom)
             }) {
                 PreLaunchSheet(
                     romName: currentSelectedRom.name,
@@ -555,14 +564,18 @@ struct RomDetailView: View {
         .padding(.bottom, 24)
     }
     
-    /// Routes a Play tap: offer resume when save states exist, otherwise boot
-    /// straight into a fresh session.
+    /// Routes a Play tap: offer resume when save states exist and the engine can
+    /// actually load them, otherwise boot straight into a fresh session.
     private func startPlay() {
-        let states = (try? saveStore.listStates(romId: rom.id)) ?? []
-        if states.isEmpty {
-            pendingResumeSlot = nil
-            Task { await viewModel.launchEmulator(rom: currentSelectedRom) }
-        } else {
+        Task {
+            guard let decision = await viewModel.resolveLaunch(rom: currentSelectedRom) else { return }
+            let states = (try? saveStore.listStates(romId: rom.id)) ?? []
+            guard decision.supportsSaveStates, !states.isEmpty else {
+                pendingResumeSlot = nil
+                viewModel.present(decision, rom: currentSelectedRom)
+                return
+            }
+            preLaunchDecision = decision
             showingPreLaunch = true
         }
     }
