@@ -48,16 +48,14 @@ extension LibretroFrontend {
     func startAudio(sampleRate: Double) {
         Self.audioActiveSampleRate = sampleRate > 0 ? sampleRate : Double(Self.audioSampleRateHz)
         Self.audioUnderruns = 0
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .default, options: [])
         // Ask for a short hardware buffer. The default under .playback is around
         // 20 ms, chosen for power rather than latency, and every millisecond here
         // is a millisecond between the core producing a sample and it being
         // heard. The render callback only copies out of a ring, so it can
         // comfortably run this often. The system may grant less than asked, and
         // over AirPlay it usually ignores this entirely, hence the log below.
-        try? session.setPreferredIOBufferDuration(0.005)
-        try? session.setActive(true, options: [])
+        EmulatorAudioSession.activate(preferredIOBufferDuration: 0.005)
+        let session = AVAudioSession.sharedInstance()
         print(String(
             format: "[Libretro] audio out: io buffer %.1f ms, route latency %.1f ms",
             session.ioBufferDuration * 1000, session.outputLatency * 1000
@@ -85,7 +83,7 @@ extension LibretroFrontend {
             audioEngine.detach(node)
             audioSourceNode = nil
         }
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        EmulatorAudioSession.deactivate()
     }
 
     /// Drops any buffered samples by collapsing the read cursor onto the write

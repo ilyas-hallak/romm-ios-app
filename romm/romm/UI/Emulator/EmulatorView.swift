@@ -5,7 +5,6 @@
 //  Created by Ilyas Hallak on 11.12.25.
 //
 
-import AVFoundation
 import SwiftUI
 import WebKit
 
@@ -204,14 +203,7 @@ struct EmulatorWebView: UIViewRepresentable {
 
         // Configure audio session for playback (non-simulator only)
         #if !targetEnvironment(simulator)
-            do {
-                try AVAudioSession.sharedInstance().setCategory(
-                    .playback, mode: .default, options: [])
-                try AVAudioSession.sharedInstance().setActive(true)
-                print("🔊 Audio session activated for playback")
-            } catch {
-                print("⚠️ Failed to activate audio session: \(error)")
-            }
+            EmulatorAudioSession.activate()
         #endif
 
         // Enable inspection in iOS Simulator
