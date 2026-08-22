@@ -270,7 +270,13 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
             self.loadBatteryIfAvailable()
+            // First: DeltaCore picks its output volume as the core comes up, and
+            // would mute itself if another app still held the audio by then.
+            EmulatorAudioSession.activate()
             self.viewController.startEmulation()
+            // Assigning this re-runs that volume decision, now without the
+            // ring switch muting a console the user deliberately started.
+            self.emulatorCore?.audioManager.respectsSilentMode = false
             self.attachExternalControllers()
             self.observeControllerConnections()
             self.registerExternalRenderTarget()
