@@ -296,13 +296,17 @@ class AppViewModel {
         logger.warning("Heartbeat error: \(error.localizedDescription)")
 
         let affectedVersion: String?
+        let alertTitle: String
         switch error {
         case .serverVersionChanged(_, let to):
             affectedVersion = to
+            alertTitle = "Server Version Changed"
         case .serverVersionTooHigh(let serverVersion, _):
             affectedVersion = serverVersion
+            alertTitle = "Unsupported Server Version"
         case .serverVersionTooLow(let serverVersion, _):
             affectedVersion = serverVersion
+            alertTitle = "Unsupported Server Version"
         case .decodingError, .networkError:
             // Transient errors should not disturb the user or log them out.
             logger.warning("Ignoring transient heartbeat error: \(error.localizedDescription)")
@@ -315,13 +319,13 @@ class AppViewModel {
             return
         }
 
-        presentServerVersionAlert(message: error.errorDescription, newVersion: affectedVersion)
+        presentServerVersionAlert(title: alertTitle, message: error.errorDescription, newVersion: affectedVersion)
     }
 
-    private func presentServerVersionAlert(message: String?, newVersion: String?) {
+    private func presentServerVersionAlert(title: String, message: String?, newVersion: String?) {
         guard appState == .authenticated, serverVersionAlert == nil else { return }
         serverVersionAlert = ServerVersionAlert(
-            title: "Server Version Changed",
+            title: title,
             message: message ?? "The server version has changed. Some features may not work correctly.",
             newVersion: newVersion
         )

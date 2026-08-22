@@ -68,6 +68,7 @@ public struct CollectionSchema: Codable, JSONEncodable, Hashable {
         case urlCover = "url_cover"
         case userId = "user_id"
         case userUsername = "user__username"
+        case ownerUsername = "owner_username"
     }
 
     // Decodable protocol methods
@@ -90,7 +91,12 @@ public struct CollectionSchema: Codable, JSONEncodable, Hashable {
         id = try container.decode(Int.self, forKey: .id)
         urlCover = try container.decodeIfPresent(String.self, forKey: .urlCover)
         userId = try container.decode(Int.self, forKey: .userId)
-        userUsername = container.decodeFlexibleString(forKey: .userUsername, default: "")
+        // RomM 5.0 renamed `user__username` to `owner_username`; 4.x still sends
+        // the old key, so accept both.
+        let ownerUsername = container.decodeFlexibleString(forKey: .ownerUsername, default: "")
+        userUsername = ownerUsername.isEmpty
+            ? container.decodeFlexibleString(forKey: .userUsername, default: "")
+            : ownerUsername
     }
 
     // Encodable protocol methods
@@ -114,7 +120,7 @@ public struct CollectionSchema: Codable, JSONEncodable, Hashable {
         try container.encode(id, forKey: .id)
         try container.encode(urlCover, forKey: .urlCover)
         try container.encode(userId, forKey: .userId)
-        try container.encode(userUsername, forKey: .userUsername)
+        try container.encode(userUsername, forKey: .ownerUsername)
     }
 }
 
