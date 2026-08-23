@@ -33,6 +33,7 @@ Join the beta program and help improve the app:
 - 🖥️ Libretro-based emulation for Sega Genesis/Mega Drive, Master System, Game Gear, Saturn, Dreamcast, PlayStation, PSP, and Arcade
 - ☁️ Cloud save sync — upload and download save states and save files to/from your RomM server
 - 🎛️ Physical controller support
+- ⏩ 2x fast-forward for native DeltaCore emulation from the in-game menu
 
 ### Library
 - 📱 Native SwiftUI design with dark mode support

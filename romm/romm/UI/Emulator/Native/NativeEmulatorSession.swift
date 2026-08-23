@@ -5,6 +5,15 @@ import DeltaCore
 import GBADeltaCore
 import GameController
 
+enum NativeEmulatorPlaybackRate {
+    static let normal = 1.0
+    static let fastForward = 2.0
+
+    static func value(isFastForwarding: Bool) -> Double {
+        isFastForwarding ? fastForward : normal
+    }
+}
+
 /// GameViewController subclass that forces the on-screen controller skin to
 /// reload after a rotation. DeltaCore only loads the skin image on initial
 /// layout, so without this the portrait skin stays active in landscape and the
@@ -182,6 +191,8 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// SwiftUI layer can show a standalone menu button in their place.
     var onControlsHiddenChanged: ((Bool) -> Void)?
 
+    private(set) var isFastForwarding = false
+
     let viewController: GameViewController
 
     /// Owned here so the display manager can hold it weakly: the target must not
@@ -274,6 +285,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             // would mute itself if another app still held the audio by then.
             EmulatorAudioSession.activate()
             self.viewController.startEmulation()
+            self.emulatorCore?.rate = NativeEmulatorPlaybackRate.normal
             // Assigning this re-runs that volume decision, now without the
             // ring switch muting a console the user deliberately started.
             self.emulatorCore?.audioManager.respectsSilentMode = false
@@ -292,7 +304,10 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         }
     }
 
-    func pause() { viewController.pauseEmulation() }
+    func pause() {
+        setFastForwarding(false)
+        viewController.pauseEmulation()
+    }
     func resume() {
         viewController.resumeEmulation()
         // Controller may have (dis)connected while paused in the menu.
@@ -305,6 +320,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     func stop() {
+        setFastForwarding(false)
         // Pause the render thread before flushing battery — DeltaCore expects
         // the emulator to be paused around save(), otherwise the save can race
         // with an in-flight frame and crash.
@@ -317,6 +333,17 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         externalRenderTarget = nil
         NotificationCenter.default.removeObserver(self)
         emulatorCore?.stop()
+    }
+
+    @discardableResult
+    func toggleFastForward() -> Bool {
+        setFastForwarding(!isFastForwarding)
+        return isFastForwarding
+    }
+
+    private func setFastForwarding(_ enabled: Bool) {
+        isFastForwarding = enabled
+        emulatorCore?.rate = NativeEmulatorPlaybackRate.value(isFastForwarding: enabled)
     }
 
     // MARK: - External display
