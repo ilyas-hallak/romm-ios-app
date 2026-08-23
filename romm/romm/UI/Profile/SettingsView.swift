@@ -16,6 +16,7 @@ struct SettingsView: View {
     @StateObject private var cloudSyncSettings = CloudSaveSyncSettings.shared
     @State private var showingLogoutAlert = false
     @State private var showingResetAlert = false
+    @State private var showingWhatsNew = false
     
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -123,6 +124,18 @@ struct SettingsView: View {
 
             // App Settings Section
             Section("App Settings") {
+                UpdateAvailableRow()
+
+                Button {
+                    showingWhatsNew = true
+                } label: {
+                    HStack {
+                        Image(systemName: "clock.arrow.circlepath")
+                        Text("Version History")
+                    }
+                    .foregroundStyle(.primary)
+                }
+
                 NavigationLink(destination: LoggingConfigurationView()) {
                     HStack {
                         Image(systemName: "doc.text.magnifyingglass")
@@ -235,6 +248,10 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .sheet(isPresented: $showingWhatsNew) {
+            // Show all entries from Settings; no mark-seen side effect
+            WhatsNewView(entries: ChangelogStore.shared.entries, markSeenOnDismiss: false)
+        }
         .alert("Logout", isPresented: $showingLogoutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Logout", role: .destructive) {

@@ -10,11 +10,12 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject var appData: AppData
     private let dependencyFactory: PDependencyFactory
-    
+    @State private var showWhatsNew = false
+
     init(dependencyFactory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.dependencyFactory = dependencyFactory
     }
-    
+
     var body: some View {
         TabView(selection: $appData.selectedTab) {
             Tab("Home", systemImage: "house", value: AppTab.home) {
@@ -56,6 +57,15 @@ struct MainTabView: View {
                 }
                 .id(flight.id)
             }
+        }
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewView()
+        }
+        .task {
+            if ChangelogStore.shared.shouldShowWhatsNew {
+                showWhatsNew = true
+            }
+            await UpdateCheckService.shared.checkForUpdate()
         }
     }
 }
