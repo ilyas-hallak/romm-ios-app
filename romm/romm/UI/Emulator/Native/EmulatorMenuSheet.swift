@@ -8,6 +8,7 @@ struct EmulatorMenuSheet: View {
     @SwiftUI.State private var selectedSlot: Int
     @SwiftUI.State private var statusMessage: String?
     @SwiftUI.State private var refreshTick: Int = 0
+    @SwiftUI.State private var isFastForwarding: Bool
     @SwiftUI.State private var showQuitConfirmation = false
     @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
 
@@ -26,6 +27,7 @@ struct EmulatorMenuSheet: View {
             return (slot, date)
         }.max(by: { $0.date < $1.date })?.slot ?? 0
         self._selectedSlot = SwiftUI.State(initialValue: mostRecent)
+        self._isFastForwarding = SwiftUI.State(initialValue: session?.isFastForwarding ?? false)
     }
 
     var body: some View {
@@ -34,6 +36,9 @@ struct EmulatorMenuSheet: View {
                 Color.black.ignoresSafeArea()
                 VStack(spacing: 0) {
                     detailHeader
+                    fastForwardButton
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
                     actionButtons
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
@@ -252,6 +257,41 @@ struct EmulatorMenuSheet: View {
                 )
             }
         }
+    }
+
+    private var fastForwardButton: some View {
+        Button {
+            isFastForwarding = session?.toggleFastForward() ?? false
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "forward.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Fast Forward")
+                        .font(.body.weight(.semibold))
+                    Text("2x speed")
+                        .font(.caption)
+                }
+                Spacer()
+                Text(isFastForwarding ? "On" : "Off")
+                    .font(.subheadline.weight(.semibold))
+                Image(systemName: isFastForwarding ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isFastForwarding ? Color.accentColor : .white.opacity(0.45))
+            }
+            .foregroundStyle(.white)
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isFastForwarding ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isFastForwarding ? Color.accentColor.opacity(0.7) : Color.white.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(session == nil)
+        .opacity(session == nil ? 0.35 : 1)
     }
 
     @ViewBuilder
