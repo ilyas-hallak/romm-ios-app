@@ -448,7 +448,7 @@ class RomDetailViewModel {
     // MARK: - External Emulator
 
     /// True when Play hands the ROM to another app instead of emulating it here.
-    var playsExternally: Bool { playTarget.externalEmulator != nil }
+    var playsExternally: Bool { playTarget.externalEmulatorID != nil }
 
     /// Re-reads the Play destination, e.g. after coming back from settings.
     func refreshPlayTarget() {
@@ -463,7 +463,8 @@ class RomDetailViewModel {
     ///
     /// - Returns: false when the built-in emulator should take over instead.
     func playExternally(rom: Rom) async -> Bool {
-        guard let target = playTarget.externalEmulator else { return false }
+        guard let targetID = playTarget.externalEmulatorID else { return false }
+        let target = targetID.emulator
 
         guard externalAppLauncher.isInstalled(target) else {
             errorMessage = "\(target.displayName) is not installed. Install it, or switch Play back to the built-in emulator in Settings."
@@ -475,9 +476,9 @@ class RomDetailViewModel {
             return true
         }
 
-        if externalEmulatorHandoffStore.hasHandedOff(romId: rom.id, to: target),
+        if externalEmulatorHandoffStore.hasHandedOff(romId: rom.id, to: targetID),
            let fileName = primaryFileName(of: resolved.rom) {
-            if await externalAppLauncher.launch(target, fileName: fileName) {
+            if await externalAppLauncher.launch(target, gameIdentifier: fileName) {
                 logger.info("Launched ROM \(rom.id) in \(target.displayName)")
                 markPlayed(romId: rom.id)
                 return true
@@ -495,25 +496,26 @@ class RomDetailViewModel {
     /// Records that an "Open in" menu actually delivered the ROM, so the next Play
     /// tap can deep link instead of asking again.
     func handoffDidComplete(romId: Int, receivingBundleIdentifier: String) {
-        guard let target = playTarget.externalEmulator else { return }
+        guard let targetID = playTarget.externalEmulatorID else { return }
+        let target = targetID.emulator
         guard target.matches(bundleIdentifier: receivingBundleIdentifier) else {
-            logger.info("ROM \(romId) went to \(receivingBundleIdentifier), not \(target.displayName) — not remembered")
+            logger.info("ROM \(romId) went to \(receivingBundleIdentifier), not \(target.displayName), not remembered")
             return
         }
-        externalEmulatorHandoffStore.markHandedOff(romId: romId, to: target)
+        externalEmulatorHandoffStore.markHandedOff(romId: romId, to: targetID)
         markPlayed(romId: romId)
     }
 
     /// No installed app claims this file type, so the "Open in" menu stayed empty.
     func handoffFoundNoTargets() {
-        let name = playTarget.externalEmulator?.displayName ?? "the external emulator"
+        let name = playTarget.externalEmulatorID?.emulator.displayName ?? "the external emulator"
         errorMessage = "No app on this device can open this ROM. Make sure \(name) is installed and supports this file type."
         openInItem = nil
     }
 
     // MARK: - Private
 
-    private func presentHandoff(of rom: DownloadedROM, to target: ExternalEmulator) async {
+    private func presentHandoff(of rom: DownloadedROM, to target: any PExternalEmulator) async {
         // Handing a file over means copying it out of the ROM folder first, which
         // for a disc image is not instant. Show the Play spinner while it runs.
         isLaunchingEmulator = true

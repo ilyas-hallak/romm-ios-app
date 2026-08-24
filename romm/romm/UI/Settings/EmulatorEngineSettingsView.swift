@@ -4,7 +4,7 @@ struct EmulatorEngineSettingsView: View {
     @State private var selection: EmulatorEngine
     @State private var menuShortcut: EmulatorMenuShortcut
     @State private var playTarget: PlayTarget
-    @State private var installedEmulators: [ExternalEmulator] = []
+    @State private var installedEmulators: [ExternalEmulatorID] = []
     private let preference: PEmulatorEnginePreference
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
     private let playTargetPreference: PPlayTargetPreference
@@ -85,7 +85,7 @@ struct EmulatorEngineSettingsView: View {
         if installedEmulators.isEmpty && playTarget == .builtIn {
             Section(
                 header: Text("Play with"),
-                footer: Text("Install RetroArch to play ROMs there instead of in the built-in emulator.")
+                footer: Text("Install \(supportedEmulatorNames) to play ROMs there instead of in the built-in emulator.")
             ) {
                 HStack {
                     Text("Play with")
@@ -100,8 +100,8 @@ struct EmulatorEngineSettingsView: View {
             ) {
                 Picker("Play with", selection: $playTarget) {
                     Text("Built-in emulator").tag(PlayTarget.builtIn)
-                    ForEach(pickableEmulators, id: \.self) { emulator in
-                        Text(emulator.displayName).tag(PlayTarget.external(emulator))
+                    ForEach(pickableEmulators, id: \.self) { id in
+                        Text(id.emulator.displayName).tag(PlayTarget.external(id))
                     }
                 }
             }
@@ -110,14 +110,21 @@ struct EmulatorEngineSettingsView: View {
 
     /// Installed apps, plus whatever is currently selected so an uninstalled
     /// choice does not silently disappear from the picker.
-    private var pickableEmulators: [ExternalEmulator] {
-        guard let selected = playTarget.externalEmulator, !installedEmulators.contains(selected) else {
+    private var pickableEmulators: [ExternalEmulatorID] {
+        guard let selected = playTarget.externalEmulatorID, !installedEmulators.contains(selected) else {
             return installedEmulators
         }
         return installedEmulators + [selected]
     }
 
+    /// Every app Play can hand a ROM to, for the "nothing installed yet" hint.
+    private var supportedEmulatorNames: String {
+        ListFormatter.localizedString(
+            byJoining: ExternalEmulatorID.allCases.map { $0.emulator.displayName }
+        )
+    }
+
     private func refreshInstalledEmulators() {
-        installedEmulators = ExternalEmulator.allCases.filter(externalAppLauncher.isInstalled)
+        installedEmulators = ExternalEmulatorID.allCases.filter { externalAppLauncher.isInstalled($0.emulator) }
     }
 }

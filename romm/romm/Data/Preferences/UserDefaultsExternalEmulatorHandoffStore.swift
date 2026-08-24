@@ -11,18 +11,18 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
         self.userDefaults = userDefaults
     }
 
-    func hasHandedOff(romId: Int, to target: ExternalEmulator) -> Bool {
+    func hasHandedOff(romId: Int, to target: ExternalEmulatorID) -> Bool {
         romIds(for: target).contains(romId)
     }
 
-    func markHandedOff(romId: Int, to target: ExternalEmulator) {
+    func markHandedOff(romId: Int, to target: ExternalEmulatorID) {
         var ids = romIds(for: target)
         guard ids.insert(romId).inserted else { return }
         userDefaults.set(Array(ids), forKey: key(for: target))
     }
 
     func forget(romId: Int) {
-        for target in ExternalEmulator.allCases {
+        for target in ExternalEmulatorID.allCases {
             var ids = romIds(for: target)
             guard ids.remove(romId) != nil else { continue }
             userDefaults.set(Array(ids), forKey: key(for: target))
@@ -31,11 +31,11 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
 
     // MARK: - Private
 
-    private func key(for target: ExternalEmulator) -> String {
+    private func key(for target: ExternalEmulatorID) -> String {
         keyPrefix + target.rawValue
     }
 
-    private func romIds(for target: ExternalEmulator) -> Set<Int> {
+    private func romIds(for target: ExternalEmulatorID) -> Set<Int> {
         Set(userDefaults.array(forKey: key(for: target)) as? [Int] ?? [])
     }
 }
