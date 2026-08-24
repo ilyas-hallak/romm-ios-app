@@ -61,15 +61,15 @@ struct MainTabView: View {
             }
         }
         .sheet(isPresented: $showWhatsNew) {
-            WhatsNewView(
-                entries: updateStore.whatsNewEntries,
+            ChangelogView(
+                markdown: updateStore.changelog,
                 mode: .whatsNew,
-                onClose: { updateStore.markWhatsNewSeen() }
+                onClose: { updateStore.markChangelogSeen() }
             )
         }
         .task {
             updateStore.loadLocalState()
-            if updateStore.shouldShowWhatsNew {
+            if updateStore.shouldShowChangelog {
                 showWhatsNew = true
             }
             await updateStore.checkForUpdates()

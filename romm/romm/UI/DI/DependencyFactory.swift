@@ -102,14 +102,9 @@ protocol PDependencyFactory {
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
 
     // Changelog / Update Check
-    var changelogRepository: PChangelogRepository { get }
-    func makeGetWhatsNewUseCase() -> PGetWhatsNewUseCase
-    func makeGetChangelogUseCase() -> PGetChangelogUseCase
-    func makeMarkChangelogSeenUseCase() -> PMarkChangelogSeenUseCase
-    func makeCheckForUpdateUseCase() -> PCheckForUpdateUseCase
-    func makeGetCachedUpdateUseCase() -> PGetCachedUpdateUseCase
-    func makeDismissUpdateUseCase() -> PDismissUpdateUseCase
-    /// Shared across the Home banner, the Settings row and the What's New sheet,
+    var appUpdateRepository: PAppUpdateRepository { get }
+    func makeAppUpdateUseCase() -> PAppUpdateUseCase
+    /// Shared across the Home banner, the Settings row and the changelog sheet,
     /// so all three read the same state.
     var appUpdateStore: AppUpdateStore { get }
 
@@ -392,42 +387,14 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     // MARK: - Changelog / Update Check
 
-    lazy var changelogRepository: PChangelogRepository = ChangelogRepository()
-    private lazy var changelogSeenStore: PChangelogSeenStore = UserDefaultsChangelogSeenStore()
-    private lazy var updateCheckStateStore: PUpdateCheckStateStore = UserDefaultsUpdateCheckStateStore()
+    lazy var appUpdateRepository: PAppUpdateRepository = AppUpdateRepository()
+    private lazy var appUpdateStateStore: PAppUpdateStateStore = UserDefaultsAppUpdateStateStore()
 
-    func makeGetWhatsNewUseCase() -> PGetWhatsNewUseCase {
-        GetWhatsNewUseCase(repository: changelogRepository, seenStore: changelogSeenStore)
+    func makeAppUpdateUseCase() -> PAppUpdateUseCase {
+        AppUpdateUseCase(repository: appUpdateRepository, stateStore: appUpdateStateStore)
     }
 
-    func makeGetChangelogUseCase() -> PGetChangelogUseCase {
-        GetChangelogUseCase(repository: changelogRepository)
-    }
-
-    func makeMarkChangelogSeenUseCase() -> PMarkChangelogSeenUseCase {
-        MarkChangelogSeenUseCase(repository: changelogRepository, seenStore: changelogSeenStore)
-    }
-
-    func makeCheckForUpdateUseCase() -> PCheckForUpdateUseCase {
-        CheckForUpdateUseCase(repository: changelogRepository, stateStore: updateCheckStateStore)
-    }
-
-    func makeGetCachedUpdateUseCase() -> PGetCachedUpdateUseCase {
-        GetCachedUpdateUseCase(repository: changelogRepository, stateStore: updateCheckStateStore)
-    }
-
-    func makeDismissUpdateUseCase() -> PDismissUpdateUseCase {
-        DismissUpdateUseCase(stateStore: updateCheckStateStore)
-    }
-
-    lazy var appUpdateStore: AppUpdateStore = AppUpdateStore(
-        getWhatsNew: makeGetWhatsNewUseCase(),
-        getChangelog: makeGetChangelogUseCase(),
-        markChangelogSeen: makeMarkChangelogSeenUseCase(),
-        checkForUpdate: makeCheckForUpdateUseCase(),
-        getCachedUpdate: makeGetCachedUpdateUseCase(),
-        dismissUpdate: makeDismissUpdateUseCase()
-    )
+    lazy var appUpdateStore: AppUpdateStore = AppUpdateStore(useCase: makeAppUpdateUseCase())
 
     // MARK: - Emulator Use Cases
 

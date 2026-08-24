@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// App-wide state for the What's New sheet and the TestFlight update hint.
+/// App-wide state for the changelog sheet and the TestFlight update hint.
 ///
 /// The banner on Home and the row in Settings show the same thing, so the state
 /// lives in one place rather than once per view. Views get it from the
@@ -12,69 +12,44 @@ final class AppUpdateStore {
 
     /// A newer TestFlight build, or nil when there is none or it was dismissed.
     private(set) var availableUpdate: AvailableUpdate?
-    /// Entries to show on this launch, empty when the user is up to date.
-    private(set) var whatsNewEntries: [ChangelogEntry] = []
+    /// True on the first launch of a build whose changelog was not shown yet.
+    private(set) var shouldShowChangelog = false
 
-    var shouldShowWhatsNew: Bool { !whatsNewEntries.isEmpty }
-
-    private let getWhatsNew: PGetWhatsNewUseCase
-    private let getChangelog: PGetChangelogUseCase
-    private let markChangelogSeen: PMarkChangelogSeenUseCase
-    private let checkForUpdate: PCheckForUpdateUseCase
-    private let getCachedUpdate: PGetCachedUpdateUseCase
-    private let dismissUpdate: PDismissUpdateUseCase
+    private let useCase: PAppUpdateUseCase
 
     /// `nonisolated` so the dependency factory can build it outside the main actor.
-    nonisolated init(
-        getWhatsNew: PGetWhatsNewUseCase,
-        getChangelog: PGetChangelogUseCase,
-        markChangelogSeen: PMarkChangelogSeenUseCase,
-        checkForUpdate: PCheckForUpdateUseCase,
-        getCachedUpdate: PGetCachedUpdateUseCase,
-        dismissUpdate: PDismissUpdateUseCase
-    ) {
-        self.getWhatsNew = getWhatsNew
-        self.getChangelog = getChangelog
-        self.markChangelogSeen = markChangelogSeen
-        self.checkForUpdate = checkForUpdate
-        self.getCachedUpdate = getCachedUpdate
-        self.dismissUpdate = dismissUpdate
+    nonisolated init(useCase: PAppUpdateUseCase) {
+        self.useCase = useCase
     }
 
-    /// Everything that can be answered from disk. Kept separate from the network
-    /// check so What's New can be presented immediately on launch.
+    var changelog: String { useCase.changelog() }
+
+    /// Answered from disk, so the sheet can be presented without waiting for the
+    /// network check below.
     func loadLocalState() {
-        whatsNewEntries = getWhatsNew.execute()
-        // The last known result, so the banner does not wait for a round trip.
-        availableUpdate = getCachedUpdate.execute()
+        shouldShowChangelog = useCase.shouldShowChangelog()
     }
 
-    /// Asks GitHub whether a newer build has been published.
     func checkForUpdates() async {
-        switch await checkForUpdate.execute() {
+        switch await useCase.checkForUpdate() {
         case .updateAvailable(let update):
             availableUpdate = update
         case .upToDate:
             availableUpdate = nil
         case .notChecked:
-            // Throttled, wrong channel or offline: keep whatever is on screen.
+            // Wrong channel or nothing cached: leave whatever is on screen.
             break
         }
     }
 
-    /// The full version history, for the Settings entry.
-    func versionHistory() -> [ChangelogEntry] {
-        getChangelog.execute()
-    }
-
-    func markWhatsNewSeen() {
-        markChangelogSeen.execute()
-        whatsNewEntries = []
+    func markChangelogSeen() {
+        useCase.markChangelogSeen()
+        shouldShowChangelog = false
     }
 
     func dismissAvailableUpdate() {
         guard let update = availableUpdate else { return }
-        dismissUpdate.execute(build: update.build)
+        useCase.dismiss(build: update.build)
         availableUpdate = nil
     }
 }

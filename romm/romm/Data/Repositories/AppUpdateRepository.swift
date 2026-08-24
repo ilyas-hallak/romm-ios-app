@@ -8,7 +8,7 @@ import Foundation
 /// needs a private JWT key that must never ship inside an app. `main` is the next
 /// best thing: Fastlane bumps `CURRENT_PROJECT_VERSION` and pushes it as part of
 /// every upload, so whatever stands there is what testers can install.
-final class ChangelogRepository: PChangelogRepository {
+final class AppUpdateRepository: PAppUpdateRepository {
 
     /// Raw GitHub is public and needs no authentication.
     private static let projectFileURL = URL(string: "https://raw.githubusercontent.com/ilyas-hallak/romm-ios-app/main/romm/romm.xcodeproj/project.pbxproj")!
@@ -41,17 +41,12 @@ final class ChangelogRepository: PChangelogRepository {
         return bundle.isTestFlightBuild ? .testFlight : .appStore
     }
 
-    func bundledEntries() -> [ChangelogEntry] {
+    func bundledChangelog() -> String {
         guard let url = bundle.url(forResource: "CHANGELOG", withExtension: "md") else {
             logger.warning("CHANGELOG.md not found in app bundle")
-            return []
+            return ""
         }
-        do {
-            return ChangelogParser.parse(try String(contentsOf: url, encoding: .utf8))
-        } catch {
-            logger.warning("Failed to read bundled CHANGELOG.md: \(error.localizedDescription)")
-            return []
-        }
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 
     func latestPublishedBuild() async throws -> Int {
@@ -60,11 +55,11 @@ final class ChangelogRepository: PChangelogRepository {
 
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            logger.error("ChangelogRepository: HTTP \(http.statusCode) for the project file")
-            throw ChangelogError.notReadable
+            logger.error("AppUpdateRepository: HTTP \(http.statusCode) for the project file")
+            throw AppUpdateError.notReadable
         }
         guard let contents = String(data: data, encoding: .utf8) else {
-            throw ChangelogError.notReadable
+            throw AppUpdateError.notReadable
         }
         return Self.buildNumber(inProjectFile: contents)
     }
@@ -74,18 +69,17 @@ final class ChangelogRepository: PChangelogRepository {
     ///
     /// Deliberately not a full pbxproj parse: the file is a large OpenStep plist
     /// and all we want is one integer that appears as a plain build setting.
+    /// Quotes are tolerated because a hand-edited project can carry them, and
+    /// getting it wrong would switch the hint off without any sign.
     static func buildNumber(inProjectFile contents: String) -> Int {
         contents
             .components(separatedBy: buildNumberSetting)
             .dropFirst()
-            // Xcode writes the value bare, but a hand-edited project can end up
-            // with it quoted. Tolerating that is cheap, and getting it wrong
-            // would switch the update hint off without any sign.
             .compactMap { Int($0.drop { $0 == "\"" }.prefix(while: \.isNumber)) }
             .max() ?? 0
     }
 }
 
-enum ChangelogError: Error {
+enum AppUpdateError: Error {
     case notReadable
 }

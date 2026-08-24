@@ -1,7 +1,8 @@
 import Foundation
 
-final class UserDefaultsUpdateCheckStateStore: PUpdateCheckStateStore {
+final class UserDefaultsAppUpdateStateStore: PAppUpdateStateStore {
 
+    private let lastSeenBuildKey = "lastSeenChangelogBuild"
     private let lastCheckKey = "lastUpdateCheckAt"
     private let dismissedBuildKey = "dismissedUpdateBuild"
     private let cachedBuildKey = "cachedRemoteBuild"
@@ -13,14 +14,9 @@ final class UserDefaultsUpdateCheckStateStore: PUpdateCheckStateStore {
         self.userDefaults = userDefaults
     }
 
-    var lastCheckedAt: Date? {
-        get {
-            guard let stamp = userDefaults.object(forKey: lastCheckKey) as? TimeInterval else { return nil }
-            return Date(timeIntervalSince1970: stamp)
-        }
-        set {
-            userDefaults.set(newValue?.timeIntervalSince1970, forKey: lastCheckKey)
-        }
+    var lastSeenBuild: Int? {
+        get { positiveValue(forKey: lastSeenBuildKey) }
+        set { userDefaults.set(newValue ?? 0, forKey: lastSeenBuildKey) }
     }
 
     var dismissedBuild: Int? {
@@ -31,6 +27,14 @@ final class UserDefaultsUpdateCheckStateStore: PUpdateCheckStateStore {
     var cachedPublishedBuild: Int? {
         get { positiveValue(forKey: cachedBuildKey) }
         set { userDefaults.set(newValue ?? 0, forKey: cachedBuildKey) }
+    }
+
+    var lastCheckedAt: Date? {
+        get {
+            guard let stamp = userDefaults.object(forKey: lastCheckKey) as? TimeInterval else { return nil }
+            return Date(timeIntervalSince1970: stamp)
+        }
+        set { userDefaults.set(newValue?.timeIntervalSince1970, forKey: lastCheckKey) }
     }
 
     var forcesCheck: Bool {

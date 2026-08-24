@@ -38,43 +38,16 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var externalDisplayPreference: PExternalDisplayPreference = InMemoryExternalDisplayPreference()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 
-    // Changelog / Update Check
-    lazy var changelogRepository: PChangelogRepository = ChangelogRepository()
-    private lazy var changelogSeenStore: PChangelogSeenStore = UserDefaultsChangelogSeenStore()
-    private lazy var updateCheckStateStore: PUpdateCheckStateStore = UserDefaultsUpdateCheckStateStore()
+    // MARK: - Changelog / Update Check
 
-    func makeGetWhatsNewUseCase() -> PGetWhatsNewUseCase {
-        GetWhatsNewUseCase(repository: changelogRepository, seenStore: changelogSeenStore)
+    lazy var appUpdateRepository: PAppUpdateRepository = AppUpdateRepository()
+    private lazy var appUpdateStateStore: PAppUpdateStateStore = UserDefaultsAppUpdateStateStore()
+
+    func makeAppUpdateUseCase() -> PAppUpdateUseCase {
+        AppUpdateUseCase(repository: appUpdateRepository, stateStore: appUpdateStateStore)
     }
 
-    func makeGetChangelogUseCase() -> PGetChangelogUseCase {
-        GetChangelogUseCase(repository: changelogRepository)
-    }
-
-    func makeMarkChangelogSeenUseCase() -> PMarkChangelogSeenUseCase {
-        MarkChangelogSeenUseCase(repository: changelogRepository, seenStore: changelogSeenStore)
-    }
-
-    func makeCheckForUpdateUseCase() -> PCheckForUpdateUseCase {
-        CheckForUpdateUseCase(repository: changelogRepository, stateStore: updateCheckStateStore)
-    }
-
-    func makeGetCachedUpdateUseCase() -> PGetCachedUpdateUseCase {
-        GetCachedUpdateUseCase(repository: changelogRepository, stateStore: updateCheckStateStore)
-    }
-
-    func makeDismissUpdateUseCase() -> PDismissUpdateUseCase {
-        DismissUpdateUseCase(stateStore: updateCheckStateStore)
-    }
-
-    lazy var appUpdateStore: AppUpdateStore = AppUpdateStore(
-        getWhatsNew: makeGetWhatsNewUseCase(),
-        getChangelog: makeGetChangelogUseCase(),
-        markChangelogSeen: makeMarkChangelogSeenUseCase(),
-        checkForUpdate: makeCheckForUpdateUseCase(),
-        getCachedUpdate: makeGetCachedUpdateUseCase(),
-        dismissUpdate: makeDismissUpdateUseCase()
-    )
+    lazy var appUpdateStore: AppUpdateStore = AppUpdateStore(useCase: makeAppUpdateUseCase())
 
     // Controller skins
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()

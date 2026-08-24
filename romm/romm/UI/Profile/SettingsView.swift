@@ -251,7 +251,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .sheet(isPresented: $showingWhatsNew) {
             // The whole history from Settings, and no mark-seen side effect.
-            WhatsNewView(entries: updateStore.versionHistory(), mode: .versionHistory)
+            ChangelogView(markdown: updateStore.changelog, mode: .versionHistory)
         }
         .alert("Logout", isPresented: $showingLogoutAlert) {
             Button("Cancel", role: .cancel) { }
