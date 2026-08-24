@@ -93,6 +93,7 @@ class RomDetailViewModel {
     private let playTargetPreference: PPlayTargetPreference
     private let externalEmulatorHandoffStore: PExternalEmulatorHandoffStore
     private let externalAppLauncher: PExternalAppLauncher
+    private let resolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifierUseCase
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared,
          apiClient: PRommAPIClient = RommAPIClient.shared) {
@@ -107,6 +108,7 @@ class RomDetailViewModel {
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
         self.getDownloadedROMUseCase = factory.makeGetDownloadedROMUseCase()
         self.getROMShareFilesUseCase = factory.makeGetROMShareFilesUseCase()
+        self.resolveExternalGameIdentifierUseCase = factory.makeResolveExternalGameIdentifierUseCase()
         self.playTargetPreference = factory.playTargetPreference
         self.externalEmulatorHandoffStore = factory.externalEmulatorHandoffStore
         self.externalAppLauncher = factory.externalAppLauncher
@@ -476,9 +478,16 @@ class RomDetailViewModel {
             return true
         }
 
-        if externalEmulatorHandoffStore.hasHandedOff(romId: rom.id, to: targetID),
-           let fileName = primaryFileName(of: resolved.rom) {
-            if await externalAppLauncher.launch(target, gameIdentifier: fileName) {
+        // Working out an identifier can mean unpacking an archive and hashing a
+        // whole ROM, and copying a disc image out of the ROM folder is not
+        // instant either, so the Play spinner covers everything below.
+        isLaunchingEmulator = true
+        defer { isLaunchingEmulator = false }
+        await Task.yield()
+
+        if externalEmulatorHandoffStore.hasHandedOff(romId: rom.id, to: targetID) {
+            if let identifier = try? await gameIdentifier(for: resolved, emulator: target),
+               await externalAppLauncher.launch(target, gameIdentifier: identifier) {
                 logger.info("Launched ROM \(rom.id) in \(target.displayName)")
                 markPlayed(romId: rom.id)
                 return true
@@ -489,7 +498,21 @@ class RomDetailViewModel {
             externalEmulatorHandoffStore.forget(romId: rom.id)
         }
 
-        await presentHandoff(of: resolved.rom, to: target)
+        do {
+            let handoff = try await resolveExternalGameIdentifierUseCase.execute(
+                rom: resolved.rom,
+                baseURL: resolved.baseURL,
+                emulator: target
+            )
+            externalEmulatorHandoffStore.cacheGameIdentifier(
+                handoff.gameIdentifier,
+                romId: rom.id,
+                kind: target.identifierKind
+            )
+            presentHandoff(of: resolved.rom, using: handoff)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         return true
     }
 
@@ -515,13 +538,39 @@ class RomDetailViewModel {
 
     // MARK: - Private
 
-    private func presentHandoff(of rom: DownloadedROM, to target: any PExternalEmulator) async {
-        // Handing a file over means copying it out of the ROM folder first, which
-        // for a disc image is not instant. Show the Play spinner while it runs.
-        isLaunchingEmulator = true
-        await Task.yield()
-        let result = getROMShareFilesUseCase.execute(rom: rom)
-        isLaunchingEmulator = false
+    /// The identifier the target app will use, worked out once and then reused.
+    ///
+    /// Hashing a ROM on every Play tap would put seconds between the tap and the
+    /// game, so the answer is cached the first time it is needed.
+    private func gameIdentifier(
+        for resolved: ResolvedDownloadedROM,
+        emulator: any PExternalEmulator
+    ) async throws -> String {
+        if let cached = externalEmulatorHandoffStore.cachedGameIdentifier(
+            romId: resolved.rom.id,
+            kind: emulator.identifierKind
+        ) {
+            return cached
+        }
+        let handoff = try await resolveExternalGameIdentifierUseCase.execute(
+            rom: resolved.rom,
+            baseURL: resolved.baseURL,
+            emulator: emulator
+        )
+        externalEmulatorHandoffStore.cacheGameIdentifier(
+            handoff.gameIdentifier,
+            romId: resolved.rom.id,
+            kind: emulator.identifierKind
+        )
+        return handoff.gameIdentifier
+    }
+
+    private func presentHandoff(of rom: DownloadedROM, using handoff: ExternalGameHandoff) {
+        // An emulator that identifies a game by its content has to receive
+        // exactly the file that was hashed, so an unpacked ROM goes over on its
+        // own rather than inside the archive it came from.
+        let result = handoff.unpackedROMURL.map { getROMShareFilesUseCase.execute(fileAt: $0) }
+            ?? getROMShareFilesUseCase.execute(rom: rom)
 
         guard !result.files.isEmpty else {
             errorMessage = "No files available to open."
@@ -535,19 +584,5 @@ class RomDetailViewModel {
         } else {
             shareItem = ShareURLsItem(urls: result.files, tempDirectory: result.tempDirectory)
         }
-    }
-
-    /// The file an external emulator should be pointed at.
-    ///
-    /// Disc-based ROMs ship a playlist or sheet next to the data tracks, and that
-    /// is the file emulators expect — a raw `.bin` boots nothing.
-    private func primaryFileName(of rom: DownloadedROM) -> String? {
-        let preferredExtensions = ["m3u", "cue"]
-        for ext in preferredExtensions {
-            if let match = rom.files.first(where: { $0.fileName.lowercased().hasSuffix(".\(ext)") }) {
-                return match.fileName
-            }
-        }
-        return rom.files.first?.fileName
     }
 }

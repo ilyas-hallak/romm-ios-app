@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CryptoKit
 
 protocol PFileValidationService {
     func validateFile(at path: String, expectedSize: Int64?, expectedChecksum: String?) -> FileValidationResult
@@ -65,10 +64,7 @@ class FileValidationService: PFileValidationService {
     }
     
     func calculateChecksum(at path: String) throws -> String {
-        let url = URL(fileURLWithPath: path)
-        let data = try Data(contentsOf: url)
-        let hash = SHA256.hash(data: data)
-        return hash.compactMap { String(format: "%02x", $0) }.joined()
+        try FileHashing.sha256(ofFileAt: URL(fileURLWithPath: path))
     }
     
     func getFileSize(at path: String) throws -> Int64 {

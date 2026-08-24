@@ -370,6 +370,10 @@ class MockDependencyFactory: PDependencyFactory {
         ResolveROMFileUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
 
+    func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase {
+        ResolveExternalGameIdentifierUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
+    }
+
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase {
         EmulatorSaveStatesUseCase(saveStore: saveStore)
     }

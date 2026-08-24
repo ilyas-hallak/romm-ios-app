@@ -54,6 +54,7 @@ extension PExternalEmulator {
 /// silently resets the user's choice.
 enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
     case retroarch
+    case delta
 
     /// The behaviour behind this identity.
     ///
@@ -63,6 +64,7 @@ enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
     var emulator: any PExternalEmulator {
         switch self {
         case .retroarch: return RetroArchExternalEmulator()
+        case .delta: return DeltaExternalEmulator()
         }
     }
 }
@@ -71,7 +73,7 @@ enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
 ///
 /// The kind, not the emulator, is what a resolved identifier is cached under:
 /// the SHA-1 of a ROM is the same no matter which app asks for it.
-enum ExternalGameIdentifierKind: String, Sendable {
+enum ExternalGameIdentifierKind: String, CaseIterable, Sendable {
     /// The plain file name, nothing has to be read or hashed.
     case fileName
     /// Lowercase hex SHA-1 over the whole ROM file.

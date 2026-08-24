@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 /// Status einer BIOS-Datei aus Sicht von App + Server.
 struct BIOSFileStatus: Identifiable, Hashable {
@@ -49,9 +48,7 @@ struct BIOSFileStatus: Identifiable, Hashable {
 
 enum BIOSFileHashing {
     static func md5(of url: URL) -> String? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        let digest = Insecure.MD5.hash(data: data)
-        return digest.map { String(format: "%02hhx", $0) }.joined()
+        try? FileHashing.md5(ofFileAt: url)
     }
 
     static func fileSize(of url: URL) -> Int? {

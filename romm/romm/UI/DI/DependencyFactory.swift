@@ -113,6 +113,7 @@ protocol PDependencyFactory {
     func makeLaunchEmulatorUseCase() -> PLaunchEmulatorUseCase
     func makeGetDownloadedROMUseCase() -> PGetDownloadedROMUseCase
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase
+    func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
     @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
@@ -468,6 +469,10 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase {
         ResolveROMFileUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
+    }
+
+    func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase {
+        ResolveExternalGameIdentifierUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
 
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase {
