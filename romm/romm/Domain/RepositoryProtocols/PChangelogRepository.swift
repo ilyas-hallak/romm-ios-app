@@ -1,7 +1,7 @@
 import Foundation
 
-/// Access to the changelog, both the copy shipped inside the app and the one
-/// published for the newest build.
+/// Access to the changelog bundled with the app, and to the build number the
+/// project on `main` currently carries.
 protocol PChangelogRepository {
     /// Build number of the running app, 0 when it cannot be read.
     var installedBuild: Int { get }
@@ -9,6 +9,7 @@ protocol PChangelogRepository {
     var distributionChannel: AppDistributionChannel { get }
     /// Changelog bundled with this build, newest entry first.
     func bundledEntries() -> [ChangelogEntry]
-    /// Changelog published for the newest build, read from the public repository.
-    func publishedEntries() async throws -> [ChangelogEntry]
+    /// Build number the project on `main` is at, which is the last one uploaded
+    /// to TestFlight. Throws when it cannot be read.
+    func latestPublishedBuild() async throws -> Int
 }

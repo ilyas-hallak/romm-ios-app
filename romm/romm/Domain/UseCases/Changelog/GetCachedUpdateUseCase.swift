@@ -5,8 +5,7 @@ protocol PGetCachedUpdateUseCase {
 }
 
 /// Restores the result of an earlier check so the banner can appear right away
-/// instead of after a round trip. Carries no entries: only the build number is
-/// cached, a fresh check fills in the rest.
+/// instead of after a round trip.
 final class GetCachedUpdateUseCase: PGetCachedUpdateUseCase {
     private let repository: PChangelogRepository
     private let stateStore: PUpdateCheckStateStore
@@ -21,6 +20,6 @@ final class GetCachedUpdateUseCase: PGetCachedUpdateUseCase {
               cached > repository.installedBuild,
               cached != stateStore.dismissedBuild else { return nil }
 
-        return AvailableUpdate(build: cached, version: "?", date: nil, entries: [])
+        return AvailableUpdate(build: cached)
     }
 }

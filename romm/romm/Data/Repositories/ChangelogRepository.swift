@@ -1,15 +1,21 @@
 import Foundation
 
-/// Reads the changelog from two places: the copy bundled with this build, and
-/// the one on `main` in the public repository.
+/// Reads the changelog bundled with this build, and the build number the project
+/// on `main` carries.
 ///
-/// The published copy is what drives the update hint. Apple exposes no API for
-/// "is a newer TestFlight build available", and the App Store Connect API needs a
-/// private JWT key that must never ship inside an app.
+/// The build number is what the update hint compares against. Apple exposes no
+/// API for "is a newer TestFlight build available", and the App Store Connect API
+/// needs a private JWT key that must never ship inside an app. `main` is the next
+/// best thing: Fastlane bumps `CURRENT_PROJECT_VERSION` and pushes it as part of
+/// every upload, so whatever stands there is what testers can install.
 final class ChangelogRepository: PChangelogRepository {
 
-    /// Raw GitHub is stable across branches and needs no authentication.
-    private static let publishedURL = URL(string: "https://raw.githubusercontent.com/ilyas-hallak/romm-ios-app/main/CHANGELOG.md")!
+    /// Raw GitHub is public and needs no authentication.
+    private static let projectFileURL = URL(string: "https://raw.githubusercontent.com/ilyas-hallak/romm-ios-app/main/romm/romm.xcodeproj/project.pbxproj")!
+
+    /// The setting appears once per build configuration and target. They are kept
+    /// in sync by the bump, so the highest one is the build.
+    private static let buildNumberSetting = "CURRENT_PROJECT_VERSION = "
 
     private let bundle: Bundle
     private let session: URLSession
@@ -48,18 +54,35 @@ final class ChangelogRepository: PChangelogRepository {
         }
     }
 
-    func publishedEntries() async throws -> [ChangelogEntry] {
-        var request = URLRequest(url: Self.publishedURL)
+    func latestPublishedBuild() async throws -> Int {
+        var request = URLRequest(url: Self.projectFileURL)
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
         let (data, response) = try await session.data(for: request)
-        if let http = response as? HTTPURLResponse {
-            logger.info("ChangelogRepository: HTTP \(http.statusCode)")
-        }
-        guard let markdown = String(data: data, encoding: .utf8) else {
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            logger.error("ChangelogRepository: HTTP \(http.statusCode) for the project file")
             throw ChangelogError.notReadable
         }
-        return ChangelogParser.parse(markdown)
+        guard let contents = String(data: data, encoding: .utf8) else {
+            throw ChangelogError.notReadable
+        }
+        return Self.buildNumber(inProjectFile: contents)
+    }
+
+    /// Exposed for tests, and because pulling the reading out keeps the network
+    /// call above readable.
+    ///
+    /// Deliberately not a full pbxproj parse: the file is a large OpenStep plist
+    /// and all we want is one integer that appears as a plain build setting.
+    static func buildNumber(inProjectFile contents: String) -> Int {
+        contents
+            .components(separatedBy: buildNumberSetting)
+            .dropFirst()
+            // Xcode writes the value bare, but a hand-edited project can end up
+            // with it quoted. Tolerating that is cheap, and getting it wrong
+            // would switch the update hint off without any sign.
+            .compactMap { Int($0.drop { $0 == "\"" }.prefix(while: \.isNumber)) }
+            .max() ?? 0
     }
 }
 

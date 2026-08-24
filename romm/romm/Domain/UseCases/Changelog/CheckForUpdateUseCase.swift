@@ -13,8 +13,8 @@ protocol PCheckForUpdateUseCase {
 }
 
 final class CheckForUpdateUseCase: PCheckForUpdateUseCase {
-    /// Minimum gap between two network fetches. The changelog changes at most a
-    /// few times a week, so anything shorter is wasted traffic.
+    /// Minimum gap between two network fetches. A new build lands a few times a
+    /// week at most, so anything shorter is wasted traffic.
     private static let throttleInterval: TimeInterval = 6 * 60 * 60
 
     private let repository: PChangelogRepository
@@ -35,25 +35,23 @@ final class CheckForUpdateUseCase: PCheckForUpdateUseCase {
     func execute() async -> UpdateCheckResult {
         guard isCheckWorthwhile, !isThrottled else { return .notChecked }
 
-        let installedBuild = repository.installedBuild
-        let entries: [ChangelogEntry]
+        let publishedBuild: Int
         do {
-            entries = try await repository.publishedEntries()
+            publishedBuild = try await repository.latestPublishedBuild()
         } catch {
             logger.error("CheckForUpdate: fetch failed - \(error.localizedDescription)")
             return .notChecked
         }
 
-        stateStore.lastCheckedAt = now()
-
-        // Entries keep file order and summary sections carry build 0, so the newest
-        // build is the highest number rather than the first entry.
-        guard let publishedBuild = entries.map(\.build).max(), publishedBuild > 0 else {
-            logger.info("CheckForUpdate: changelog is empty or unparseable")
+        guard publishedBuild > 0 else {
+            logger.info("CheckForUpdate: no build number found on main")
             return .notChecked
         }
+
+        stateStore.lastCheckedAt = now()
         stateStore.cachedPublishedBuild = publishedBuild
 
+        let installedBuild = repository.installedBuild
         guard publishedBuild > installedBuild else {
             logger.info("CheckForUpdate: no newer build (published=\(publishedBuild), installed=\(installedBuild))")
             return .upToDate
@@ -63,18 +61,8 @@ final class CheckForUpdateUseCase: PCheckForUpdateUseCase {
             return .upToDate
         }
 
-        let newerEntries = entries.filter { $0.build > installedBuild }
-        guard let newest = newerEntries.first ?? entries.first else { return .upToDate }
-
         logger.info("CheckForUpdate: build \(publishedBuild) available")
-        return .updateAvailable(
-            AvailableUpdate(
-                build: publishedBuild,
-                version: newest.version,
-                date: newest.date,
-                entries: newerEntries
-            )
-        )
+        return .updateAvailable(AvailableUpdate(build: publishedBuild))
     }
 
     // MARK: - Private

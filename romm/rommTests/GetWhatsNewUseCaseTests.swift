@@ -15,7 +15,9 @@ private final class MockChangelogRepository: PChangelogRepository {
     }
 
     func bundledEntries() -> [ChangelogEntry] { bundled }
-    func publishedEntries() async throws -> [ChangelogEntry] { [] }
+    /// What's New only ever reads the bundled changelog, so the remote lookup is
+    /// never exercised here and exists only to satisfy the protocol.
+    func latestPublishedBuild() async throws -> Int { 0 }
 }
 
 private final class MockChangelogSeenStore: PChangelogSeenStore {

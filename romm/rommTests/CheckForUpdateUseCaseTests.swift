@@ -7,12 +7,14 @@ import Foundation
 private final class MockUpdateRepository: PChangelogRepository {
     var installedBuild: Int
     var distributionChannel: AppDistributionChannel
-    var publishedResult: Result<[ChangelogEntry], Error>
+    /// Result of the "what is on main" lookup, so a test can hand over a build
+    /// number or make the network leg fail.
+    var publishedResult: Result<Int, Error>
 
     init(
         installedBuild: Int,
         channel: AppDistributionChannel = .testFlight,
-        published: [ChangelogEntry] = []
+        published: Int = 0
     ) {
         self.installedBuild = installedBuild
         self.distributionChannel = channel
@@ -21,7 +23,7 @@ private final class MockUpdateRepository: PChangelogRepository {
 
     func bundledEntries() -> [ChangelogEntry] { [] }
 
-    func publishedEntries() async throws -> [ChangelogEntry] {
+    func latestPublishedBuild() async throws -> Int {
         try publishedResult.get()
     }
 }
@@ -43,17 +45,12 @@ private struct TestError: Error {}
 
 struct CheckForUpdateUseCaseTests {
 
-    private func entry(build: Int, order: Int = 0) -> ChangelogEntry {
-        ChangelogEntry(build: build, version: "1.0", date: nil, body: "body", order: order)
-    }
-
     // MARK: - Distribution channel gating
 
     // App Store users get updates through the system. Showing a "there's an update"
-    // banner would be redundant and potentially confusing - skip the check entirely.
+    // banner would be redundant and potentially confusing, so skip the check entirely.
     @Test func appStoreChannelReturnsNotChecked() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .appStore,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .appStore, published: 49)
         let store = MockUpdateStateStore()
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
@@ -62,11 +59,23 @@ struct CheckForUpdateUseCaseTests {
         #expect(result == .notChecked)
     }
 
-    // Debug builds should not flood the developer with update banners; the flag
-    // must be explicitly enabled before a check happens.
+    // A skipped check must leave the state untouched, otherwise the throttle would
+    // start ticking for a check that never happened.
+    @Test func appStoreChannelWritesNoState() async {
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .appStore, published: 49)
+        let store = MockUpdateStateStore()
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
+
+        _ = await useCase.execute()
+
+        #expect(store.lastCheckedAt == nil)
+        #expect(store.cachedPublishedBuild == nil)
+    }
+
+    // Debug builds should not nag the developer with update banners, so the flag
+    // has to be turned on by hand before a check happens.
     @Test func debugChannelWithoutForceFlagReturnsNotChecked() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .debug,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .debug, published: 49)
         let store = MockUpdateStateStore(forcesCheck: false)
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
@@ -75,41 +84,36 @@ struct CheckForUpdateUseCaseTests {
         #expect(result == .notChecked)
     }
 
-    // The debug force flag exists exactly for QA and development testing of the
-    // update flow without being on TestFlight.
+    // The debug force flag exists exactly so the update flow can be exercised
+    // without shipping a build to TestFlight first.
     @Test func debugChannelWithForceFlagPerformsCheck() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .debug,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .debug, published: 49)
         let store = MockUpdateStateStore(forcesCheck: true)
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
         let result = await useCase.execute()
 
-        // The exact result depends on data, but it must not be notChecked.
-        #expect(result != .notChecked)
+        #expect(result == .updateAvailable(AvailableUpdate(build: 49)))
     }
 
     @Test func testFlightChannelPerformsCheck() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
         let result = await useCase.execute()
 
-        #expect(result != .notChecked)
+        #expect(result == .updateAvailable(AvailableUpdate(build: 49)))
     }
 
     // MARK: - Throttling
 
-    // Network traffic is wasted if we re-fetch every launch; 6 hours is the
-    // minimum gap. A check done 1 hour ago must not trigger another fetch.
+    // Re-fetching on every launch is wasted traffic, so a check done an hour ago
+    // must not trigger another one.
     @Test func recentCheckIsThrottled() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
-        let oneHourAgo = Date().addingTimeInterval(-3600)
-        store.lastCheckedAt = oneHourAgo
+        store.lastCheckedAt = Date().addingTimeInterval(-3600)
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
         let result = await useCase.execute()
@@ -117,65 +121,57 @@ struct CheckForUpdateUseCaseTests {
         #expect(result == .notChecked)
     }
 
-    // A check done exactly at the throttle boundary (6 hours + 1 second ago)
-    // must be allowed through so the user does not wait forever.
+    // Just past the six hour window the check has to run again, otherwise a user
+    // who leaves the app open would never learn about a new build.
     @Test func checkOlderThanThrottleWindowIsAllowed() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
-        let justOverSixHours = Date().addingTimeInterval(-(6 * 3600 + 1))
-        store.lastCheckedAt = justOverSixHours
+        store.lastCheckedAt = Date().addingTimeInterval(-(6 * 3600 + 1))
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
         let result = await useCase.execute()
 
-        #expect(result != .notChecked)
+        #expect(result == .updateAvailable(AvailableUpdate(build: 49)))
     }
 
     // MARK: - Update detection
 
     @Test func newerBuildReturnsUpdateAvailable() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: [entry(build: 49, order: 0), entry(build: 48, order: 1)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
         let result = await useCase.execute()
 
-        if case .updateAvailable(let update) = result {
-            #expect(update.build == 49)
-        } else {
-            Issue.record("Expected updateAvailable, got \(result)")
-        }
+        #expect(result == .updateAvailable(AvailableUpdate(build: 49)))
     }
 
-    // Only entries strictly newer than the installed build should appear in the
-    // banner's "what's new" list. Showing the already-installed build is noise.
-    @Test func updateAvailableEntriesAreOnlyNewerThanInstalled() async {
-        let published = [
-            entry(build: 49, order: 0),
-            entry(build: 48, order: 1),
-            entry(build: 47, order: 2),
-        ]
-        let repo = MockUpdateRepository(installedBuild: 47, channel: .testFlight,
-                                        published: published)
+    // The number in the banner is the one from main, not a delta or an offset,
+    // so a jump of several builds still names the build the tester will install.
+    @Test func updateAvailableCarriesThePublishedBuildNumber() async {
+        let repo = MockUpdateRepository(installedBuild: 41, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
         let result = await useCase.execute()
 
-        if case .updateAvailable(let update) = result {
-            #expect(!update.entries.contains(where: { $0.build <= 47 }))
-            #expect(update.entries.contains(where: { $0.build == 48 }))
-            #expect(update.entries.contains(where: { $0.build == 49 }))
-        } else {
-            Issue.record("Expected updateAvailable, got \(result)")
-        }
+        #expect(result == .updateAvailable(AvailableUpdate(build: 49)))
     }
 
-    @Test func sameOrOlderBuildReturnsUpToDate() async {
-        let repo = MockUpdateRepository(installedBuild: 49, channel: .testFlight,
-                                        published: [entry(build: 48, order: 0), entry(build: 49, order: 1)])
+    @Test func sameBuildReturnsUpToDate() async {
+        let repo = MockUpdateRepository(installedBuild: 49, channel: .testFlight, published: 49)
+        let store = MockUpdateStateStore()
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
+
+        let result = await useCase.execute()
+
+        #expect(result == .upToDate)
+    }
+
+    // Running a build newer than main happens on a local device build, and must
+    // not be reported as an available update.
+    @Test func olderPublishedBuildReturnsUpToDate() async {
+        let repo = MockUpdateRepository(installedBuild: 50, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
@@ -186,11 +182,10 @@ struct CheckForUpdateUseCaseTests {
 
     // MARK: - Dismissed build
 
-    // Once the user dismisses a banner for build 49, it should not come back
-    // unless an even newer build (50+) appears in the changelog.
+    // Once the user waves away build 49 it must stay gone, otherwise the banner
+    // would come back on the next launch and the dismissal would mean nothing.
     @Test func dismissedBuildReturnsUpToDate() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: [entry(build: 49, order: 0)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
         store.dismissedBuild = 49
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
@@ -200,29 +195,38 @@ struct CheckForUpdateUseCaseTests {
         #expect(result == .upToDate)
     }
 
-    // A newer build than the dismissed one lifts the dismissal automatically
-    // because the user has not seen that version yet.
+    // A build newer than the dismissed one lifts the dismissal by itself, since
+    // the user has not been asked about that one yet.
     @Test func newerBuildThanDismissedStillShowsBanner() async {
-        let published = [entry(build: 50, order: 0), entry(build: 49, order: 1)]
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: published)
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 50)
         let store = MockUpdateStateStore()
         store.dismissedBuild = 49
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
         let result = await useCase.execute()
 
-        if case .updateAvailable(let update) = result {
-            #expect(update.build == 50)
-        } else {
-            Issue.record("Expected updateAvailable, got \(result)")
-        }
+        #expect(result == .updateAvailable(AvailableUpdate(build: 50)))
+    }
+
+    // A dismissal still counts as a completed check, so the cache is refreshed
+    // and the banner can be restored instantly once a newer build lands.
+    @Test func dismissedBuildStillWritesState() async {
+        let fixedDate = Date(timeIntervalSince1970: 3_000_000)
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
+        let store = MockUpdateStateStore()
+        store.dismissedBuild = 49
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { fixedDate })
+
+        _ = await useCase.execute()
+
+        #expect(store.lastCheckedAt == fixedDate)
+        #expect(store.cachedPublishedBuild == 49)
     }
 
     // MARK: - Network error handling
 
-    // A failed network fetch must not erase an already-visible banner. Returning
-    // .notChecked leaves any existing UI state unchanged.
+    // A failed fetch must not erase a banner that is already up, so the result is
+    // "did not look" rather than "nothing newer".
     @Test func networkErrorReturnsNotChecked() async {
         let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight)
         repo.publishedResult = .failure(TestError())
@@ -234,9 +238,8 @@ struct CheckForUpdateUseCaseTests {
         #expect(result == .notChecked)
     }
 
-    // A failed check must not update lastCheckedAt: if we recorded the attempt,
-    // the throttle would suppress the next real check for 6 hours on a bad
-    // network, making the feature feel broken.
+    // Recording a failed attempt would let the throttle suppress the next real
+    // check for six hours, so a flaky network would silently disable the feature.
     @Test func networkErrorDoesNotUpdateLastCheckedAt() async {
         let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight)
         repo.publishedResult = .failure(TestError())
@@ -246,19 +249,73 @@ struct CheckForUpdateUseCaseTests {
         _ = await useCase.execute()
 
         #expect(store.lastCheckedAt == nil)
+        #expect(store.cachedPublishedBuild == nil)
+    }
+
+    // A failed fetch must leave an earlier cached build intact, since that is what
+    // keeps the banner on screen while the network is down.
+    @Test func networkErrorKeepsPreviouslyCachedBuild() async {
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight)
+        repo.publishedResult = .failure(TestError())
+        let store = MockUpdateStateStore()
+        store.cachedPublishedBuild = 49
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
+
+        _ = await useCase.execute()
+
+        #expect(store.cachedPublishedBuild == 49)
+    }
+
+    // MARK: - Unreadable build number
+
+    // A response that carries no build number means the project file moved or its
+    // format changed. That is a lookup failure, not "you are up to date", so it
+    // must not be mistaken for a definitive answer.
+    @Test func zeroPublishedBuildReturnsNotChecked() async {
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 0)
+        let store = MockUpdateStateStore()
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
+
+        let result = await useCase.execute()
+
+        #expect(result == .notChecked)
+    }
+
+    // Caching a 0 would make the cached-update path compare against a bogus build,
+    // and stamping the time would throttle away the next honest attempt.
+    @Test func zeroPublishedBuildWritesNoState() async {
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 0)
+        let store = MockUpdateStateStore()
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
+
+        _ = await useCase.execute()
+
+        #expect(store.lastCheckedAt == nil)
+        #expect(store.cachedPublishedBuild == nil)
+    }
+
+    // Same reasoning as above, and here a stale cache is the only thing left to
+    // show the user, so it has to survive an unreadable answer.
+    @Test func zeroPublishedBuildKeepsPreviouslyCachedBuild() async {
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 0)
+        let store = MockUpdateStateStore()
+        store.cachedPublishedBuild = 49
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
+
+        _ = await useCase.execute()
+
+        #expect(store.cachedPublishedBuild == 49)
     }
 
     // MARK: - State persistence after a successful check
 
-    // After a successful fetch, both the timestamp and the cached build must be
-    // written so the next launch can show the banner instantly from cache.
+    // The timestamp drives the throttle and the cached build lets the next launch
+    // show the banner before the network answers, so both have to be written.
     @Test func successfulCheckWritesLastCheckedAt() async {
         let fixedDate = Date(timeIntervalSince1970: 1_000_000)
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
-        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store,
-                                            now: { fixedDate })
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { fixedDate })
 
         _ = await useCase.execute()
 
@@ -266,8 +323,7 @@ struct CheckForUpdateUseCaseTests {
     }
 
     @Test func successfulCheckWritesCachedPublishedBuild() async {
-        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight,
-                                        published: [entry(build: 49), entry(build: 48, order: 1)])
+        let repo = MockUpdateRepository(installedBuild: 48, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
         let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { Date() })
 
@@ -276,18 +332,76 @@ struct CheckForUpdateUseCaseTests {
         #expect(store.cachedPublishedBuild == 49)
     }
 
-    // Even a "up to date" check must persist the timestamp, otherwise the
-    // throttle never kicks in and we keep hitting the network.
-    @Test func upToDateCheckStillWritesLastCheckedAt() async {
+    // An "up to date" answer is a completed check too. Without the timestamp the
+    // throttle never engages and every launch hits the network.
+    @Test func upToDateCheckStillWritesState() async {
         let fixedDate = Date(timeIntervalSince1970: 2_000_000)
-        let repo = MockUpdateRepository(installedBuild: 49, channel: .testFlight,
-                                        published: [entry(build: 49)])
+        let repo = MockUpdateRepository(installedBuild: 49, channel: .testFlight, published: 49)
         let store = MockUpdateStateStore()
-        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store,
-                                            now: { fixedDate })
+        let useCase = CheckForUpdateUseCase(repository: repo, stateStore: store, now: { fixedDate })
 
         _ = await useCase.execute()
 
         #expect(store.lastCheckedAt == fixedDate)
+        #expect(store.cachedPublishedBuild == 49)
+    }
+}
+
+// MARK: - GetCachedUpdateUseCase
+
+struct GetCachedUpdateUseCaseTests {
+
+    // Without an earlier check there is nothing to restore, so the banner stays
+    // hidden until the first fetch comes back.
+    @Test func noCachedBuildReturnsNil() {
+        let repo = MockUpdateRepository(installedBuild: 48)
+        let store = MockUpdateStateStore()
+
+        #expect(GetCachedUpdateUseCase(repository: repo, stateStore: store).execute() == nil)
+    }
+
+    // The whole point of the cache is to put the banner up before the network
+    // answers, so a newer cached build has to produce an update right away.
+    @Test func newerCachedBuildIsRestored() {
+        let repo = MockUpdateRepository(installedBuild: 48)
+        let store = MockUpdateStateStore()
+        store.cachedPublishedBuild = 49
+
+        let result = GetCachedUpdateUseCase(repository: repo, stateStore: store).execute()
+
+        #expect(result == AvailableUpdate(build: 49))
+    }
+
+    // After the user installs the update the cache still names that build, so it
+    // has to be compared against the running build rather than shown blindly.
+    @Test func cachedBuildEqualToInstalledReturnsNil() {
+        let repo = MockUpdateRepository(installedBuild: 49)
+        let store = MockUpdateStateStore()
+        store.cachedPublishedBuild = 49
+
+        #expect(GetCachedUpdateUseCase(repository: repo, stateStore: store).execute() == nil)
+    }
+
+    // A dismissal has to survive a restart, otherwise the cached build would put
+    // the banner straight back on the next launch.
+    @Test func dismissedCachedBuildReturnsNil() {
+        let repo = MockUpdateRepository(installedBuild: 48)
+        let store = MockUpdateStateStore()
+        store.cachedPublishedBuild = 49
+        store.dismissedBuild = 49
+
+        #expect(GetCachedUpdateUseCase(repository: repo, stateStore: store).execute() == nil)
+    }
+
+    // Dismissing 49 must not hide 50: the dismissal is tied to one build number.
+    @Test func cachedBuildNewerThanDismissedIsRestored() {
+        let repo = MockUpdateRepository(installedBuild: 48)
+        let store = MockUpdateStateStore()
+        store.cachedPublishedBuild = 50
+        store.dismissedBuild = 49
+
+        let result = GetCachedUpdateUseCase(repository: repo, stateStore: store).execute()
+
+        #expect(result == AvailableUpdate(build: 50))
     }
 }
