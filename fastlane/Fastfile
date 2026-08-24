@@ -95,11 +95,27 @@ platform :ios do
       message: "TestFlight upload #{tag_name}"
     )
 
-    if ENV['FASTLANE_PUSH_AFTER_DEPLOY'].to_s.downcase == 'true'
-      push_to_git_remote(tags: true)
+    # The in-app update hint compares the installed build against the one on
+    # main, so the bump has to land there or every tester keeps being told they
+    # are up to date. The release worktree runs on a detached HEAD, hence the
+    # explicit branch names.
+    #
+    # The ancestor check is the safety net: it refuses to push when HEAD is not
+    # built on top of origin/main, so a stray feature branch can never end up
+    # there. The push itself is never forced, so a main that moved on fails
+    # loudly instead of being overwritten.
+    sh('git fetch origin main --quiet')
+    unless sh('git merge-base --is-ancestor origin/main HEAD && echo yes || echo no', log: false).strip == 'yes'
+      UI.user_error!('HEAD is not based on origin/main, refusing to push the build bump. Rebase the release worktree and push by hand.')
     end
 
-    UI.success("Upload complete. Created commit and tag #{tag_name}")
+    push_to_git_remote(
+      local_branch: 'HEAD',
+      remote_branch: 'main',
+      tags: true
+    )
+
+    UI.success("Upload complete. Pushed build #{build_number} to main and tagged #{tag_name}")
   end
 
   desc 'Convenience alias for deploy_testflight'

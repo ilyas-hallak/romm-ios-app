@@ -36,6 +36,7 @@ struct HomeView: View {
     private var contentView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                UpdateAvailableBanner()
                 HomeRomSection(
                     title: "Continue Playing",
                     roms: viewModel.continuePlaying,

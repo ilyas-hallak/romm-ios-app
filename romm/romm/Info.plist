@@ -15,6 +15,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>itms-beta</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
