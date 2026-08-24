@@ -43,6 +43,17 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore = UserDefaultsExternalEmulatorHandoffStore()
     lazy var externalAppLauncher: PExternalAppLauncher = UIExternalAppLauncher()
 
+    // MARK: - Changelog / Update Check
+
+    lazy var appUpdateRepository: PAppUpdateRepository = AppUpdateRepository()
+    private lazy var appUpdateStateStore: PAppUpdateStateStore = UserDefaultsAppUpdateStateStore()
+
+    func makeAppUpdateUseCase() -> PAppUpdateUseCase {
+        AppUpdateUseCase(repository: appUpdateRepository, stateStore: appUpdateStateStore)
+    }
+
+    lazy var appUpdateStore: AppUpdateStore = AppUpdateStore(useCase: makeAppUpdateUseCase())
+
     // Controller skins
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
     private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)

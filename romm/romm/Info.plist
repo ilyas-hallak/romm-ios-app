@@ -17,6 +17,7 @@
 	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
+		<string>itms-beta</string>
 		<string>retroarch</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>

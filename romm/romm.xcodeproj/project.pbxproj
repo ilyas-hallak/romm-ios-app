@@ -25,8 +25,6 @@
 		5D93A1752FBF68F400086CE8 /* N64DeltaCore_Video.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A1522FBF67E300086CE8 /* N64DeltaCore_Video.framework */; };
 		5D93A1762FBF68F400086CE8 /* N64DeltaCore_Video.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A1522FBF67E300086CE8 /* N64DeltaCore_Video.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5D93A8982FC241F000086CE8 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1B2C3D4E5F600000000CE11 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 5D9D918D2E5F8F21009AF769 /* Kingfisher */; };
 		5DAA110000000007ABCD0007 /* SNESDeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; };
 		5DAA110000000008ABCD0008 /* SNESDeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -36,6 +34,10 @@
 		5DF893FC2FB7D26D0083B111 /* GBADeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF893F52FB7D2210083B111 /* GBADeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5DF8940F2FB7D79F0083B111 /* ZIPFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */; };
 		5DF894102FB7D79F0083B111 /* ZIPFoundation.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1B2C3D4E5F600000000CE11 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		5DCA1106000000000000C102 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
+		5DCB1107000000000000D103 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -168,8 +170,6 @@
 		5D93A1532FBF67E900086CE8 /* MelonDSDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = MelonDSDeltaCore.xcodeproj; path = ../Vendor/MelonDSDeltaCore/MelonDSDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5D93A15F2FBF67EF00086CE8 /* GBCDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GBCDeltaCore.xcodeproj; path = ../Vendor/GBCDeltaCore/GBCDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = pcsx_rearmed_libretro_ios.framework; sourceTree = "<group>"; };
-		A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = mednafen_pce_fast_libretro_ios.framework; sourceTree = "<group>"; };
-		A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = genesis_plus_gx_libretro_ios.framework; sourceTree = "<group>"; };
 		5DA7E4202E43D870003680D9 /* romm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = romm.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DA7E4332E43D872003680D9 /* rommTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rommTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DA7E43D2E43D872003680D9 /* rommUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rommUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -177,6 +177,9 @@
 		5DF893EB2FB7D2200083B111 /* GBADeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GBADeltaCore.xcodeproj; path = ../Vendor/GBADeltaCore/GBADeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5DF893F82FB7D26D0083B111 /* DeltaCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = DeltaCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ZIPFoundation.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = mednafen_pce_fast_libretro_ios.framework; sourceTree = "<group>"; };
+		A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = genesis_plus_gx_libretro_ios.framework; sourceTree = "<group>"; };
+		5DCA1106000000000000C101 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = CHANGELOG.md; path = ../CHANGELOG.md; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -217,6 +220,7 @@
 			files = (
 				5DF893F92FB7D26D0083B111 /* DeltaCore.framework in Frameworks */,
 				5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */,
+				5DCB1107000000000000D103 /* MarkdownUI in Frameworks */,
 				5D2C4E1F2F7B9A43009CF871 /* SWCompression in Frameworks */,
 				5D7501352E97A35300DAE612 /* mft.xcframework in Frameworks */,
 				5D93A1712FBF682D00086CE8 /* MelonDSDeltaCore.framework in Frameworks */,
@@ -315,6 +319,7 @@
 		5DA7E4172E43D870003680D9 = {
 			isa = PBXGroup;
 			children = (
+				5DCA1106000000000000C101 /* CHANGELOG.md */,
 				5D93A8952FC2419700086CE8 /* Libretro */,
 				5D93A15F2FBF67EF00086CE8 /* GBCDeltaCore.xcodeproj */,
 				5D93A1532FBF67E900086CE8 /* MelonDSDeltaCore.xcodeproj */,
@@ -381,6 +386,7 @@
 			name = romm;
 			packageProductDependencies = (
 				5D9D918D2E5F8F21009AF769 /* Kingfisher */,
+				5DCB1107000000000000D102 /* MarkdownUI */,
 				5D2C4E1E2F7B9A43009CF871 /* SWCompression */,
 			);
 			productName = romm;
@@ -468,6 +474,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -583,6 +590,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5DCA1106000000000000C102 /* CHANGELOG.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1002,6 +1010,14 @@
 				minimumVersion = 8.5.0;
 			};
 		};
+		5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1014,6 +1030,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
+		};
+		5DCB1107000000000000D102 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

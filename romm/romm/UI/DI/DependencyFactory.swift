@@ -101,6 +101,13 @@ protocol PDependencyFactory {
     // Local ROM Use Cases
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
 
+    // Changelog / Update Check
+    var appUpdateRepository: PAppUpdateRepository { get }
+    func makeAppUpdateUseCase() -> PAppUpdateUseCase
+    /// Shared across the Home banner, the Settings row and the changelog sheet,
+    /// so all three read the same state.
+    var appUpdateStore: AppUpdateStore { get }
+
     // Emulator Use Cases
     func makeCheckEmulatorSupportUseCase() -> PCheckEmulatorSupportUseCase
     func makeLaunchEmulatorUseCase() -> PLaunchEmulatorUseCase
@@ -383,6 +390,17 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeSaveGroupRomsUseCase() -> PSaveGroupRomsUseCase {
         SaveGroupRomsUseCase()
     }
+
+    // MARK: - Changelog / Update Check
+
+    lazy var appUpdateRepository: PAppUpdateRepository = AppUpdateRepository()
+    private lazy var appUpdateStateStore: PAppUpdateStateStore = UserDefaultsAppUpdateStateStore()
+
+    func makeAppUpdateUseCase() -> PAppUpdateUseCase {
+        AppUpdateUseCase(repository: appUpdateRepository, stateStore: appUpdateStateStore)
+    }
+
+    lazy var appUpdateStore: AppUpdateStore = AppUpdateStore(useCase: makeAppUpdateUseCase())
 
     // MARK: - Emulator Use Cases
 
