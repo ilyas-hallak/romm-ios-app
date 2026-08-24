@@ -125,8 +125,14 @@ protocol PDependencyFactory {
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
     var screenBrightness: PScreenBrightness { get }
+
     func makePlatformEngineSupport() -> PPlatformEngineSupport
     func makeControllerSkinsUseCase() -> PControllerSkinsUseCase
+
+    // External emulator apps
+    var playTargetPreference: PPlayTargetPreference { get }
+    var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore { get }
+    var externalAppLauncher: PExternalAppLauncher { get }
 
     // SFTP ViewModels
     @MainActor func makeSFTPDevicesViewModel() -> SFTPDevicesViewModel
@@ -408,6 +414,12 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
+
+    // MARK: - External Emulator Apps
+
+    lazy var playTargetPreference: PPlayTargetPreference = UserDefaultsPlayTargetPreferenceStore()
+    lazy var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore = UserDefaultsExternalEmulatorHandoffStore()
+    lazy var externalAppLauncher: PExternalAppLauncher = UIExternalAppLauncher()
 
     // MARK: - Controller Skins
 

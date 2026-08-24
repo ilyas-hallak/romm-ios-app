@@ -38,6 +38,11 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var externalDisplayPreference: PExternalDisplayPreference = InMemoryExternalDisplayPreference()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 
+    // External emulator apps
+    lazy var playTargetPreference: PPlayTargetPreference = UserDefaultsPlayTargetPreferenceStore()
+    lazy var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore = UserDefaultsExternalEmulatorHandoffStore()
+    lazy var externalAppLauncher: PExternalAppLauncher = UIExternalAppLauncher()
+
     // MARK: - Changelog / Update Check
 
     lazy var appUpdateRepository: PAppUpdateRepository = AppUpdateRepository()

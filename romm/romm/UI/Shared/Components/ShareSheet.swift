@@ -5,6 +5,9 @@ import UniformTypeIdentifiers
 /// Shared component for presenting iOS share sheet
 struct ShareSheet: UIViewControllerRepresentable {
     let activityItems: [Any]
+    /// Called with the activity that handled the share. For "Open in <app>" this
+    /// is the receiving bundle identifier, which is how a handoff is confirmed.
+    var onCompleted: ((String?) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
         print("🔧 Creating UIActivityViewController with \(activityItems.count) items")
@@ -45,6 +48,7 @@ struct ShareSheet: UIViewControllerRepresentable {
                 print("❌ Share failed: \(error.localizedDescription)")
             } else if completed {
                 print("✅ Share completed with: \(activityType?.rawValue ?? "unknown")")
+                onCompleted?(activityType?.rawValue)
             } else {
                 print("⚠️ Share cancelled")
             }

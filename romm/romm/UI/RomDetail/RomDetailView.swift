@@ -183,7 +183,13 @@ struct RomDetailView: View {
                     ), onDismiss: {
                         viewModel.cleanupShareTemp()
                     }) { item in
-                        ShareSheet(activityItems: item.urls)
+                        ShareSheet(activityItems: item.urls) { activityType in
+                            guard let activityType else { return }
+                            viewModel.handoffDidComplete(
+                                romId: currentSelectedRom.id,
+                                receivingBundleIdentifier: activityType
+                            )
+                        }
                     }
                     .sheet(isPresented: $showingSFTPUpload) {
                         SFTPUploadView(rom: currentSelectedRom)
@@ -297,6 +303,7 @@ struct RomDetailView: View {
                     await viewModel.loadRomDetails(romId: rom.id)
                 }
                 viewModel.refreshDownloadState(romId: rom.id)
+                viewModel.refreshPlayTarget()
             }
             .toast(
                 isPresented: $viewModel.showAddedToast,
@@ -498,10 +505,12 @@ struct RomDetailView: View {
 
                 // Only offered for a ROM that is already on the device, on a
                 // platform we can emulate, and with the in-app emulator switched
-                // on, so it never leads to a dead end.
+                // on, so it never leads to a dead end. Handing the ROM to an
+                // external app has none of those limits: the other emulator
+                // decides what it supports.
                 if downloadState == .downloaded
-                    && viewModel.canPlayEmulator
-                    && experimentalSettings.isEmulatorEnabled {
+                    && (viewModel.playsExternally
+                        || (viewModel.canPlayEmulator && experimentalSettings.isEmulatorEnabled)) {
                     Button(action: { startPlay() }) {
                         Group {
                             if viewModel.isLaunchingEmulator {
@@ -522,8 +531,24 @@ struct RomDetailView: View {
                     }
                     .disabled(viewModel.isLaunchingEmulator)
                     .accessibilityLabel("Play")
-                    .accessibility(hint: Text("Play this ROM on this device"))
+                    .accessibility(hint: Text(viewModel.playsExternally
+                        ? "Play this ROM in the external emulator set in Settings"
+                        : "Play this ROM on this device"))
                     .transition(.scale.combined(with: .opacity))
+                    // Anchors the "Open in" popover on iPad to the Play button.
+                    .background(
+                        OpenInMenuPresenter(
+                            item: viewModel.openInItem,
+                            onSent: { bundleIdentifier in
+                                viewModel.handoffDidComplete(
+                                    romId: currentSelectedRom.id,
+                                    receivingBundleIdentifier: bundleIdentifier
+                                )
+                            },
+                            onDismiss: { viewModel.openInItem = nil },
+                            onNoTargets: { viewModel.handoffFoundNoTargets() }
+                        )
+                    )
                 }
             }
             .animation(.easeOut(duration: 0.25), value: downloadState == .downloaded)
@@ -568,6 +593,9 @@ struct RomDetailView: View {
     /// actually load them, otherwise boot straight into a fresh session.
     private func startPlay() {
         Task {
+            // An external emulator owns the whole launch, including its own
+            // save states, so the resume dialog below never applies to it.
+            if await viewModel.playExternally(rom: currentSelectedRom) { return }
             guard let decision = await viewModel.resolveLaunch(rom: currentSelectedRom) else { return }
             let states = (try? saveStore.listStates(romId: rom.id)) ?? []
             guard decision.supportsSaveStates, !states.isEmpty else {
