@@ -37,6 +37,7 @@
 		A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE11 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		5DCA1106000000000000C102 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
+		5DCB1107000000000000D103 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -219,6 +220,7 @@
 			files = (
 				5DF893F92FB7D26D0083B111 /* DeltaCore.framework in Frameworks */,
 				5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */,
+				5DCB1107000000000000D103 /* MarkdownUI in Frameworks */,
 				5D2C4E1F2F7B9A43009CF871 /* SWCompression in Frameworks */,
 				5D7501352E97A35300DAE612 /* mft.xcframework in Frameworks */,
 				5D93A1712FBF682D00086CE8 /* MelonDSDeltaCore.framework in Frameworks */,
@@ -384,6 +386,7 @@
 			name = romm;
 			packageProductDependencies = (
 				5D9D918D2E5F8F21009AF769 /* Kingfisher */,
+				5DCB1107000000000000D102 /* MarkdownUI */,
 				5D2C4E1E2F7B9A43009CF871 /* SWCompression */,
 			);
 			productName = romm;
@@ -471,6 +474,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -1006,6 +1010,14 @@
 				minimumVersion = 8.5.0;
 			};
 		};
+		5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1018,6 +1030,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
+		};
+		5DCB1107000000000000D102 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

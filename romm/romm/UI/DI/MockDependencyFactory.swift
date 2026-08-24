@@ -38,6 +38,44 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var externalDisplayPreference: PExternalDisplayPreference = InMemoryExternalDisplayPreference()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 
+    // Changelog / Update Check
+    lazy var changelogRepository: PChangelogRepository = ChangelogRepository()
+    private lazy var changelogSeenStore: PChangelogSeenStore = UserDefaultsChangelogSeenStore()
+    private lazy var updateCheckStateStore: PUpdateCheckStateStore = UserDefaultsUpdateCheckStateStore()
+
+    func makeGetWhatsNewUseCase() -> PGetWhatsNewUseCase {
+        GetWhatsNewUseCase(repository: changelogRepository, seenStore: changelogSeenStore)
+    }
+
+    func makeGetChangelogUseCase() -> PGetChangelogUseCase {
+        GetChangelogUseCase(repository: changelogRepository)
+    }
+
+    func makeMarkChangelogSeenUseCase() -> PMarkChangelogSeenUseCase {
+        MarkChangelogSeenUseCase(repository: changelogRepository, seenStore: changelogSeenStore)
+    }
+
+    func makeCheckForUpdateUseCase() -> PCheckForUpdateUseCase {
+        CheckForUpdateUseCase(repository: changelogRepository, stateStore: updateCheckStateStore)
+    }
+
+    func makeGetCachedUpdateUseCase() -> PGetCachedUpdateUseCase {
+        GetCachedUpdateUseCase(repository: changelogRepository, stateStore: updateCheckStateStore)
+    }
+
+    func makeDismissUpdateUseCase() -> PDismissUpdateUseCase {
+        DismissUpdateUseCase(stateStore: updateCheckStateStore)
+    }
+
+    lazy var appUpdateStore: AppUpdateStore = AppUpdateStore(
+        getWhatsNew: makeGetWhatsNewUseCase(),
+        getChangelog: makeGetChangelogUseCase(),
+        markChangelogSeen: makeMarkChangelogSeenUseCase(),
+        checkForUpdate: makeCheckForUpdateUseCase(),
+        getCachedUpdate: makeGetCachedUpdateUseCase(),
+        dismissUpdate: makeDismissUpdateUseCase()
+    )
+
     // Controller skins
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
     private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)

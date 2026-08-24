@@ -17,7 +17,8 @@ struct SettingsView: View {
     @State private var showingLogoutAlert = false
     @State private var showingResetAlert = false
     @State private var showingWhatsNew = false
-    
+    private let updateStore: AppUpdateStore = DefaultDependencyFactory.shared.appUpdateStore
+
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
@@ -249,8 +250,8 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .sheet(isPresented: $showingWhatsNew) {
-            // Show all entries from Settings; no mark-seen side effect
-            WhatsNewView(entries: ChangelogStore.shared.entries, markSeenOnDismiss: false)
+            // The whole history from Settings, and no mark-seen side effect.
+            WhatsNewView(entries: updateStore.versionHistory(), mode: .versionHistory)
         }
         .alert("Logout", isPresented: $showingLogoutAlert) {
             Button("Cancel", role: .cancel) { }

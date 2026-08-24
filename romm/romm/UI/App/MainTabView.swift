@@ -10,10 +10,12 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject var appData: AppData
     private let dependencyFactory: PDependencyFactory
+    private let updateStore: AppUpdateStore
     @State private var showWhatsNew = false
 
     init(dependencyFactory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.dependencyFactory = dependencyFactory
+        self.updateStore = dependencyFactory.appUpdateStore
     }
 
     var body: some View {
@@ -59,13 +61,18 @@ struct MainTabView: View {
             }
         }
         .sheet(isPresented: $showWhatsNew) {
-            WhatsNewView()
+            WhatsNewView(
+                entries: updateStore.whatsNewEntries,
+                mode: .whatsNew,
+                onClose: { updateStore.markWhatsNewSeen() }
+            )
         }
         .task {
-            if ChangelogStore.shared.shouldShowWhatsNew {
+            updateStore.loadLocalState()
+            if updateStore.shouldShowWhatsNew {
                 showWhatsNew = true
             }
-            await UpdateCheckService.shared.checkForUpdate()
+            await updateStore.checkForUpdates()
         }
     }
 }

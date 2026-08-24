@@ -14,10 +14,14 @@ import SwiftUI
 /// Inline card for the top of a scroll view. Renders to nothing when there is no
 /// pending update, so callers can embed it unconditionally.
 struct UpdateAvailableBanner: View {
-    @State private var service = UpdateCheckService.shared
+    private let store: AppUpdateStore
+
+    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.store = factory.appUpdateStore
+    }
 
     var body: some View {
-        if let update = service.availableUpdate {
+        if let update = store.availableUpdate {
             Button {
                 TestFlightLink.open()
             } label: {
@@ -41,7 +45,7 @@ struct UpdateAvailableBanner: View {
                     .multilineTextAlignment(.leading)
 
                     Button {
-                        service.dismissCurrentUpdate()
+                        store.dismissAvailableUpdate()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.caption2.weight(.bold))
@@ -67,7 +71,7 @@ struct UpdateAvailableBanner: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 16)
             .transition(.opacity.combined(with: .move(edge: .top)))
-            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: service.availableUpdate)
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: store.availableUpdate)
         }
     }
 }
@@ -77,10 +81,14 @@ struct UpdateAvailableBanner: View {
 /// A compact Settings-list row that shows when an update is available.
 /// Renders to nothing when there is no pending update.
 struct UpdateAvailableRow: View {
-    @State private var service = UpdateCheckService.shared
+    private let store: AppUpdateStore
+
+    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.store = factory.appUpdateStore
+    }
 
     var body: some View {
-        if let update = service.availableUpdate {
+        if let update = store.availableUpdate {
             Button {
                 TestFlightLink.open()
             } label: {
@@ -101,61 +109,5 @@ struct UpdateAvailableRow: View {
             }
             .buttonStyle(.plain)
         }
-    }
-}
-
-// MARK: - Opening TestFlight
-
-enum TestFlightLink {
-    private static let testFlight = URL(string: "itms-beta://")!
-    private static let appStore = URL(string: "https://apps.apple.com/app/testflight/id899247664")!
-
-    /// Opens the TestFlight app, falling back to its App Store page when it is not
-    /// installed. `canOpenURL` for itms-beta needs LSApplicationQueriesSchemes, so we
-    /// just attempt the open and use the completion handler as the probe.
-    static func open() {
-        UIApplication.shared.open(testFlight, options: [:]) { success in
-            if !success {
-                UIApplication.shared.open(appStore)
-            }
-        }
-    }
-}
-
-// MARK: - Previews
-
-#Preview("Banner") {
-    ScrollView {
-        VStack(spacing: 16) {
-            UpdateAvailableBanner()
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.quaternary)
-                .frame(height: 160)
-                .padding(.horizontal, 16)
-        }
-        .padding(.vertical, 16)
-    }
-    .background(Color(.systemGroupedBackground))
-    .onAppear {
-        UpdateCheckService.shared.availableUpdate = .init(
-            build: 52, version: "1.0", date: "2026-08-23", entries: []
-        )
-    }
-}
-
-#Preview("Row") {
-    NavigationStack {
-        List {
-            Section("App Settings") {
-                UpdateAvailableRow()
-                Text("Other setting")
-            }
-        }
-        .navigationTitle("Settings")
-    }
-    .onAppear {
-        UpdateCheckService.shared.availableUpdate = .init(
-            build: 52, version: "1.0", date: "2026-08-23", entries: []
-        )
     }
 }
