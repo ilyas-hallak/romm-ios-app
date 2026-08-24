@@ -47,6 +47,12 @@ class RomDetailViewModel {
     var shareItem: ShareURLsItem? = nil
     var showAddedToast: Bool = false
 
+    // External emulator handoff
+    /// File waiting to be handed to an external emulator through the "Open in" menu.
+    var openInItem: OpenInItem? = nil
+    /// Play destination, mirrored into state so the button reacts to a settings change.
+    var playTarget: PlayTarget = .builtIn
+
     /// Shared, app-wide download queue. Downloads keep running after this screen
     /// is dismissed; the queue is viewable from the Downloads tab.
     let downloadQueue = DownloadQueueManager.shared
@@ -84,6 +90,9 @@ class RomDetailViewModel {
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
     private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
     private let getROMShareFilesUseCase: PGetROMShareFilesUseCase
+    private let playTargetPreference: PPlayTargetPreference
+    private let externalEmulatorHandoffStore: PExternalEmulatorHandoffStore
+    private let externalAppLauncher: PExternalAppLauncher
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared,
          apiClient: PRommAPIClient = RommAPIClient.shared) {
@@ -98,6 +107,10 @@ class RomDetailViewModel {
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
         self.getDownloadedROMUseCase = factory.makeGetDownloadedROMUseCase()
         self.getROMShareFilesUseCase = factory.makeGetROMShareFilesUseCase()
+        self.playTargetPreference = factory.playTargetPreference
+        self.externalEmulatorHandoffStore = factory.externalEmulatorHandoffStore
+        self.externalAppLauncher = factory.externalAppLauncher
+        self.playTarget = factory.playTargetPreference.current
     }
     
     func loadRomDetails(romId: Int) async {
@@ -373,11 +386,16 @@ class RomDetailViewModel {
     func present(_ decision: LaunchDecision, rom: Rom) {
         logger.info("Launching emulator for ROM: \(rom.name) — decision: \(String(describing: decision))")
         self.launchDecision = decision
+        markPlayed(romId: rom.id)
+    }
+
+    /// Reports the ROM as played to the server, best effort.
+    private func markPlayed(romId: Int) {
         Task { [updateLastPlayedUseCase, logger] in
             do {
-                try await updateLastPlayedUseCase.execute(romId: rom.id)
+                try await updateLastPlayedUseCase.execute(romId: romId)
             } catch {
-                logger.warning("Failed to update last_played for ROM \(rom.id): \(error)")
+                logger.warning("Failed to update last_played for ROM \(romId): \(error)")
             }
         }
     }
@@ -417,11 +435,117 @@ class RomDetailViewModel {
         }
     }
 
-    /// Cleans up the temporary directory created for sharing.
+    /// Dismisses the share sheet.
+    ///
+    /// The temp copy is deliberately left behind: apps that open documents in
+    /// place (RetroArch) still read from it while importing, and deleting it here
+    /// would truncate the import. `GetROMShareFilesUseCase` collects old copies on
+    /// the next share instead.
     func cleanupShareTemp() {
-        if let dir = shareItem?.tempDirectory {
-            try? FileManager.default.removeItem(at: dir)
-        }
         shareItem = nil
+    }
+
+    // MARK: - External Emulator
+
+    /// True when Play hands the ROM to another app instead of emulating it here.
+    var playsExternally: Bool { playTarget.externalEmulator != nil }
+
+    /// Re-reads the Play destination, e.g. after coming back from settings.
+    func refreshPlayTarget() {
+        playTarget = playTargetPreference.current
+    }
+
+    /// Routes a Play tap to the configured external emulator.
+    ///
+    /// The first launch has to go through the system "Open in" menu because iOS
+    /// does not let us preselect a target; once the app has imported the ROM, its
+    /// URL scheme boots it directly.
+    ///
+    /// - Returns: false when the built-in emulator should take over instead.
+    func playExternally(rom: Rom) async -> Bool {
+        guard let target = playTarget.externalEmulator else { return false }
+
+        guard externalAppLauncher.isInstalled(target) else {
+            errorMessage = "\(target.displayName) is not installed. Install it, or switch Play back to the built-in emulator in Settings."
+            return true
+        }
+
+        guard let resolved = try? getDownloadedROMUseCase.execute(romId: rom.id) else {
+            errorMessage = "Download this ROM before opening it in \(target.displayName)."
+            return true
+        }
+
+        if externalEmulatorHandoffStore.hasHandedOff(romId: rom.id, to: target),
+           let fileName = primaryFileName(of: resolved.rom) {
+            if await externalAppLauncher.launch(target, fileName: fileName) {
+                logger.info("Launched ROM \(rom.id) in \(target.displayName)")
+                markPlayed(romId: rom.id)
+                return true
+            }
+            // The app turned the link down, so its library no longer holds the
+            // ROM. Hand it over again rather than leaving Play dead.
+            logger.info("\(target.displayName) rejected the deep link, handing the ROM over again")
+            externalEmulatorHandoffStore.forget(romId: rom.id)
+        }
+
+        await presentHandoff(of: resolved.rom, to: target)
+        return true
+    }
+
+    /// Records that an "Open in" menu actually delivered the ROM, so the next Play
+    /// tap can deep link instead of asking again.
+    func handoffDidComplete(romId: Int, receivingBundleIdentifier: String) {
+        guard let target = playTarget.externalEmulator else { return }
+        guard target.matches(bundleIdentifier: receivingBundleIdentifier) else {
+            logger.info("ROM \(romId) went to \(receivingBundleIdentifier), not \(target.displayName) — not remembered")
+            return
+        }
+        externalEmulatorHandoffStore.markHandedOff(romId: romId, to: target)
+        markPlayed(romId: romId)
+    }
+
+    /// No installed app claims this file type, so the "Open in" menu stayed empty.
+    func handoffFoundNoTargets() {
+        let name = playTarget.externalEmulator?.displayName ?? "the external emulator"
+        errorMessage = "No app on this device can open this ROM. Make sure \(name) is installed and supports this file type."
+        openInItem = nil
+    }
+
+    // MARK: - Private
+
+    private func presentHandoff(of rom: DownloadedROM, to target: ExternalEmulator) async {
+        // Handing a file over means copying it out of the ROM folder first, which
+        // for a disc image is not instant. Show the Play spinner while it runs.
+        isLaunchingEmulator = true
+        await Task.yield()
+        let result = getROMShareFilesUseCase.execute(rom: rom)
+        isLaunchingEmulator = false
+
+        guard !result.files.isEmpty else {
+            errorMessage = "No files available to open."
+            return
+        }
+        // The "Open in" menu carries a single document. Multi-file ROMs such as
+        // cue/bin need every part, so those go through the share sheet, which the
+        // user then has to point at the emulator themselves.
+        if result.files.count == 1, let url = result.files.first {
+            openInItem = OpenInItem(url: url, tempDirectory: result.tempDirectory)
+        } else {
+            shareItem = ShareURLsItem(urls: result.files, tempDirectory: result.tempDirectory)
+        }
+    }
+
+    /// The file an external emulator should be pointed at.
+    ///
+    /// Disc-based ROMs ship a playlist or sheet next to the data tracks, and that
+    /// is the file emulators expect — a raw `.bin` boots nothing.
+    private func primaryFileName(of rom: DownloadedROM) -> String? {
+        let preferredExtensions = ["m3u", "cue"]
+        for ext in preferredExtensions {
+            if let match = rom.files.first(where: { $0.fileName.lowercased().hasSuffix(".\(ext)") }) {
+                return match.fileName
+            }
+        }
+        return rom.files.first?.fileName
     }
 }
