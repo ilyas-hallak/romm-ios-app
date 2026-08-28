@@ -1,3 +1,5 @@
+import CoreHaptics
+import GameController
 import SwiftUI
 
 /// Where a Play tap sends a game, across both the built-in engines and the
@@ -41,6 +43,14 @@ struct EmulatorEngineSettingsView: View {
 
     #if DEBUG
     @State private var simulateController = EmulatorControllerState.simulateConnected
+    /// Kept in @State so the engine survives body recomputations. The view is
+    /// MainActor-isolated (SWIFT_DEFAULT_ACTOR_ISOLATION), so building the
+    /// @MainActor RumbleOutput in the property initializer is fine.
+    @State private var rumbleTester = RumbleOutput()
+    @State private var rumbleTestTask: Task<Void, Never>?
+    @State private var deviceHapticsStatus = ""
+    @State private var controllerStatus = ""
+    @State private var controllerHapticsStatus = ""
     #endif
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
@@ -102,10 +112,20 @@ struct EmulatorEngineSettingsView: View {
                         EmulatorControllerState.simulateConnected = new
                     }
             }
+
+            rumbleTestSection
             #endif
         }
         .navigationTitle("Emulator")
-        .onAppear { refreshInstalledEmulators() }
+        .onAppear {
+            refreshInstalledEmulators()
+            #if DEBUG
+            refreshRumbleDiagnostics()
+            #endif
+        }
+        #if DEBUG
+        .onDisappear { stopRumbleTest() }
+        #endif
         .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
         .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
         .onChange(of: rumbleEnabled) { _, new in rumblePreference.isEnabled = new }
@@ -190,4 +210,84 @@ struct EmulatorEngineSettingsView: View {
     private func refreshInstalledEmulators() {
         installedEmulators = ExternalEmulatorID.allCases.filter { externalAppLauncher.isInstalled($0.emulator) }
     }
+
+    #if DEBUG
+
+    // MARK: - Rumble test
+
+    /// Drives the haptic layer straight from the settings screen, so a quiet game
+    /// can be told apart from a quiet device without going through the emulator.
+    @ViewBuilder
+    private var rumbleTestSection: some View {
+        Section(
+            header: Text("Rumble test"),
+            footer: Text("Plays the motors directly, ignoring the Rumble switch and the emulator, at the intensity selected above. Each pulse lasts 800 ms and goes to a connected controller if there is one, otherwise to the device's own haptics.")
+        ) {
+            #if os(iOS)
+            rumbleStatusRow("Device haptics", deviceHapticsStatus)
+            #endif
+            rumbleStatusRow("Controller", controllerStatus)
+            rumbleStatusRow("Controller haptics", controllerHapticsStatus)
+
+            Button("Pulse strong") { pulseRumble(strong: 1, weak: 0) }
+            Button("Pulse weak") { pulseRumble(strong: 0, weak: 1) }
+            Button("Pulse both") { pulseRumble(strong: 1, weak: 1) }
+        }
+    }
+
+    private func rumbleStatusRow(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Read once per appearance. A pad paired while the screen is open shows up
+    /// on the next visit, which is enough for a debug readout.
+    private func refreshRumbleDiagnostics() {
+        #if os(iOS)
+        deviceHapticsStatus = CHHapticEngine.capabilitiesForHardware().supportsHaptics
+            ? "Supported"
+            : "Not supported"
+        #endif
+
+        let controller = GCController.controllers().first
+        controllerStatus = controller?.vendorName ?? "None"
+
+        guard let controller else {
+            controllerHapticsStatus = "No controller"
+            return
+        }
+        guard let haptics = controller.haptics else {
+            controllerHapticsStatus = "None"
+            return
+        }
+        let localities = haptics.supportedLocalities.map(\.rawValue).sorted()
+        controllerHapticsStatus = localities.isEmpty ? "None" : localities.joined(separator: ", ")
+    }
+
+    /// The engine is left running afterwards, so the next tap does not pay the
+    /// start-up latency again. Only `onDisappear` tears it down.
+    private func pulseRumble(strong: Float, weak: Float) {
+        rumbleTester.scale = rumbleIntensity.scale
+        rumbleTester.start()
+        rumbleTester.attach(controller: GCController.controllers().first)
+        rumbleTester.setMotors(strong: strong, weak: weak)
+
+        rumbleTestTask?.cancel()
+        rumbleTestTask = Task {
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled else { return }
+            rumbleTester.setMotors(strong: 0, weak: 0)
+        }
+    }
+
+    private func stopRumbleTest() {
+        rumbleTestTask?.cancel()
+        rumbleTestTask = nil
+        rumbleTester.stop()
+    }
+
+    #endif
 }
