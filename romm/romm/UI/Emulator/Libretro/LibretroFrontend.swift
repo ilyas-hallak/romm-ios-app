@@ -86,7 +86,15 @@ final class LibretroFrontend {
     private var reportedStrong: UInt16 = 0
     private var reportedWeak: UInt16 = 0
 
+    /// Logged once, to tell "the core never calls" apart from "the core calls
+    /// but only ever asks for zero".
+    private var loggedFirstRumbleCall = false
+
     func setRumbleState(port: UInt32, effect: UInt32, strength: UInt16) {
+        if !loggedFirstRumbleCall {
+            loggedFirstRumbleCall = true
+            print("[Libretro] first set_rumble_state: port=\(port) effect=\(effect) strength=\(strength)")
+        }
         guard port == 0 else { return }
         switch effect {
         case LibretroABI.RUMBLE_STRONG: rumbleStrong = strength
@@ -102,6 +110,8 @@ final class LibretroFrontend {
         guard rumbleStrong != reportedStrong || rumbleWeak != reportedWeak else { return }
         reportedStrong = rumbleStrong
         reportedWeak = rumbleWeak
+        // A change is rare enough to log, unlike the per frame calls above.
+        print("[Libretro] rumble strong=\(rumbleStrong) weak=\(rumbleWeak)")
         onRumbleChanged?(
             Float(rumbleStrong) / Float(UInt16.max),
             Float(rumbleWeak) / Float(UInt16.max)

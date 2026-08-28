@@ -34,6 +34,10 @@ final class RumbleOutput {
     private static let weakSharpness: Float = 0.85
     /// Sharpness used when both channels share one motor.
     private static let combinedSharpness: Float = 0.5
+    /// How hard the weak channel is allowed to hit once both channels share a
+    /// single actuator. Only used on the combined path, a pad with separate
+    /// handles brings that difference in hardware.
+    private static let weakMotorRatio: Float = 0.5
 
     // MARK: - Public API
 
@@ -128,7 +132,13 @@ final class RumbleOutput {
         if let combinedChannel {
             // One motor for both channels, so the stronger of the two wins.
             // Adding them up would saturate at the slightest bit of rumble.
-            combinedChannel.setIntensity(max(strong, weak))
+            //
+            // The weak channel is damped down here, and only here. On a real pad
+            // the weak motor is the small high frequency one and simply cannot
+            // hit as hard as the big one, but a single actuator has no such
+            // asymmetry, and the core reports weak as either off or full blast.
+            // Undamped it lands just as hard as strong, which is wrong.
+            combinedChannel.setIntensity(max(strong, weak * Self.weakMotorRatio))
         } else {
             strongChannel?.setIntensity(strong)
             weakChannel?.setIntensity(weak)
