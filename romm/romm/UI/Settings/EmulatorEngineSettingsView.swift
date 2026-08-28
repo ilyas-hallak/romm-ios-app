@@ -29,10 +29,13 @@ struct EmulatorEngineSettingsView: View {
     @State private var playChoice: PlayChoice
     @State private var menuShortcut: EmulatorMenuShortcut
     @State private var swapFaceButtons: Bool
+    @State private var rumbleEnabled: Bool
+    @State private var rumbleIntensity: RumbleIntensity
     @State private var installedEmulators: [ExternalEmulatorID] = []
     private let preference: PEmulatorEnginePreference
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
     private let faceButtonPreference: PGamepadFaceButtonPreference
+    private let rumblePreference: PRumblePreference
     private let playTargetPreference: PPlayTargetPreference
     private let externalAppLauncher: PExternalAppLauncher
 
@@ -44,10 +47,13 @@ struct EmulatorEngineSettingsView: View {
         self.preference = factory.enginePreference
         self.menuShortcutPreference = factory.emulatorMenuShortcutPreference
         self.faceButtonPreference = factory.gamepadFaceButtonPreference
+        self.rumblePreference = factory.rumblePreference
         self.playTargetPreference = factory.playTargetPreference
         self.externalAppLauncher = factory.externalAppLauncher
         _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
         _swapFaceButtons = State(wrappedValue: factory.gamepadFaceButtonPreference.isSwapped)
+        _rumbleEnabled = State(wrappedValue: factory.rumblePreference.isEnabled)
+        _rumbleIntensity = State(wrappedValue: factory.rumblePreference.intensity)
         _playChoice = State(wrappedValue: PlayChoice(
             engine: factory.enginePreference.current,
             target: factory.playTargetPreference.current
@@ -58,7 +64,7 @@ struct EmulatorEngineSettingsView: View {
         Form {
             playWithSection
 
-            Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it — handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
+            Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it, handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
 
             Section(
                 header: Text("Controller"),
@@ -73,6 +79,17 @@ struct EmulatorEngineSettingsView: View {
 
             Section(footer: Text("Face buttons are read by position, never by the label printed on them, so a Nintendo-style pad ends up with A and B the wrong way round. Turn this on if the buttons in a game don't match your controller.")) {
                 Toggle("Swap A/B and X/Y", isOn: $swapFaceButtons)
+            }
+
+            Section(footer: Text("Only PlayStation games report rumble, so it stays quiet everywhere else. It plays on a connected controller if that one has motors, otherwise through the device's own haptics. Turning it on switches the PlayStation controller type to DualShock, so turn it back off if a game misbehaves with that.")) {
+                Toggle("Rumble", isOn: $rumbleEnabled)
+
+                Picker("Intensity", selection: $rumbleIntensity) {
+                    ForEach(RumbleIntensity.allCases) { intensity in
+                        Text(intensity.displayName).tag(intensity)
+                    }
+                }
+                .disabled(!rumbleEnabled)
             }
 
             #if DEBUG
@@ -91,6 +108,8 @@ struct EmulatorEngineSettingsView: View {
         .onAppear { refreshInstalledEmulators() }
         .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
         .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
+        .onChange(of: rumbleEnabled) { _, new in rumblePreference.isEnabled = new }
+        .onChange(of: rumbleIntensity) { _, new in rumblePreference.intensity = new }
         .onChange(of: playChoice) { _, new in apply(new) }
     }
 

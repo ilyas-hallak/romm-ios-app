@@ -11,8 +11,12 @@ final class LibretroSession: NSObject {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
+    private let rumblePreference: PRumblePreference?
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
+
+    // MARK: - Rumble
+    private let rumbleOutput = RumbleOutput()
 
     var onMenuRequested: (() -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
@@ -39,6 +43,7 @@ final class LibretroSession: NSObject {
         screenPositionPreference: PEmulatorScreenPositionPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         faceButtonPreference: PGamepadFaceButtonPreference? = nil,
+        rumblePreference: PRumblePreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -47,6 +52,7 @@ final class LibretroSession: NSObject {
         self.saveStates = saveStates
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
+        self.rumblePreference = rumblePreference
         self.cloudSync = cloudSync
         self.externalRenderTarget = nil
         self.viewController = LibretroGameViewController(
@@ -157,12 +163,38 @@ final class LibretroSession: NSObject {
             let saveDir = libretroSaveDirectory().path
             print("[Libretro] core=\(corePath)")
             print("[Libretro] system=\(systemDir) save=\(saveDir)")
+
+            // pcsx_rearmed only reports rumble on a DualShock port, and that port
+            // also changes what the core expects from us. With rumble switched
+            // off we stay on the plain pad, which is exactly the old behaviour.
+            // The preference is read once here, never per frame.
+            let preference = rumblePreference
+            let rumbleActive = (preference?.isEnabled ?? false) && core == .pcsxRearmed
+            let portDevice = rumbleActive
+                ? LibretroABI.DEVICE_PSE_DUALSHOCK
+                : LibretroABI.DEVICE_JOYPAD
+
             try frontend.load(
                 corePath: corePath,
                 gamePath: gameURL.path,
                 systemDir: systemDir,
-                saveDir: saveDir
+                saveDir: saveDir,
+                portDevice: portDevice
             )
+
+            // Only after the core is up, so a failed load leaves no haptics
+            // engine running and no hook dangling on the shared frontend. The
+            // hook just has to be in place before the first frame runs.
+            if rumbleActive, let preference {
+                rumbleOutput.scale = preference.intensity.scale
+                rumbleOutput.start()
+                rumbleOutput.attach(controller: attachedController)
+                frontend.onRumbleChanged = { [weak self] strong, weak in
+                    self?.rumbleOutput.setMotors(strong: strong, weak: weak)
+                }
+                print("[Libretro] rumble enabled (\(preference.intensity.rawValue))")
+            }
+
             frontend.startRunLoop()
         } catch let error as LibretroFrontend.FrontendError {
             print("[Libretro] start failed: \(error.diagnosticDescription)")
@@ -184,6 +216,8 @@ final class LibretroSession: NSObject {
         // connect/disconnect events.
         controllerInput.detach(from: attachedController)
         attachedController = nil
+        // Back to the device haptics until a controller shows up again.
+        rumbleOutput.attach(controller: nil)
         attachControllerIfPresent()
     }
 
@@ -191,6 +225,7 @@ final class LibretroSession: NSObject {
         guard let controller = GCController.controllers().first else { return }
         attachedController = controller
         controllerInput.attach(to: controller)
+        rumbleOutput.attach(controller: controller)
         print("[Libretro] physical controller attached: \(controller.vendorName ?? "unknown")")
     }
 
@@ -211,6 +246,7 @@ final class LibretroSession: NSObject {
         externalRenderTarget = nil
         frontend.videoSink = nil
         frontend.stop()
+        rumbleOutput.stop()
         flushBatteryFromSaveDir()
     }
 

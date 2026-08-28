@@ -71,6 +71,52 @@ final class LibretroFrontend {
         for i in 0..<buttonState.count { buttonState[i] = false }
     }
 
+    // MARK: - Rumble state (port 0)
+
+    /// Called whenever a motor level actually changes, with both channels
+    /// normalized to 0...1.
+    var onRumbleChanged: ((Float, Float) -> Void)?
+
+    /// What the core last asked for.
+    private var rumbleStrong: UInt16 = 0
+    private var rumbleWeak: UInt16 = 0
+    /// What we last handed to `onRumbleChanged`. Tracked separately from the core
+    /// state so pausing can silence the motors without making the core's next
+    /// (unchanged) value look like a no-op after resuming.
+    private var reportedStrong: UInt16 = 0
+    private var reportedWeak: UInt16 = 0
+
+    func setRumbleState(port: UInt32, effect: UInt32, strength: UInt16) {
+        guard port == 0 else { return }
+        switch effect {
+        case LibretroABI.RUMBLE_STRONG: rumbleStrong = strength
+        case LibretroABI.RUMBLE_WEAK: rumbleWeak = strength
+        default: return
+        }
+        notifyRumbleIfChanged()
+    }
+
+    /// The core may call the rumble interface every frame, so only a real change
+    /// is forwarded.
+    private func notifyRumbleIfChanged() {
+        guard rumbleStrong != reportedStrong || rumbleWeak != reportedWeak else { return }
+        reportedStrong = rumbleStrong
+        reportedWeak = rumbleWeak
+        onRumbleChanged?(
+            Float(rumbleStrong) / Float(UInt16.max),
+            Float(rumbleWeak) / Float(UInt16.max)
+        )
+    }
+
+    /// Silences the motors without touching the core state, so the next core
+    /// value gets through again even if it is the one from before the pause.
+    private func silenceRumble() {
+        guard reportedStrong != 0 || reportedWeak != 0 else { return }
+        reportedStrong = 0
+        reportedWeak = 0
+        onRumbleChanged?(0, 0)
+    }
+
     // MARK: - Audio state (Implementation in LibretroFrontend+Audio.swift)
     let audioEngine = AVAudioEngine()
     var audioSourceNode: AVAudioSourceNode?
@@ -99,7 +145,18 @@ final class LibretroFrontend {
         }
     }
 
-    func load(corePath: String, gamePath: String, systemDir: String, saveDir: String) throws {
+    /// - Parameter portDevice: Device reported for controller port 0, usually
+    ///   `LibretroABI.DEVICE_JOYPAD`. It is applied after `retro_load_game`,
+    ///   which resets the port to a plain pad internally. No default here: the
+    ///   constants are main-actor isolated, and a default argument is evaluated
+    ///   in the caller's (nonisolated) context.
+    func load(
+        corePath: String,
+        gamePath: String,
+        systemDir: String,
+        saveDir: String,
+        portDevice: UInt32
+    ) throws {
         guard FileManager.default.fileExists(atPath: corePath) else {
             throw FrontendError.dylibNotFound(corePath)
         }
@@ -183,7 +240,7 @@ final class LibretroFrontend {
         self.avInfo = av
         print("[Libretro] AV: \(av.geometry.base_width)x\(av.geometry.base_height) @\(av.timing.fps)Hz audio=\(av.timing.sample_rate)Hz")
 
-        retro_set_controller_port_device?(0, LibretroABI.DEVICE_JOYPAD)
+        retro_set_controller_port_device?(0, portDevice)
 
         startAudio(sampleRate: av.timing.sample_rate > 0 ? av.timing.sample_rate : 44100)
     }
@@ -271,6 +328,11 @@ final class LibretroFrontend {
         displayLink = nil
         stopAudio()
         clearAllButtons()
+        rumbleStrong = 0
+        rumbleWeak = 0
+        reportedStrong = 0
+        reportedWeak = 0
+        onRumbleChanged?(0, 0)
         writeSRAMToDisk()
         sramURL = nil
         retro_unload_game?()
@@ -281,7 +343,9 @@ final class LibretroFrontend {
         }
         // Drop stale C function pointers into the now-unmapped dylib so a
         // delayed pause/resume from a stray scenePhase callback can't jump
-        // into freed text segments.
+        // into freed text segments. The rumble hook goes with them: the session
+        // that owns its haptics is on its way out too.
+        onRumbleChanged = nil
         retro_init = nil; retro_deinit = nil
         retro_get_system_info = nil; retro_get_system_av_info = nil
         retro_set_environment = nil; retro_set_video_refresh = nil
@@ -299,6 +363,7 @@ final class LibretroFrontend {
         guard let link = displayLink, !link.isPaused else { return }
         link.isPaused = true
         clearAllButtons()
+        silenceRumble()
         pauseAudio()
         writeSRAMToDisk()
     }

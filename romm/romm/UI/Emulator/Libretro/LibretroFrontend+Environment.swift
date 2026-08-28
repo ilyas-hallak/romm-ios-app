@@ -49,6 +49,13 @@ extension LibretroFrontend {
         }
     }
 
+    static let setRumbleStateCallback: LibretroABI.SetRumbleStateFn = { port, effect, strength in
+        MainActor.assumeIsolated {
+            LibretroFrontend.shared.setRumbleState(port: port, effect: effect, strength: strength)
+        }
+        return true
+    }
+
     // MARK: - Environment dispatch
 
     func handleEnv(cmd: UInt32, data: UnsafeMutableRawPointer?) -> Bool {
@@ -76,6 +83,13 @@ extension LibretroFrontend {
             data?.assumingMemoryBound(to: Bool.self).pointee = false
             return true
 
+        case LibretroABI.ENVIRONMENT_GET_RUMBLE_INTERFACE:
+            guard let data = data else { return false }
+            data.assumingMemoryBound(to: LibretroABI.RumbleInterface.self).pointee =
+                LibretroABI.RumbleInterface(set_rumble_state: Self.setRumbleStateCallback)
+            print("[Libretro] rumble interface handed to core")
+            return true
+
         case LibretroABI.ENVIRONMENT_GET_VARIABLE:
             // pcsx_rearmed default `pcsx_rearmed_memcard1 = "disabled"` means the core
             // never allocates the SAVE_RAM buffer -- so retro_get_memory_size(0) returns
@@ -88,6 +102,10 @@ extension LibretroFrontend {
             let answer: String?
             switch key {
             case "pcsx_rearmed_memcard1", "pcsx_rearmed_memcard2": answer = "libretro"
+            // The core would otherwise swallow L1+R1+Select as its analog toggle,
+            // which collides with our own L1+R1 menu shortcut. We do not support
+            // analog sticks anyway, so a manual toggle buys nothing.
+            case "pcsx_rearmed_analog_combo": answer = "disabled"
             default: answer = nil
             }
             if let answer = answer {

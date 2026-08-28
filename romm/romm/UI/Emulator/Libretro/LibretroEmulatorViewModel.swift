@@ -98,6 +98,7 @@ final class LibretroEmulatorViewModel {
                 screenPositionPreference: screenPositionPreference,
                 menuShortcutPreference: menuShortcutPreference,
                 faceButtonPreference: factory.gamepadFaceButtonPreference,
+                rumblePreference: factory.rumblePreference,
                 cloudSync: cloudSync
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }
