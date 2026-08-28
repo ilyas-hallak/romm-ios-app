@@ -185,6 +185,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private let cloudSync: CloudSaveSyncService?
     private let logger = Logger.ui
     let screenPositionPreference: PEmulatorScreenPositionPreference
+    private let faceButtonPreference: PGamepadFaceButtonPreference?
 
     var onMenuRequested: (() -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
@@ -209,13 +210,14 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.emulatorCore
     }
 
-    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, controllerSkinURL: URL? = nil, cloudSync: CloudSaveSyncService? = nil) {
+    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, controllerSkinURL: URL? = nil, faceButtonPreference: PGamepadFaceButtonPreference? = nil, cloudSync: CloudSaveSyncService? = nil) {
         self.gameURL = gameURL
         self.gameType = gameType
         self.romId = romId
         self.saveStates = saveStates
         self.cloudSync = cloudSync
         self.screenPositionPreference = screenPositionPreference
+        self.faceButtonPreference = faceButtonPreference
 
         let vc = RommGameViewController()
         vc.screenPositionPreference = screenPositionPreference
@@ -364,11 +366,21 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         var nextIndex = 0
         for controller in ExternalGameControllerManager.shared.connectedControllers {
             controller.playerIndex = nextIndex
-            controller.addReceiver(core)
-            controller.addReceiver(viewController)
+            attach(controller, to: core)
             nextIndex += 1
         }
         updateOnScreenControlsVisibility()
+    }
+
+    /// Wires one controller to the core and the view controller. Passing the
+    /// default mapping through is exactly what `addReceiver(_:)` does, so with
+    /// the swap off this stays the behaviour the app always had.
+    private func attach(_ controller: GameController, to core: EmulatorCore) {
+        let mapping = (faceButtonPreference?.isSwapped ?? false)
+            ? FaceButtonInputMapping.swappingFaceButtons(of: controller.defaultInputMapping)
+            : controller.defaultInputMapping
+        controller.addReceiver(core, inputMapping: mapping)
+        controller.addReceiver(viewController, inputMapping: mapping)
     }
 
     private func detachExternalControllers() {
@@ -416,8 +428,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         var nextIndex = 0
         while usedIndexes.contains(nextIndex) { nextIndex += 1 }
         controller.playerIndex = nextIndex
-        controller.addReceiver(core)
-        controller.addReceiver(viewController)
+        attach(controller, to: core)
         updateOnScreenControlsVisibility()
     }
 

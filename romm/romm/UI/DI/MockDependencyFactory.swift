@@ -35,6 +35,7 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = InMemoryLibretroAspectRatioPreference()
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = InMemoryEmulatorScreenPositionPreference()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
+    lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = InMemoryExternalDisplayPreference()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 

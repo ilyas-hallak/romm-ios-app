@@ -38,6 +38,7 @@ final class LibretroSession: NSObject {
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
+        faceButtonPreference: PGamepadFaceButtonPreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -59,7 +60,8 @@ final class LibretroSession: NSObject {
         // onMenuRequested is wired after super.init() once self is available.
         self.controllerInput = LibretroControllerInput(
             frontend: LibretroFrontend.shared,
-            menuShortcutPreference: menuShortcutPreference
+            menuShortcutPreference: menuShortcutPreference,
+            faceButtonPreference: faceButtonPreference
         )
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in

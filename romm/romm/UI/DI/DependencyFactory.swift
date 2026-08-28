@@ -124,6 +124,7 @@ protocol PDependencyFactory {
     var libretroAspectRatioPreference: PLibretroAspectRatioPreference { get }
     var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference { get }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
+    var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
     var screenBrightness: PScreenBrightness { get }
 
@@ -413,6 +414,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = UserDefaultsLibretroAspectRatioPreferenceStore()
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = UserDefaultsEmulatorScreenPositionPreferenceStore()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
+    lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 
