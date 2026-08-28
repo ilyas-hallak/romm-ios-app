@@ -1,10 +1,34 @@
 import SwiftUI
 
+/// Where a Play tap sends a game, across both the built-in engines and the
+/// external apps.
+///
+/// These live in two separate preferences, but as a question to the user they
+/// are one: a game runs either here or somewhere else, never both.
+private enum PlayChoice: Hashable {
+    case builtIn(EmulatorEngine)
+    case external(ExternalEmulatorID)
+
+    init(engine: EmulatorEngine, target: PlayTarget) {
+        if let id = target.externalEmulatorID {
+            self = .external(id)
+        } else {
+            self = .builtIn(Self.usableEngine(engine))
+        }
+    }
+
+    /// `.auto`, and `.web` in builds without the web engine, have no row of their
+    /// own, so they resolve to the one that does.
+    private static func usableEngine(_ engine: EmulatorEngine) -> EmulatorEngine {
+        guard AppFeatures.webEmulatorEnabled, engine == .web else { return .native }
+        return .web
+    }
+}
+
 struct EmulatorEngineSettingsView: View {
-    @State private var selection: EmulatorEngine
+    @State private var playChoice: PlayChoice
     @State private var menuShortcut: EmulatorMenuShortcut
-    @State private var playTarget: PlayTarget
-    @State private var installedEmulators: [ExternalEmulator] = []
+    @State private var installedEmulators: [ExternalEmulatorID] = []
     private let preference: PEmulatorEnginePreference
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
     private let playTargetPreference: PPlayTargetPreference
@@ -19,33 +43,16 @@ struct EmulatorEngineSettingsView: View {
         self.menuShortcutPreference = factory.emulatorMenuShortcutPreference
         self.playTargetPreference = factory.playTargetPreference
         self.externalAppLauncher = factory.externalAppLauncher
-        _selection = State(wrappedValue: factory.enginePreference.current)
         _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
-        _playTarget = State(wrappedValue: factory.playTargetPreference.current)
+        _playChoice = State(wrappedValue: PlayChoice(
+            engine: factory.enginePreference.current,
+            target: factory.playTargetPreference.current
+        ))
     }
 
     var body: some View {
         Form {
-            if AppFeatures.webEmulatorEnabled {
-                Section(header: Text("Engine")) {
-                    Picker("Engine", selection: $selection) {
-                        Text("Web (EmulatorJS)").tag(EmulatorEngine.web)
-                        Text("Native (DeltaCore, etc.)").tag(EmulatorEngine.native)
-                    }
-                    .pickerStyle(.inline)
-                }
-                Section(footer: Text("Native runs emulation on-device via embedded cores (DeltaCore for Game Boy / Color, GBA, NES, SNES, N64, Nintendo DS, Sega Genesis; libretro for PlayStation). Other platforms fall back to Web automatically.")) { EmptyView() }
-            } else {
-                Section(footer: Text("Emulation runs on-device via embedded native cores: DeltaCore for Game Boy / Color, GBA, NES, SNES, N64, Nintendo DS, Sega Genesis; libretro for PlayStation. Other platforms are not supported.")) {
-                    HStack {
-                        Text("Engine")
-                        Spacer()
-                        Text("Native").foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            playTargetSection
+            playWithSection
 
             Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it — handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
 
@@ -74,50 +81,85 @@ struct EmulatorEngineSettingsView: View {
         }
         .navigationTitle("Emulator")
         .onAppear { refreshInstalledEmulators() }
-        .onChange(of: selection) { _, new in preference.current = new }
         .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
-        .onChange(of: playTarget) { _, new in playTargetPreference.current = new }
+        .onChange(of: playChoice) { _, new in apply(new) }
     }
 
-    /// Lets Play hand the ROM to another emulator app instead of running it here.
+    /// One list for where a game runs, built-in engines first, then the apps a
+    /// ROM can be handed to.
     @ViewBuilder
-    private var playTargetSection: some View {
-        if installedEmulators.isEmpty && playTarget == .builtIn {
-            Section(
-                header: Text("Play with"),
-                footer: Text("Install RetroArch to play ROMs there instead of in the built-in emulator.")
-            ) {
+    private var playWithSection: some View {
+        Section(header: Text("Play with"), footer: Text(footerText)) {
+            if choices.count > 1 {
+                Picker("Play with", selection: $playChoice) {
+                    ForEach(choices, id: \.self) { choice in
+                        Text(label(for: choice)).tag(choice)
+                    }
+                }
+                .pickerStyle(.inline)
+            } else {
+                // Nothing to choose between, so a picker would only look broken.
                 HStack {
                     Text("Play with")
                     Spacer()
-                    Text("Built-in emulator").foregroundStyle(.secondary)
+                    Text(label(for: playChoice)).foregroundStyle(.secondary)
                 }
             }
-        } else {
-            Section(
-                header: Text("Play with"),
-                footer: Text("The first time a ROM goes to another app you pick it from the system menu, which also imports the file. Every Play after that opens it there directly. Save states are not shared between the apps.")
-            ) {
-                Picker("Play with", selection: $playTarget) {
-                    Text("Built-in emulator").tag(PlayTarget.builtIn)
-                    ForEach(pickableEmulators, id: \.self) { emulator in
-                        Text(emulator.displayName).tag(PlayTarget.external(emulator))
-                    }
-                }
-            }
+        }
+    }
+
+    private var choices: [PlayChoice] {
+        var choices: [PlayChoice] = AppFeatures.webEmulatorEnabled
+            ? [.builtIn(.web), .builtIn(.native)]
+            : [.builtIn(.native)]
+        choices += pickableEmulators.map { .external($0) }
+        return choices
+    }
+
+    private func label(for choice: PlayChoice) -> String {
+        switch choice {
+        case .builtIn(let engine):
+            guard AppFeatures.webEmulatorEnabled else { return "Built-in emulator" }
+            return engine == .web ? "Web (EmulatorJS)" : "Native (DeltaCore, etc.)"
+        case .external(let id):
+            return "External: \(id.emulator.displayName)"
+        }
+    }
+
+    private var footerText: String {
+        guard !pickableEmulators.isEmpty else {
+            return "Install \(supportedEmulatorNames) to play ROMs there instead of on this device."
+        }
+        return "An external app is handed the ROM once through the system menu, then opens it directly. Save states are not shared between apps."
+    }
+
+    private func apply(_ choice: PlayChoice) {
+        switch choice {
+        case .builtIn(let engine):
+            preference.current = engine
+            playTargetPreference.current = .builtIn
+        case .external(let id):
+            playTargetPreference.current = .external(id)
         }
     }
 
     /// Installed apps, plus whatever is currently selected so an uninstalled
     /// choice does not silently disappear from the picker.
-    private var pickableEmulators: [ExternalEmulator] {
-        guard let selected = playTarget.externalEmulator, !installedEmulators.contains(selected) else {
+    private var pickableEmulators: [ExternalEmulatorID] {
+        guard case .external(let selected) = playChoice, !installedEmulators.contains(selected) else {
             return installedEmulators
         }
         return installedEmulators + [selected]
     }
 
+    /// Every app Play can hand a ROM to, for the "nothing installed yet" hint.
+    private var supportedEmulatorNames: String {
+        ListFormatter.localizedString(
+            byJoining: ExternalEmulatorID.allCases.map { $0.emulator.displayName }
+        )
+    }
+
     private func refreshInstalledEmulators() {
-        installedEmulators = ExternalEmulator.allCases.filter(externalAppLauncher.isInstalled)
+        installedEmulators = ExternalEmulatorID.allCases.filter { externalAppLauncher.isInstalled($0.emulator) }
     }
 }

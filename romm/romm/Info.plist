@@ -19,6 +19,7 @@
 	<array>
 		<string>itms-beta</string>
 		<string>retroarch</string>
+		<string>delta</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

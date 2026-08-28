@@ -2,6 +2,9 @@ import Foundation
 
 protocol PGetROMShareFilesUseCase {
     func execute(rom: DownloadedROM) -> (files: [URL], tempDirectory: URL?)
+    /// Stages a single already resolved ROM file, e.g. one unpacked out of an
+    /// archive for an emulator that cannot read archives.
+    func execute(fileAt url: URL) -> (files: [URL], tempDirectory: URL?)
 }
 
 final class GetROMShareFilesUseCase: PGetROMShareFilesUseCase {
@@ -18,10 +21,7 @@ final class GetROMShareFilesUseCase: PGetROMShareFilesUseCase {
     func execute(rom: DownloadedROM) -> (files: [URL], tempDirectory: URL?) {
         let romsBaseURL = localROMRepository.romsBaseURL
         let fileManager = FileManager.default
-        purgeStaleShareDirectories(fileManager: fileManager)
-        let shareDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("\(Self.shareDirectoryPrefix)\(UUID().uuidString)")
-        try? fileManager.createDirectory(at: shareDirectory, withIntermediateDirectories: true)
+        let shareDirectory = makeShareDirectory(fileManager: fileManager)
 
         var romDirectoryURL = romsBaseURL.appendingPathComponent(rom.localDirectory)
         if !fileManager.fileExists(atPath: romDirectoryURL.path) {
@@ -31,19 +31,42 @@ final class GetROMShareFilesUseCase: PGetROMShareFilesUseCase {
             romDirectoryURL = actual
         }
 
-        var urls: [URL] = []
-        for file in rom.files {
-            let src = romDirectoryURL.appendingPathComponent(file.fileName)
-            let dst = shareDirectory.appendingPathComponent(file.fileName)
-            guard fileManager.fileExists(atPath: src.path) else { continue }
-            do {
-                try fileManager.copyItem(at: src, to: dst)
-                try fileManager.setAttributes([.posixPermissions: 0o644], ofItemAtPath: dst.path)
-                urls.append(dst)
-            } catch {}
+        let urls = rom.files.compactMap {
+            copy(romDirectoryURL.appendingPathComponent($0.fileName), into: shareDirectory, fileManager: fileManager)
         }
 
         return (urls, urls.isEmpty ? nil : shareDirectory)
+    }
+
+    func execute(fileAt url: URL) -> (files: [URL], tempDirectory: URL?) {
+        let fileManager = FileManager.default
+        let shareDirectory = makeShareDirectory(fileManager: fileManager)
+        guard let staged = copy(url, into: shareDirectory, fileManager: fileManager) else {
+            return ([], nil)
+        }
+        return ([staged], shareDirectory)
+    }
+
+    private func makeShareDirectory(fileManager: FileManager) -> URL {
+        purgeStaleShareDirectories(fileManager: fileManager)
+        let shareDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("\(Self.shareDirectoryPrefix)\(UUID().uuidString)")
+        try? fileManager.createDirectory(at: shareDirectory, withIntermediateDirectories: true)
+        return shareDirectory
+    }
+
+    /// The receiving app needs to be able to read the copy, which the ROM folder's
+    /// own permissions do not guarantee.
+    private func copy(_ source: URL, into directory: URL, fileManager: FileManager) -> URL? {
+        guard fileManager.fileExists(atPath: source.path) else { return nil }
+        let destination = directory.appendingPathComponent(source.lastPathComponent)
+        do {
+            try fileManager.copyItem(at: source, to: destination)
+            try fileManager.setAttributes([.posixPermissions: 0o644], ofItemAtPath: destination.path)
+            return destination
+        } catch {
+            return nil
+        }
     }
 
     /// Removes leftovers from earlier shares.
