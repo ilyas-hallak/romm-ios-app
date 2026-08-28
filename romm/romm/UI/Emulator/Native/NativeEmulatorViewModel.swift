@@ -77,6 +77,7 @@ final class NativeEmulatorViewModel {
                 romId: rom.id, saveStates: saveStates,
                 screenPositionPreference: factory.emulatorScreenPositionPreference,
                 controllerSkinURL: skinURL,
+                faceButtonPreference: factory.gamepadFaceButtonPreference,
                 cloudSync: cloudSync
             )
             session?.onControlsHiddenChanged = { [weak self] hidden in

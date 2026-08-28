@@ -97,6 +97,7 @@ final class LibretroEmulatorViewModel {
                 aspectRatioPreference: aspectRatioPreference,
                 screenPositionPreference: screenPositionPreference,
                 menuShortcutPreference: menuShortcutPreference,
+                faceButtonPreference: factory.gamepadFaceButtonPreference,
                 cloudSync: cloudSync
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }

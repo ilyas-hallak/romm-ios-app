@@ -28,9 +28,11 @@ private enum PlayChoice: Hashable {
 struct EmulatorEngineSettingsView: View {
     @State private var playChoice: PlayChoice
     @State private var menuShortcut: EmulatorMenuShortcut
+    @State private var swapFaceButtons: Bool
     @State private var installedEmulators: [ExternalEmulatorID] = []
     private let preference: PEmulatorEnginePreference
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
+    private let faceButtonPreference: PGamepadFaceButtonPreference
     private let playTargetPreference: PPlayTargetPreference
     private let externalAppLauncher: PExternalAppLauncher
 
@@ -41,9 +43,11 @@ struct EmulatorEngineSettingsView: View {
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.preference = factory.enginePreference
         self.menuShortcutPreference = factory.emulatorMenuShortcutPreference
+        self.faceButtonPreference = factory.gamepadFaceButtonPreference
         self.playTargetPreference = factory.playTargetPreference
         self.externalAppLauncher = factory.externalAppLauncher
         _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
+        _swapFaceButtons = State(wrappedValue: factory.gamepadFaceButtonPreference.isSwapped)
         _playChoice = State(wrappedValue: PlayChoice(
             engine: factory.enginePreference.current,
             target: factory.playTargetPreference.current
@@ -67,6 +71,10 @@ struct EmulatorEngineSettingsView: View {
                 }
             }
 
+            Section(footer: Text("Face buttons are read by position, never by the label printed on them, so a Nintendo-style pad ends up with A and B the wrong way round. Turn this on if the buttons in a game don't match your controller.")) {
+                Toggle("Swap A/B and X/Y", isOn: $swapFaceButtons)
+            }
+
             #if DEBUG
             Section(
                 header: Text("Debug"),
@@ -82,6 +90,7 @@ struct EmulatorEngineSettingsView: View {
         .navigationTitle("Emulator")
         .onAppear { refreshInstalledEmulators() }
         .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
+        .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
         .onChange(of: playChoice) { _, new in apply(new) }
     }
 

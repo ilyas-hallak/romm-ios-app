@@ -9,6 +9,8 @@ import GameController
 /// is RETRO_DEVICE_ID_JOYPAD_B (index 0) and the right face button is
 /// RETRO_DEVICE_ID_JOYPAD_A (index 8), so physical A/B and X/Y are
 /// cross-mapped from the Xbox-style GCController naming to the SNES layout.
+/// `PGamepadFaceButtonPreference` flips those two pairs back for pads whose
+/// labels run the other way round.
 ///
 /// Writes go straight to `buttonState` from the handler, exactly like the touch
 /// path in LibretroTouchControllerView. The core reads that array from the
@@ -19,6 +21,7 @@ final class LibretroControllerInput {
 
     private weak var frontend: LibretroFrontend?
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference?
+    private let faceButtonPreference: PGamepadFaceButtonPreference?
     var onMenuRequested: (() -> Void)?
 
     /// Digital buttons currently held, used to detect the menu shortcut combo.
@@ -27,9 +30,14 @@ final class LibretroControllerInput {
     /// while the buttons stay held.
     private var comboLatched = false
 
-    init(frontend: LibretroFrontend, menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil) {
+    init(
+        frontend: LibretroFrontend,
+        menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
+        faceButtonPreference: PGamepadFaceButtonPreference? = nil
+    ) {
         self.frontend = frontend
         self.menuShortcutPreference = menuShortcutPreference
+        self.faceButtonPreference = faceButtonPreference
     }
 
     // MARK: - Connect / Disconnect
@@ -52,11 +60,13 @@ final class LibretroControllerInput {
 
         // Face buttons (SNES/libretro layout: bottom = B, right = A, left = Y, top = X)
         // GCController uses Xbox names: buttonA = bottom, buttonB = right,
-        // buttonX = left, buttonY = top.
-        pad.buttonA.valueChangedHandler = handler(for: .b)
-        pad.buttonB.valueChangedHandler = handler(for: .a)
-        pad.buttonX.valueChangedHandler = handler(for: .y)
-        pad.buttonY.valueChangedHandler = handler(for: .x)
+        // buttonX = left, buttonY = top. The pairs flip when the player has told
+        // us their pad is labelled the other way round.
+        let swapped = faceButtonPreference?.isSwapped ?? false
+        pad.buttonA.valueChangedHandler = handler(for: Self.faceButton(.bottom, swapped: swapped))
+        pad.buttonB.valueChangedHandler = handler(for: Self.faceButton(.right, swapped: swapped))
+        pad.buttonX.valueChangedHandler = handler(for: Self.faceButton(.left, swapped: swapped))
+        pad.buttonY.valueChangedHandler = handler(for: Self.faceButton(.top, swapped: swapped))
 
         // Shoulders
         pad.leftShoulder.valueChangedHandler  = handler(for: .l)
@@ -86,6 +96,24 @@ final class LibretroControllerInput {
         pressedButtons.removeAll()
         comboLatched = false
         frontend?.clearAllButtons()
+    }
+
+    // MARK: - Face button layout
+
+    /// Where a face button sits on the pad, independent of what is printed on it.
+    enum FaceButtonPosition {
+        case bottom, right, left, top
+    }
+
+    /// The libretro button a physical face button drives. `swapped` exchanges
+    /// the two pairs for pads whose labels run the other way round.
+    nonisolated static func faceButton(_ position: FaceButtonPosition, swapped: Bool) -> LibretroABI.JoypadButton {
+        switch position {
+        case .bottom: return swapped ? .a : .b
+        case .right:  return swapped ? .b : .a
+        case .left:   return swapped ? .x : .y
+        case .top:    return swapped ? .y : .x
+        }
     }
 
     // MARK: - Private helpers
