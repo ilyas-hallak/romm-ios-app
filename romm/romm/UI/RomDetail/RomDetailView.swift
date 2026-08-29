@@ -26,6 +26,8 @@ struct RomDetailView: View {
     @State private var selectedTab: DetailTab = .details
     @State private var dominantColor: Color? = nil
     @State private var isHashesExpanded: Bool = false
+    @State private var showsAllAchievements = false
+    @State private var selectedAchievement: AchievementDetail?
     @State private var showingSFTPUpload = false
     @State private var showingCollectionPicker = false
     @State private var showingFullScreenPDF = false
@@ -311,6 +313,9 @@ struct RomDetailView: View {
                 type: .success,
                 duration: 2.0
             )
+            .sheet(item: $selectedAchievement) { detail in
+                AchievementDetailSheet(detail: detail)
+            }
     }
 
     @ViewBuilder
@@ -921,8 +926,12 @@ struct RomDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }) { achievement in
+                let achievements = details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }
+                ForEach(showsAllAchievements ? achievements : Array(achievements.prefix(5))) { achievement in
                     let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(for: achievement)
+                    Button {
+                        selectedAchievement = AchievementDetail(achievement: achievement, earnedAchievement: earnedAchievement)
+                    } label: {
                     HStack(alignment: .top, spacing: 12) {
                         if let badgeURL = earnedAchievement == nil ? achievement.lockedBadgeURL : achievement.badgeURL {
                             CachedKFImage(urlString: badgeURL) { image in
@@ -961,7 +970,16 @@ struct RomDetailView: View {
                             }
                         }
                     }
+                    }
+                    .buttonStyle(.plain)
                     .padding(.vertical, 4)
+                }
+
+                if achievements.count > 5 {
+                    Button(showsAllAchievements ? "Show less" : "Show all \(achievements.count) achievements") {
+                        showsAllAchievements.toggle()
+                    }
+                    .font(.subheadline)
                 }
             }
         }
@@ -987,7 +1005,7 @@ struct RomDetailView: View {
             .foregroundStyle(isEarned ? .green : .secondary)
             .frame(width: 40, height: 40)
     }
-    
+
     @ViewBuilder
     private func summarySection(_ summary: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
