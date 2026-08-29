@@ -25,7 +25,13 @@ struct UserMapper {
                     gameId: gameId,
                     awardedCount: progression.numAwarded,
                     maximumCount: progression.maxPossible,
-                    earnedAchievementIds: Set(progression.earnedAchievements.map(\.id))
+                    earnedAchievements: progression.earnedAchievements.map {
+                        EarnedRetroAchievement(
+                            id: $0.id,
+                            earnedAt: $0.date,
+                            earnedHardcoreAt: $0.dateHardcore
+                        )
+                    }
                 )
             }
         )

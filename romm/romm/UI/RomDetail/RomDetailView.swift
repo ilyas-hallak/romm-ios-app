@@ -902,7 +902,7 @@ struct RomDetailView: View {
 
             if let progress = retroAchievementsProgress(for: details) {
                 let maximum = progress.maximumCount ?? details.retroAchievements.count
-                let awarded = progress.awardedCount ?? progress.earnedAchievementIds.count
+                let awarded = progress.awardedCount ?? progress.earnedAchievements.count
                 VStack(alignment: .leading, spacing: 6) {
                     Text("\(awarded) of \(maximum) earned")
                         .font(.subheadline)
@@ -922,11 +922,11 @@ struct RomDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }) { achievement in
-                    let isEarned = retroAchievementsProgress(for: details)?.earnedAchievementIds.contains(achievement.id) == true
+                    let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(id: achievement.id)
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: isEarned ? "checkmark.seal.fill" : "seal")
+                        Image(systemName: earnedAchievement != nil ? "checkmark.seal.fill" : "seal")
                             .font(.title3)
-                            .foregroundStyle(isEarned ? .green : .secondary)
+                            .foregroundStyle(earnedAchievement != nil ? .green : .secondary)
                             .frame(width: 24)
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
@@ -944,6 +944,16 @@ struct RomDetailView: View {
                                 Text(description)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                            }
+
+                            if let earnedAchievement {
+                                Text(
+                                    earnedAchievement.earnedHardcoreAt == nil
+                                        ? "Unlocked \(earnedAchievement.earnedAt)"
+                                        : "Unlocked in hardcore mode \(earnedAchievement.earnedAt)"
+                                )
+                                    .font(.caption)
+                                    .foregroundStyle(.green)
                             }
                         }
                     }

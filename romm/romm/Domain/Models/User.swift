@@ -43,7 +43,18 @@ struct RetroAchievementsProgression: Equatable {
     let gameId: Int
     let awardedCount: Int?
     let maximumCount: Int?
-    let earnedAchievementIds: Set<String>
+    let earnedAchievements: [EarnedRetroAchievement]
+
+    func earnedAchievement(id: String) -> EarnedRetroAchievement? {
+        earnedAchievements.first { $0.id == id }
+    }
+}
+
+/// A RetroAchievements unlock reported by the RomM server.
+struct EarnedRetroAchievement: Equatable {
+    let id: String
+    let earnedAt: String
+    let earnedHardcoreAt: String?
 }
 
 enum UserRole: String, CaseIterable {

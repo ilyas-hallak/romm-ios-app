@@ -60,6 +60,21 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            if let retroAchievementsUsername = appData.currentUser?.retroAchievementsUsername {
+                Section("RetroAchievements") {
+                    HStack {
+                        Image(systemName: "trophy.fill")
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(retroAchievementsUsername)
+                            Text("Connected account")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
             
             // Server Section
             if let config = appData.currentConfiguration {
