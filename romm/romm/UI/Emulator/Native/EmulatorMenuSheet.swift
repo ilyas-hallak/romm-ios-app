@@ -3,6 +3,7 @@ import SwiftUI
 struct EmulatorMenuSheet: View {
     let session: NativeEmulatorSession?
     let faceButtonPreference: PGamepadFaceButtonPreference
+    let menuShortcutPreference: PEmulatorMenuShortcutPreference
     let onResume: () -> Void
     let onQuit: () -> Void
 
@@ -20,11 +21,13 @@ struct EmulatorMenuSheet: View {
     init(
         session: NativeEmulatorSession?,
         faceButtonPreference: PGamepadFaceButtonPreference,
+        menuShortcutPreference: PEmulatorMenuShortcutPreference,
         onResume: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) {
         self.session = session
         self.faceButtonPreference = faceButtonPreference
+        self.menuShortcutPreference = menuShortcutPreference
         self.onResume = onResume
         self.onQuit = onQuit
         // Pre-select the most recently touched slot so existing saves are
@@ -41,47 +44,54 @@ struct EmulatorMenuSheet: View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
-                VStack(spacing: 0) {
-                    detailHeader
-                    fastForwardButton
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 10)
-                    actionButtons
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                    // Unlike the libretro menu this sheet is a fixed stack, not a
-                    // scroll view, so the section only appears once there really
-                    // is a display. Settings carries the discoverability.
-                    if externalDisplay.isConnected {
-                        Divider().background(Color.white.opacity(0.1))
-                        ExternalDisplayControls(onRequestDismiss: onResume)
+                // One scroll view for everything, like the libretro menu. The
+                // slot list used to scroll on its own inside a fixed stack, which
+                // squeezed it as soon as an optional section above appeared.
+                ScrollView {
+                    VStack(spacing: 0) {
+                        detailHeader
+                        fastForwardButton
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 10)
+                        actionButtons
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                        // Still gated on a real display, unlike the libretro menu
+                        // which always shows the section. Settings carries the
+                        // discoverability.
+                        if externalDisplay.isConnected {
+                            Divider().background(Color.white.opacity(0.1))
+                            ExternalDisplayControls(onRequestDismiss: onResume)
+                                .padding(16)
+                        }
+                        if EmulatorControllerState.isConnected {
+                            Divider().background(Color.white.opacity(0.1))
+                            EmulatorControllerControls(
+                                faceButtonPreference: faceButtonPreference,
+                                menuShortcutPreference: menuShortcutPreference,
+                                style: .inlineRows
+                            ) {
+                                session?.reloadFaceButtonMapping()
+                                session?.reloadMenuShortcut()
+                            }
                             .padding(16)
-                    }
-                    // No menu shortcut here: the native engine reaches its menu
-                    // through DeltaCore's own menu input and never evaluates the
-                    // combo, so only the swap is offered.
-                    if EmulatorControllerState.isConnected {
-                        Divider().background(Color.white.opacity(0.1))
-                        EmulatorControllerControls(faceButtonPreference: faceButtonPreference) {
-                            session?.reloadFaceButtonMapping()
                         }
-                        .padding(16)
-                    }
-                    if let preference = session?.screenPositionPreference,
-                       EmulatorControllerState.isConnected {
-                        Divider().background(Color.white.opacity(0.1))
-                        EmulatorScreenControls(preference: preference) {
-                            session?.refreshScreenPlacement()
+                        if let preference = session?.screenPositionPreference,
+                           EmulatorControllerState.isConnected {
+                            Divider().background(Color.white.opacity(0.1))
+                            EmulatorScreenControls(preference: preference) {
+                                session?.refreshScreenPlacement()
+                            }
+                            .padding(16)
                         }
-                        .padding(16)
+                        #if DEBUG
+                        Divider().background(Color.white.opacity(0.1))
+                        EmulatorControllerDebugToggle()
+                            .padding(16)
+                        #endif
+                        Divider().background(Color.white.opacity(0.1))
+                        slotList
                     }
-                    #if DEBUG
-                    Divider().background(Color.white.opacity(0.1))
-                    EmulatorControllerDebugToggle()
-                        .padding(16)
-                    #endif
-                    Divider().background(Color.white.opacity(0.1))
-                    slotList
                 }
             }
             .navigationTitle("Save States")
@@ -166,15 +176,16 @@ struct EmulatorMenuSheet: View {
         )
     }
 
+    /// Part of the sheet's own scroll view, not a scroll view of its own. The
+    /// list is a fixed 21 rows, so a plain stack is enough and nesting two
+    /// vertical scroll views is avoided.
     private var slotList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(slots, id: \.self) { slot in
-                    slotRow(slot)
-                    if slot != slots.last {
-                        Divider().background(Color.white.opacity(0.06))
-                            .padding(.leading, 16)
-                    }
+        VStack(spacing: 0) {
+            ForEach(slots, id: \.self) { slot in
+                slotRow(slot)
+                if slot != slots.last {
+                    Divider().background(Color.white.opacity(0.06))
+                        .padding(.leading, 16)
                 }
             }
         }

@@ -10,11 +10,22 @@ import SwiftUI
 /// Only meaningful with a physical controller connected, which the caller
 /// decides, same as it does for `EmulatorScreenControls`.
 struct EmulatorControllerControls: View {
+    /// The two menus label their blocks differently, so the block follows
+    /// whichever one is showing it.
+    enum Style {
+        /// Caption heading above the rows, next to the libretro menu's own
+        /// "Haptics" and friends.
+        case section
+        /// No heading, the rows carry a symbol instead, like the native menu's
+        /// "Play on TV" and "Screen size" neighbors.
+        case inlineRows
+    }
+
     let faceButtonPreference: PGamepadFaceButtonPreference
-    /// `nil` hides the shortcut picker. The native engine opens its menu through
-    /// DeltaCore's own menu input and never evaluates the combo, so offering it
-    /// there would be a setting without an effect.
+    /// `nil` hides the shortcut picker, for callers that have no combo detection
+    /// behind them. Both engines evaluate it.
     let menuShortcutPreference: PEmulatorMenuShortcutPreference?
+    let style: Style
     /// Called after a change so the running session can re-apply it live.
     var onChange: () -> Void = {}
 
@@ -24,10 +35,12 @@ struct EmulatorControllerControls: View {
     init(
         faceButtonPreference: PGamepadFaceButtonPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
+        style: Style = .section,
         onChange: @escaping () -> Void = {}
     ) {
         self.faceButtonPreference = faceButtonPreference
         self.menuShortcutPreference = menuShortcutPreference
+        self.style = style
         self.onChange = onChange
         self._swapFaceButtons = SwiftUI.State(initialValue: faceButtonPreference.isSwapped)
         self._menuShortcut = SwiftUI.State(initialValue: menuShortcutPreference?.current ?? .none)
@@ -35,13 +48,13 @@ struct EmulatorControllerControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Controller")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.5))
+            if style == .section {
+                Text("Controller")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.5))
+            }
             HStack {
-                Text("Swap A/B and X/Y")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                rowLabel("Swap A/B and X/Y", symbol: "gamecontroller")
                 Spacer()
                 Toggle("", isOn: $swapFaceButtons)
                     .labelsHidden()
@@ -52,9 +65,7 @@ struct EmulatorControllerControls: View {
             }
             if let menuShortcutPreference {
                 HStack {
-                    Text("Menu shortcut")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                    rowLabel("Menu shortcut", symbol: "line.3.horizontal")
                     Spacer()
                     Picker("Menu shortcut", selection: $menuShortcut) {
                         Text("Off").tag(EmulatorMenuShortcut.none)
@@ -70,5 +81,28 @@ struct EmulatorControllerControls: View {
                 }
             }
         }
+    }
+
+    /// The heading is what tells the libretro menu these rows belong together, so
+    /// without it every row has to say so itself, through its symbol.
+    @ViewBuilder
+    private func rowLabel(_ title: String, symbol: String) -> some View {
+        Group {
+            switch style {
+            case .section:
+                Text(title)
+            case .inlineRows:
+                // Fixed symbol column, otherwise the two rows sit on different
+                // text edges: the gamepad glyph is wider than the menu glyph.
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(systemName: symbol).frame(width: 22)
+                }
+            }
+        }
+        .font(.subheadline)
+        .foregroundColor(.white.opacity(0.7))
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
