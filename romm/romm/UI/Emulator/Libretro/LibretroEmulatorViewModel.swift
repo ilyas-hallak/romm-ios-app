@@ -49,6 +49,12 @@ final class LibretroEmulatorViewModel {
         self.factory = factory
     }
 
+    /// The same instances the session is handed, so the in-game menu writes the
+    /// values where the session reads them back from.
+    var rumblePreference: PRumblePreference { factory.rumblePreference }
+    var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { factory.gamepadFaceButtonPreference }
+    var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { factory.emulatorMenuShortcutPreference }
+
     /// Save-state slot to auto-load once the core is running (chosen in the
     /// pre-launch sheet), or `nil` for a fresh start.
     private var resumeSlot: Int?

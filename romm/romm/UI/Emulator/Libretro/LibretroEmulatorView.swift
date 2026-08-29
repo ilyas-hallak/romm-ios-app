@@ -78,6 +78,9 @@ struct LibretroEmulatorView: View {
             LibretroMenuSheet(
                 session: viewModel.session,
                 aspectRatioPreference: viewModel.aspectRatioPreference,
+                rumblePreference: viewModel.rumblePreference,
+                faceButtonPreference: viewModel.gamepadFaceButtonPreference,
+                menuShortcutPreference: viewModel.emulatorMenuShortcutPreference,
                 onResume: { showMenu = false },
                 onQuit: {
                     isQuitting = true
@@ -93,6 +96,9 @@ struct LibretroEmulatorView: View {
 private struct LibretroMenuSheet: View {
     let session: LibretroSession?
     let aspectRatioPreference: PLibretroAspectRatioPreference
+    let rumblePreference: PRumblePreference
+    let faceButtonPreference: PGamepadFaceButtonPreference
+    let menuShortcutPreference: PEmulatorMenuShortcutPreference
     let onResume: () -> Void
     let onQuit: () -> Void
 
@@ -102,6 +108,7 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
+    @SwiftUI.State private var rumbleIntensity: RumbleIntensity
 
     // 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
@@ -110,14 +117,21 @@ private struct LibretroMenuSheet: View {
     init(
         session: LibretroSession?,
         aspectRatioPreference: PLibretroAspectRatioPreference,
+        rumblePreference: PRumblePreference,
+        faceButtonPreference: PGamepadFaceButtonPreference,
+        menuShortcutPreference: PEmulatorMenuShortcutPreference,
         onResume: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) {
         self.session = session
         self.aspectRatioPreference = aspectRatioPreference
+        self.rumblePreference = rumblePreference
+        self.faceButtonPreference = faceButtonPreference
+        self.menuShortcutPreference = menuShortcutPreference
         self.onResume = onResume
         self.onQuit = onQuit
         self._aspectRatio = SwiftUI.State(initialValue: aspectRatioPreference.psx)
+        self._rumbleIntensity = SwiftUI.State(initialValue: rumblePreference.intensity)
         // Pre-select the most recently touched slot so existing saves are
         // immediately visible and loadable after the 1→0 slot renumbering (PR #57).
         let slots = Array(0...20)
@@ -245,6 +259,36 @@ private struct LibretroMenuSheet: View {
                 }
             }
             ExternalDisplayControls(onRequestDismiss: onResume)
+            hapticsControls
+            if EmulatorControllerState.isConnected {
+                EmulatorControllerControls(
+                    faceButtonPreference: faceButtonPreference,
+                    menuShortcutPreference: menuShortcutPreference
+                ) {
+                    session?.reloadControllerPreferences()
+                }
+            }
+            if let preference = session?.screenPositionPreference,
+               EmulatorControllerState.isConnected {
+                EmulatorScreenControls(preference: preference) {
+                    session?.reloadAspectRatio()
+                }
+            }
+            #if DEBUG
+            EmulatorControllerDebugToggle()
+            #endif
+        }
+    }
+
+    /// Everything the player can feel, in one place. The rumble strength is only
+    /// offered when the running session actually rumbles (switched on and a core
+    /// that reports it), the on/off switch itself stays in Settings because it
+    /// picks the controller port at load time.
+    private var hapticsControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Haptics")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.5))
             HStack {
                 Text("Release Haptics")
                     .font(.subheadline)
@@ -256,15 +300,25 @@ private struct LibretroMenuSheet: View {
                         HapticsPreferences.onRelease = newValue
                     }
             }
-            if let preference = session?.screenPositionPreference,
-               EmulatorControllerState.isConnected {
-                EmulatorScreenControls(preference: preference) {
-                    session?.reloadAspectRatio()
+            if session?.isRumbleActive == true {
+                HStack {
+                    Text("Rumble intensity")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                    Picker("Rumble intensity", selection: $rumbleIntensity) {
+                        ForEach(RumbleIntensity.allCases) { intensity in
+                            Text(intensity.displayName).tag(intensity)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 240)
+                    .onChange(of: rumbleIntensity) { _, newValue in
+                        rumblePreference.intensity = newValue
+                        session?.reloadRumbleIntensity()
+                    }
                 }
             }
-            #if DEBUG
-            EmulatorControllerDebugToggle()
-            #endif
         }
     }
 

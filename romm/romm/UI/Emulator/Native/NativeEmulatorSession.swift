@@ -383,6 +383,26 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         controller.addReceiver(viewController, inputMapping: mapping)
     }
 
+    /// Re-applies the face-button swap to every connected controller after it
+    /// changed in the in-game menu, live.
+    ///
+    /// DeltaCore keeps one mapping per receiver in a map table, so calling
+    /// `addReceiver` again simply overwrites the previous entry, no
+    /// `removeReceiver` in between (which would also drop the receiver for a
+    /// frame). What does need care is anything still held: its press was routed
+    /// through the old mapping and its release would go to the new target,
+    /// leaving the old input stuck down in the core, so held inputs are lifted
+    /// before the swap.
+    func reloadFaceButtonMapping() {
+        guard let core = emulatorCore else { return }
+        for controller in ExternalGameControllerManager.shared.connectedControllers {
+            for input in controller.activatedInputs.keys {
+                controller.deactivate(input)
+            }
+            attach(controller, to: core)
+        }
+    }
+
     private func detachExternalControllers() {
         guard let core = emulatorCore else { return }
         for controller in ExternalGameControllerManager.shared.connectedControllers {

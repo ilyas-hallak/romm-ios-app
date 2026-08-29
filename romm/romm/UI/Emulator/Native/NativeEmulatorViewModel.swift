@@ -44,6 +44,10 @@ final class NativeEmulatorViewModel {
         self.factory = factory
     }
 
+    /// The same instance the session is handed, so the in-game menu writes the
+    /// swap where the session reads it back from.
+    var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { factory.gamepadFaceButtonPreference }
+
     /// Save-state slot to auto-load once the core is running (chosen in the
     /// pre-launch sheet), or `nil` for a fresh start.
     private var resumeSlot: Int?

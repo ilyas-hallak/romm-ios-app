@@ -32,7 +32,6 @@ struct EmulatorEngineSettingsView: View {
     @State private var menuShortcut: EmulatorMenuShortcut
     @State private var swapFaceButtons: Bool
     @State private var rumbleEnabled: Bool
-    @State private var rumbleIntensity: RumbleIntensity
     @State private var installedEmulators: [ExternalEmulatorID] = []
     private let preference: PEmulatorEnginePreference
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
@@ -63,7 +62,6 @@ struct EmulatorEngineSettingsView: View {
         _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
         _swapFaceButtons = State(wrappedValue: factory.gamepadFaceButtonPreference.isSwapped)
         _rumbleEnabled = State(wrappedValue: factory.rumblePreference.isEnabled)
-        _rumbleIntensity = State(wrappedValue: factory.rumblePreference.intensity)
         _playChoice = State(wrappedValue: PlayChoice(
             engine: factory.enginePreference.current,
             target: factory.playTargetPreference.current
@@ -91,15 +89,8 @@ struct EmulatorEngineSettingsView: View {
                 Toggle("Swap A/B and X/Y", isOn: $swapFaceButtons)
             }
 
-            Section(footer: Text("Only PlayStation games report rumble, so it stays quiet everywhere else. It plays on a connected controller if that one has motors, otherwise through the device's own haptics. Turning it on switches the PlayStation controller type to DualShock, so turn it back off if a game misbehaves with that.")) {
+            Section(footer: Text("Only PlayStation games report rumble, so it stays quiet everywhere else. It plays on a connected controller if that one has motors, otherwise through the device's own haptics. Set how strong it is from the in-game menu. Turning it on switches the PlayStation controller type to DualShock, so turn it back off if a game misbehaves with that.")) {
                 Toggle("Rumble", isOn: $rumbleEnabled)
-
-                Picker("Intensity", selection: $rumbleIntensity) {
-                    ForEach(RumbleIntensity.allCases) { intensity in
-                        Text(intensity.displayName).tag(intensity)
-                    }
-                }
-                .disabled(!rumbleEnabled)
             }
 
             #if DEBUG
@@ -119,6 +110,10 @@ struct EmulatorEngineSettingsView: View {
         .navigationTitle("Emulator")
         .onAppear {
             refreshInstalledEmulators()
+            // The in-game menu writes these two as well, so re-read them here
+            // instead of trusting the values captured when the screen was built.
+            menuShortcut = menuShortcutPreference.current
+            swapFaceButtons = faceButtonPreference.isSwapped
             #if DEBUG
             refreshRumbleDiagnostics()
             #endif
@@ -129,7 +124,6 @@ struct EmulatorEngineSettingsView: View {
         .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
         .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
         .onChange(of: rumbleEnabled) { _, new in rumblePreference.isEnabled = new }
-        .onChange(of: rumbleIntensity) { _, new in rumblePreference.intensity = new }
         .onChange(of: playChoice) { _, new in apply(new) }
     }
 
@@ -221,7 +215,7 @@ struct EmulatorEngineSettingsView: View {
     private var rumbleTestSection: some View {
         Section(
             header: Text("Rumble test"),
-            footer: Text("Plays the motors directly, ignoring the Rumble switch and the emulator, at the intensity selected above. Each pulse lasts 800 ms and goes to a connected controller if there is one, otherwise to the device's own haptics.")
+            footer: Text("Plays the motors directly, ignoring the Rumble switch and the emulator, at the intensity last set in the in-game menu. Each pulse lasts 800 ms and goes to a connected controller if there is one, otherwise to the device's own haptics.")
         ) {
             #if os(iOS)
             rumbleStatusRow("Device haptics", deviceHapticsStatus)
@@ -270,7 +264,7 @@ struct EmulatorEngineSettingsView: View {
     /// The engine is left running afterwards, so the next tap does not pay the
     /// start-up latency again. Only `onDisappear` tears it down.
     private func pulseRumble(strong: Float, weak: Float) {
-        rumbleTester.scale = rumbleIntensity.scale
+        rumbleTester.scale = rumblePreference.intensity.scale
         rumbleTester.start()
         rumbleTester.attach(controller: GCController.controllers().first)
         rumbleTester.setMotors(strong: strong, weak: weak)

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EmulatorMenuSheet: View {
     let session: NativeEmulatorSession?
+    let faceButtonPreference: PGamepadFaceButtonPreference
     let onResume: () -> Void
     let onQuit: () -> Void
 
@@ -16,8 +17,14 @@ struct EmulatorMenuSheet: View {
     // (files are `slot0.state`…`slot20.state`). Slot 0 is a real, usable slot.
     private let slots = Array(0...20)
 
-    init(session: NativeEmulatorSession?, onResume: @escaping () -> Void, onQuit: @escaping () -> Void) {
+    init(
+        session: NativeEmulatorSession?,
+        faceButtonPreference: PGamepadFaceButtonPreference,
+        onResume: @escaping () -> Void,
+        onQuit: @escaping () -> Void
+    ) {
         self.session = session
+        self.faceButtonPreference = faceButtonPreference
         self.onResume = onResume
         self.onQuit = onQuit
         // Pre-select the most recently touched slot so existing saves are
@@ -49,6 +56,16 @@ struct EmulatorMenuSheet: View {
                         Divider().background(Color.white.opacity(0.1))
                         ExternalDisplayControls(onRequestDismiss: onResume)
                             .padding(16)
+                    }
+                    // No menu shortcut here: the native engine reaches its menu
+                    // through DeltaCore's own menu input and never evaluates the
+                    // combo, so only the swap is offered.
+                    if EmulatorControllerState.isConnected {
+                        Divider().background(Color.white.opacity(0.1))
+                        EmulatorControllerControls(faceButtonPreference: faceButtonPreference) {
+                            session?.reloadFaceButtonMapping()
+                        }
+                        .padding(16)
                     }
                     if let preference = session?.screenPositionPreference,
                        EmulatorControllerState.isConnected {

@@ -17,6 +17,10 @@ final class LibretroSession: NSObject {
 
     // MARK: - Rumble
     private let rumbleOutput = RumbleOutput()
+    /// Whether rumble is actually running for this session (switched on and a
+    /// core that reports it). The in-game menu only offers the intensity when
+    /// this is true, a slider that does nothing would be worse than none.
+    private(set) var isRumbleActive = false
 
     var onMenuRequested: (() -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
@@ -186,6 +190,7 @@ final class LibretroSession: NSObject {
             // engine running and no hook dangling on the shared frontend. The
             // hook just has to be in place before the first frame runs.
             if rumbleActive, let preference {
+                isRumbleActive = true
                 rumbleOutput.scale = preference.intensity.scale
                 rumbleOutput.start()
                 rumbleOutput.attach(controller: attachedController)
@@ -233,6 +238,21 @@ final class LibretroSession: NSObject {
         viewController.applyAspectConstraints()
     }
 
+    /// Picks up the face-button swap and the menu shortcut changed in the
+    /// in-game menu, live. Both only affect how the input bridge reads the pad,
+    /// so nothing about the running core has to be touched.
+    func reloadControllerPreferences() {
+        controllerInput.reloadPreferences(for: attachedController)
+    }
+
+    /// Picks up an intensity changed from the in-game menu, live. Only the
+    /// scale is re-read: the on/off switch decides the controller port at load
+    /// time and cannot be flipped while the core is running.
+    func reloadRumbleIntensity() {
+        guard isRumbleActive, let preference = rumblePreference else { return }
+        rumbleOutput.scale = preference.intensity.scale
+    }
+
 
     func stop() {
         // Detach the physical controller before tearing down the frontend so
@@ -247,6 +267,7 @@ final class LibretroSession: NSObject {
         frontend.videoSink = nil
         frontend.stop()
         rumbleOutput.stop()
+        isRumbleActive = false
         flushBatteryFromSaveDir()
     }
 
