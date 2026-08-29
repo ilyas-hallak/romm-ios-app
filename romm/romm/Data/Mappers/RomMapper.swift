@@ -152,6 +152,17 @@ struct RomMapper {
             platformId: apiRom.platformId,
             isFavourite: false, // Will be loaded separately via user properties
             hasRetroAchievements: apiRom.raId != nil,
+            retroAchievementsGameId: apiRom.raId,
+            retroAchievements: (apiRom.mergedRaMetadata?.achievements ?? []).compactMap { achievement in
+                guard let id = achievement.raId else { return nil }
+                return RetroAchievement(
+                    id: String(id),
+                    title: achievement.title ?? "Untitled Achievement",
+                    description: achievement.description,
+                    points: achievement.points,
+                    displayOrder: achievement.displayOrder
+                )
+            },
             genre: genres,
             developer: developer,
             publisher: publisher,

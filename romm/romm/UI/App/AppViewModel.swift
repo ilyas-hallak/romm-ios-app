@@ -55,6 +55,7 @@ class AppViewModel {
     private let clearServerVersionUseCase: ClearServerVersionUseCase
     private let saveServerVersionUseCase: SaveServerVersionUseCase
     private let getHeartbeatUseCase: GetHeartbeatUseCase
+    private let getCurrentUserUseCase: GetCurrentUserUseCase
 
     private let factory: PDependencyFactory
 
@@ -72,6 +73,7 @@ class AppViewModel {
         self.clearServerVersionUseCase = factory.makeClearServerVersionUseCase()
         self.saveServerVersionUseCase = factory.makeSaveServerVersionUseCase()
         self.getHeartbeatUseCase = factory.makeGetHeartbeatUseCase()
+        self.getCurrentUserUseCase = factory.makeGetCurrentUserUseCase()
 
         // Listen for restart setup requests
         NotificationCenter.default.addObserver(
@@ -128,6 +130,7 @@ class AppViewModel {
                 logger.info("Authentication state: \(appData.isAuthenticated) (method: \(authMethod.displayName))")
                 updateAppConfig(config)
                 appState = .authenticated
+                await loadCurrentUser()
                 // Verify the server version right after launch, not only on foreground.
                 await checkServerVersionOnForeground()
             } else {
@@ -169,6 +172,7 @@ class AppViewModel {
             appData.updateLoading(false)
             isHandlingSessionExpiration = false
             appState = .authenticated
+            await loadCurrentUser()
         } catch {
             logger.error("Setup configuration failed: \(error)")
             appData.updateLoading(false)
@@ -205,6 +209,15 @@ class AppViewModel {
         appData.updateAuthState(false)
         appData.updateUser(nil)
         appData.updateError(nil)
+    }
+
+    /// Keeps app-wide user data, including RetroAchievements progress, current.
+    private func loadCurrentUser() async {
+        do {
+            appData.updateUser(try await getCurrentUserUseCase.execute())
+        } catch {
+            logger.warning("Unable to load current user: \(error.localizedDescription)")
+        }
     }
 
     func clearError() {

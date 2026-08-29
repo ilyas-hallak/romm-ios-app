@@ -41,6 +41,8 @@ struct Rom: Identifiable, Equatable {
     let releaseYear: Int?
     let isFavourite: Bool
     let hasRetroAchievements: Bool
+    let retroAchievementsGameId: Int?
+    let retroAchievements: [RetroAchievement]
     let isPlayable: Bool
     
     // Additional fields for table display
@@ -70,6 +72,8 @@ struct Rom: Identifiable, Equatable {
         releaseYear: Int? = nil,
         isFavourite: Bool = false,
         hasRetroAchievements: Bool = false,
+        retroAchievementsGameId: Int? = nil,
+        retroAchievements: [RetroAchievement] = [],
         isPlayable: Bool = false,
         sizeBytes: Int? = nil,
         createdAt: String? = nil,
@@ -92,6 +96,8 @@ struct Rom: Identifiable, Equatable {
         self.releaseYear = releaseYear
         self.isFavourite = isFavourite
         self.hasRetroAchievements = hasRetroAchievements
+        self.retroAchievementsGameId = retroAchievementsGameId
+        self.retroAchievements = retroAchievements
         self.isPlayable = isPlayable
         self.sizeBytes = sizeBytes
         self.createdAt = createdAt
@@ -107,6 +113,15 @@ struct Rom: Identifiable, Equatable {
     }
 }
 
+/// Metadata for an achievement supplied by RetroAchievements through RomM.
+struct RetroAchievement: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let description: String?
+    let points: Int?
+    let displayOrder: Int?
+}
+
 struct RomDetails: Identifiable, Equatable {
     let id: Int
     let name: String
@@ -118,6 +133,8 @@ struct RomDetails: Identifiable, Equatable {
     let platformId: Int
     let isFavourite: Bool
     let hasRetroAchievements: Bool
+    let retroAchievementsGameId: Int?
+    let retroAchievements: [RetroAchievement]
     let genre: [String]
     let developer: String?
     let publisher: String?
@@ -148,6 +165,8 @@ struct RomDetails: Identifiable, Equatable {
         platformId: Int,
         isFavourite: Bool = false,
         hasRetroAchievements: Bool = false,
+        retroAchievementsGameId: Int? = nil,
+        retroAchievements: [RetroAchievement] = [],
         genre: [String] = [],
         developer: String? = nil,
         publisher: String? = nil,
@@ -175,6 +194,8 @@ struct RomDetails: Identifiable, Equatable {
         self.platformId = platformId
         self.isFavourite = isFavourite
         self.hasRetroAchievements = hasRetroAchievements
+        self.retroAchievementsGameId = retroAchievementsGameId
+        self.retroAchievements = retroAchievements
         self.genre = genre
         self.developer = developer
         self.publisher = publisher
