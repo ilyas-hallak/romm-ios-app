@@ -160,6 +160,8 @@ struct RomMapper {
                     title: achievement.title ?? "Untitled Achievement",
                     description: achievement.description,
                     points: achievement.points,
+                    badgeURL: achievement.badgeUrl,
+                    lockedBadgeURL: achievement.badgeUrlLock,
                     displayOrder: achievement.displayOrder
                 )
             },

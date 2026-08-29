@@ -924,10 +924,18 @@ struct RomDetailView: View {
                 ForEach(details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }) { achievement in
                     let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(id: achievement.id)
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: earnedAchievement != nil ? "checkmark.seal.fill" : "seal")
-                            .font(.title3)
-                            .foregroundStyle(earnedAchievement != nil ? .green : .secondary)
-                            .frame(width: 24)
+                        if let badgeURL = earnedAchievement == nil ? achievement.lockedBadgeURL : achievement.badgeURL {
+                            CachedKFImage(urlString: badgeURL) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                            } placeholder: {
+                                achievementStatusIcon(isEarned: earnedAchievement != nil)
+                            }
+                            .frame(width: 40, height: 40)
+                        } else {
+                            achievementStatusIcon(isEarned: earnedAchievement != nil)
+                        }
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
                                 Text(achievement.title)
@@ -966,6 +974,13 @@ struct RomDetailView: View {
     private func retroAchievementsProgress(for details: RomDetails) -> RetroAchievementsProgression? {
         guard let gameId = details.retroAchievementsGameId else { return nil }
         return appData.currentUser?.retroAchievementsProgression.first { $0.gameId == gameId }
+    }
+
+    private func achievementStatusIcon(isEarned: Bool) -> some View {
+        Image(systemName: isEarned ? "checkmark.seal.fill" : "seal")
+            .font(.title3)
+            .foregroundStyle(isEarned ? .green : .secondary)
+            .frame(width: 40, height: 40)
     }
     
     @ViewBuilder

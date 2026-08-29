@@ -113,6 +113,8 @@ struct RetroAchievement: Identifiable, Equatable {
     let title: String
     let description: String?
     let points: Int?
+    let badgeURL: String?
+    let lockedBadgeURL: String?
     let displayOrder: Int?
 }
 
