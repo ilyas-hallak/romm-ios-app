@@ -194,6 +194,10 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     private(set) var isFastForwarding = false
 
+    /// Tokens of the audio session observers, kept so `stop()` can remove them:
+    /// block-based observers are not covered by `removeObserver(self)`.
+    private var audioObservers: [any NSObjectProtocol] = []
+
     let viewController: GameViewController
 
     /// Owned here so the display manager can hold it weakly: the target must not
@@ -293,6 +297,8 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             self.emulatorCore?.audioManager.respectsSilentMode = false
             self.attachExternalControllers()
             self.observeControllerConnections()
+            self.observeAudioSessionChanges()
+            self.recheckOutputVolumeAfterStart()
             self.registerExternalRenderTarget()
             guard let slot = resumeSlot else { return }
             try? await Task.sleep(nanoseconds: 600_000_000)
@@ -334,7 +340,81 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         ExternalDisplayManager.shared.setRenderTarget(nil)
         externalRenderTarget = nil
         NotificationCenter.default.removeObserver(self)
+        // Block observers are keyed by token, so the sweep above misses them.
+        for observer in audioObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        audioObservers.removeAll()
         emulatorCore?.stop()
+    }
+
+    // MARK: - Audio recovery
+
+    /// DeltaCore decides its mixer volume once, while the core comes up, and
+    /// silences itself for the rest of the session if another app happened to
+    /// hold the audio at that moment. It never revisits that call: it observes
+    /// no interruptions, and a route change only rebuilds its engine, leaving
+    /// the volume at zero. So a game started while a podcast was still fading
+    /// out stays mute long after the podcast is gone, and a phone call leaves
+    /// the session deactivated behind it.
+    ///
+    /// Both are repaired from the outside rather than in the vendored core:
+    /// re-assigning `respectsSilentMode` re-runs DeltaCore's own volume
+    /// decision, since `didSet` fires on every assignment, not just on a change.
+    private func observeAudioSessionChanges() {
+        let center = NotificationCenter.default
+        // Audio session notifications arrive on an internal queue, so the
+        // notification is inspected there and only the verdict crosses over to
+        // the main actor, where everything else here lives.
+        audioObservers.append(center.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard Self.isInterruptionEnded(notification) else { return }
+            Task { @MainActor in
+                // A call leaves the session deactivated behind it, so the
+                // category has to be claimed again before the volume is worth
+                // re-evaluating.
+                EmulatorAudioSession.activate()
+                self?.refreshOutputVolume()
+            }
+        })
+        audioObservers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in self?.refreshOutputVolume() }
+        })
+    }
+
+    private nonisolated static func isInterruptionEnded(_ notification: Notification) -> Bool {
+        guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return false }
+        return type == .ended
+    }
+
+    /// Re-runs DeltaCore's output volume decision, see
+    /// `observeAudioSessionChanges()` for why that is needed at all.
+    private func refreshOutputVolume() {
+        emulatorCore?.audioManager.respectsSilentMode = false
+    }
+
+    /// The one case no notification announces: `isOtherAudioPlaying` can still
+    /// name the previous app for a moment while iOS tears its session down, so
+    /// DeltaCore reads it a beat too early and mutes a game that in fact has the
+    /// audio to itself. Nothing fires afterwards to correct that, so the value
+    /// is simply read again once things have settled.
+    private func recheckOutputVolumeAfterStart() {
+        Task { [weak self] in
+            // Milliseconds to wait before each re-read, relative to the previous.
+            for delay in [500, 2_000] {
+                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
+                guard let self else { return }
+                self.refreshOutputVolume()
+            }
+        }
     }
 
     @discardableResult
