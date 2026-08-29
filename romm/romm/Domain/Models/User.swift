@@ -45,6 +45,11 @@ struct User: Identifiable, Equatable {
         self.retroAchievementsUsername = retroAchievementsUsername
         self.retroAchievementsProgression = retroAchievementsProgression
     }
+
+    func retroAchievementsProgression(for gameId: Int?) -> RetroAchievementsProgression? {
+        guard let gameId else { return nil }
+        return retroAchievementsProgression.first { $0.gameId == gameId }
+    }
 }
 
 extension User {
