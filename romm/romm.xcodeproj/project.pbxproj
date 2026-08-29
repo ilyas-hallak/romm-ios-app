@@ -406,6 +406,7 @@
 				5D9D918D2E5F8F21009AF769 /* Kingfisher */,
 				5DCB1107000000000000D102 /* MarkdownUI */,
 				5D2C4E1E2F7B9A43009CF871 /* SWCompression */,
+				5DF70002000000000000CA01 /* rcheevos */,
 			);
 			productName = romm;
 			productReference = 5DA7E4202E43D870003680D9 /* romm.app */;
@@ -494,6 +495,7 @@
 				5D9D918C2E5F8F21009AF769 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				5D2C4E1D2F7B9A43009CF871 /* XCRemoteSwiftPackageReference "SWCompression" */,
+				5DF70001000000000000CA01 /* XCRemoteSwiftPackageReference "rcheevos" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5DA7E4212E43D870003680D9 /* Products */;
@@ -1040,6 +1042,14 @@
 				minimumVersion = 2.4.1;
 			};
 		};
+		5DF70001000000000000CA01 /* XCRemoteSwiftPackageReference "rcheevos" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/NicolaFolchi/rcheevos.git";
+			requirement = {
+				branch = romm-xcode26;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1057,6 +1067,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5DCB1107000000000000D101 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		5DF70002000000000000CA01 /* rcheevos */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5DF70001000000000000CA01 /* XCRemoteSwiftPackageReference "rcheevos" */;
+			productName = rcheevos;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

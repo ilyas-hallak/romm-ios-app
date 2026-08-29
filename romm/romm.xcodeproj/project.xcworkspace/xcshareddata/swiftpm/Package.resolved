@@ -1,5 +1,5 @@
 {
-  "originHash" : "aed2995dc740119eed9fc404c0c9942a18dfed1a6a321ba82cddfbed55a081b4",
+  "originHash" : "400b1f318b885222233876708d0418a31d891c6dfce23f3eacbb1f65d7ef6c9a",
   "pins" : [
     {
       "identity" : "bitbytedata",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "2849f5323265386e200484b0d0f896e73c3411b9",
         "version" : "6.0.1"
+      }
+    },
+    {
+      "identity" : "rcheevos",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/NicolaFolchi/rcheevos.git",
+      "state" : {
+        "branch" : "romm-xcode26",
+        "revision" : "45e0239d87d049ae850eed22a539e0e56670f226"
       }
     },
     {
