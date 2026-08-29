@@ -37,6 +37,7 @@
 		A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE11 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		5DCA1106000000000000C102 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
+		5DFA9001000000000000F102 /* FAQ.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DFA9001000000000000F101 /* FAQ.md */; };
 		5DCB1107000000000000D103 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
@@ -180,6 +181,7 @@
 		A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = mednafen_pce_fast_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = genesis_plus_gx_libretro_ios.framework; sourceTree = "<group>"; };
 		5DCA1106000000000000C101 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = CHANGELOG.md; path = ../CHANGELOG.md; sourceTree = SOURCE_ROOT; };
+		5DFA9001000000000000F101 /* FAQ.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = FAQ.md; path = ../FAQ.md; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -320,6 +322,7 @@
 			isa = PBXGroup;
 			children = (
 				5DCA1106000000000000C101 /* CHANGELOG.md */,
+				5DFA9001000000000000F101 /* FAQ.md */,
 				5D93A8952FC2419700086CE8 /* Libretro */,
 				5D93A15F2FBF67EF00086CE8 /* GBCDeltaCore.xcodeproj */,
 				5D93A1532FBF67E900086CE8 /* MelonDSDeltaCore.xcodeproj */,
@@ -591,6 +594,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5DCA1106000000000000C102 /* CHANGELOG.md in Resources */,
+				5DFA9001000000000000F102 /* FAQ.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var showingLogoutAlert = false
     @State private var showingResetAlert = false
     @State private var showingWhatsNew = false
+    @State private var showingHelp = false
     private let updateStore: AppUpdateStore = DefaultDependencyFactory.shared.appUpdateStore
 
     private var appVersion: String {
@@ -126,6 +127,16 @@ struct SettingsView: View {
             // App Settings Section
             Section("App Settings") {
                 UpdateAvailableRow()
+
+                Button {
+                    showingHelp = true
+                } label: {
+                    HStack {
+                        Image(systemName: "questionmark.circle")
+                        Text("Help")
+                    }
+                    .foregroundStyle(.primary)
+                }
 
                 Button {
                     showingWhatsNew = true
@@ -252,6 +263,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showingWhatsNew) {
             // The whole history from Settings, and no mark-seen side effect.
             ChangelogView(markdown: updateStore.changelog, mode: .versionHistory)
+        }
+        .sheet(isPresented: $showingHelp) {
+            HelpView()
         }
         .alert("Logout", isPresented: $showingLogoutAlert) {
             Button("Cancel", role: .cancel) { }

@@ -20,6 +20,9 @@ struct SetupView: View {
     // Focus
     @FocusState private var focusedField: SetupField?
 
+    /// Question the help opens on, set by whichever error offered it.
+    @State private var helpTopic: HelpTopic?
+
     private var connectionLogger: ConnectionLogger { ConnectionLogger.shared }
 
     init(appViewModel: AppViewModel) {
@@ -134,6 +137,9 @@ struct SetupView: View {
                     await viewModel.performClientTokenPairing(code: code)
                 }
             }
+        }
+        .sheet(item: $helpTopic) { topic in
+            HelpView(highlightedQuestion: topic.question)
         }
     }
 
@@ -305,6 +311,12 @@ struct SetupView: View {
                     .padding(.leading, 21)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
+
+            // The error most users actually hit: the server cannot be reached,
+            // typically a missing scheme or a local address iOS has not been
+            // allowed to talk to yet.
+            helpLink(for: Self.reachServerHelpQuestion)
+                .padding(.leading, 21)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -438,14 +450,11 @@ struct SetupView: View {
 
                 // Login error hint
                 if let errorMessage = viewModel.loginError {
-                    HStack(spacing: 5) {
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(SetupTheme.errorIcon)
-                        Text(errorMessage)
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(SetupTheme.errorText)
-                    }
+                    setupErrorHint(errorMessage)
+                    // Signing in is where users get stuck by far the most, and
+                    // they cannot reach Settings from here, so the answer has to
+                    // come to them.
+                    helpLink(for: Self.signInHelpQuestion)
                 }
             }
         }
@@ -583,6 +592,7 @@ struct SetupView: View {
 
             if let deviceFlowError = viewModel.deviceFlowError {
                 setupErrorHint(deviceFlowError)
+                helpLink(for: Self.reachServerHelpQuestion)
             }
         }
     }
@@ -710,6 +720,29 @@ struct SetupView: View {
 
             loginButton
         }
+    }
+
+    /// Opening lines of the two questions the setup screen can send users to.
+    /// Prefixes, not full headlines, so editing `FAQ.md` cannot break the link.
+    private static let signInHelpQuestion = "I can sign in from Safari"
+    private static let reachServerHelpQuestion = "The app cannot reach my server"
+
+    /// Way out of a failed sign-in: opens the help on the question that matches
+    /// the error the user is looking at.
+    private func helpLink(for question: String) -> some View {
+        Button {
+            helpTopic = HelpTopic(question: question)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 11))
+                Text("Why does this happen?")
+                    .font(.system(size: 12.5))
+                    .underline()
+            }
+            .foregroundStyle(.white.opacity(0.7))
+        }
+        .buttonStyle(.plain)
     }
 
     /// Small inline error row reused across auth sections.
