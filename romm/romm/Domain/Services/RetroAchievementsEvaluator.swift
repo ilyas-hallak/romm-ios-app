@@ -18,12 +18,16 @@ final class RetroAchievementsEvaluator {
     @discardableResult
     func activate(achievementID: Int, definition: String) -> Bool {
         guard let identifier = UInt32(exactly: achievementID) else { return false }
+        runtimeEvaluationLock.lock()
+        defer { runtimeEvaluationLock.unlock() }
         return definition.withCString {
             rc_runtime_activate_achievement(runtime, identifier, $0, nil, 0) == RC_OK
         }
     }
 
     func evaluateFrame() -> [Int] {
+        runtimeEvaluationLock.lock()
+        defer { runtimeEvaluationLock.unlock() }
         triggeredAchievementIDs.removeAll(keepingCapacity: true)
         rc_runtime_do_frame(
             runtime,
@@ -48,6 +52,7 @@ private final class MemoryBox {
 // is driven from Libretro's main-actor frame callback, so a process-wide buffer
 // is sufficient until multiple simultaneous emulator sessions are supported.
 nonisolated(unsafe) private var triggeredAchievementIDs: [UInt32] = []
+private let runtimeEvaluationLock = NSLock()
 
 private func runtimeEventHandler(_ event: UnsafePointer<rc_runtime_event_t>?) {
     guard let event,
