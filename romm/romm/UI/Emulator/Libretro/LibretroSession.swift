@@ -11,8 +11,16 @@ final class LibretroSession: NSObject {
     private let saveStates: PEmulatorSaveStatesUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
+    private let rumblePreference: PRumblePreference?
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
+
+    // MARK: - Rumble
+    private let rumbleOutput = RumbleOutput()
+    /// Whether rumble is actually running for this session (switched on and a
+    /// core that reports it). The in-game menu only offers the intensity when
+    /// this is true, a slider that does nothing would be worse than none.
+    private(set) var isRumbleActive = false
 
     var onMenuRequested: (() -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
@@ -39,6 +47,7 @@ final class LibretroSession: NSObject {
         screenPositionPreference: PEmulatorScreenPositionPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         faceButtonPreference: PGamepadFaceButtonPreference? = nil,
+        rumblePreference: PRumblePreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -47,6 +56,7 @@ final class LibretroSession: NSObject {
         self.saveStates = saveStates
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
+        self.rumblePreference = rumblePreference
         self.cloudSync = cloudSync
         self.externalRenderTarget = nil
         self.viewController = LibretroGameViewController(
@@ -150,19 +160,107 @@ final class LibretroSession: NSObject {
         }
     }
 
+    // MARK: - HW-Render Meilenstein 1 (TEMPORAER)
+
+    /// Schaltet den roten-Bildschirm-Test statt der echten Core-Startlogik ein.
+    /// Beweist EAGL-Kontext + FBO + glReadPixels + Y-Flip + RGBA-CGImage-Mapping
+    /// isoliert, ohne libretro-Core. Wird in Meilenstein 3 durch echte
+    /// HW-Frames ersetzt. Zum Testen auf `true` setzen, danach wieder `false`.
+    /// Bewusst hier isoliert, damit die bestehende Software-Pipeline unberuehrt
+    /// bleibt.
+    private static let hwRenderMilestone1Test = false
+
+    /// Erzeugt einen roten FBO-Frame ueber den HW-Pfad und schickt ihn an den
+    /// bestehenden Video-Sink (Software-Blit). Reines Debugging fuer M1.
+    private func runHWRenderMilestone1Test() {
+        let width = 640
+        let height = 480
+
+        guard hwRenderMakeContext() else {
+            print("[HWRender] M1: Kontext-Erzeugung fehlgeschlagen")
+            viewController.showError("HW-Render M1: GL-Kontext fehlgeschlagen")
+            return
+        }
+        hwRenderSetupFramebuffer(Int32(width), Int32(height))
+
+        var buffer = [UInt8](repeating: 0, count: width * height * 4)
+        let ok = buffer.withUnsafeMutableBufferPointer { ptr -> Bool in
+            hwRenderClearAndReadback(ptr.baseAddress, Int32(width), Int32(height))
+        }
+        guard ok else {
+            print("[HWRender] M1: Readback fehlgeschlagen")
+            viewController.showError("HW-Render M1: Readback fehlgeschlagen")
+            return
+        }
+
+        print("[HWRender] M1: Testmuster-Frame an Video-Sink (\(width)x\(height))")
+        buffer.withUnsafeBufferPointer { ptr in
+            frontend.videoSink?.libretroDidProduceFrame(
+                data: ptr.baseAddress,
+                width: UInt32(width),
+                height: UInt32(height),
+                pitch: width * 4,
+                pixelFormat: .rgba8888
+            )
+        }
+    }
+
     private func startCore() {
+        // TEMPORAER (Meilenstein 1): den roten-Bildschirm-Test statt des echten
+        // Cores fahren. Laesst die Software-Core-Pipeline unangetastet.
+        if Self.hwRenderMilestone1Test {
+            runHWRenderMilestone1Test()
+            return
+        }
+
         do {
             let corePath = try locateCoreDylib()
-            let systemDir = libretroSystemDirectory().path
+            let systemDirURL = libretroSystemDirectory()
+            let systemDir = systemDirURL.path
             let saveDir = libretroSaveDirectory().path
             print("[Libretro] core=\(corePath)")
             print("[Libretro] system=\(systemDir) save=\(saveDir)")
+
+            // PPSSPP reads its runtime assets from <systemDir>/PPSSPP/ and only
+            // warns when they are absent. They ship in the app bundle, so put
+            // them in place before retro_init reads the system directory. No-op
+            // once the files are there; other cores never touch this path.
+            if core == .ppsspp {
+                PPSSPPAssetsInstaller.installIfNeeded(into: systemDirURL)
+            }
+
+            // pcsx_rearmed only reports rumble on a DualShock port, and that port
+            // also changes what the core expects from us. With rumble switched
+            // off we stay on the plain pad, which is exactly the old behaviour.
+            // The preference is read once here, never per frame.
+            let preference = rumblePreference
+            let rumbleActive = (preference?.isEnabled ?? false) && core == .pcsxRearmed
+            let portDevice = rumbleActive
+                ? LibretroABI.DEVICE_PSE_DUALSHOCK
+                : LibretroABI.DEVICE_JOYPAD
+
             try frontend.load(
                 corePath: corePath,
                 gamePath: gameURL.path,
                 systemDir: systemDir,
-                saveDir: saveDir
+                saveDir: saveDir,
+                portDevice: portDevice
             )
+
+            // Only after the core is up, so a failed load leaves no haptics
+            // engine running and no hook dangling on the shared frontend. The
+            // hook just has to be in place before the first frame runs.
+            if rumbleActive, let preference {
+                isRumbleActive = true
+                rumbleOutput.scale = preference.intensity.scale
+                rumbleOutput.start()
+                rumbleOutput.attach(controller: attachedController)
+                frontend.onRumbleChanged = { [weak self] strong, weak in
+                    self?.rumbleOutput.setMotors(strong: strong, weak: weak)
+                }
+                print("[Libretro] rumble enabled (\(preference.intensity.rawValue))")
+            }
+
             frontend.startRunLoop()
         } catch let error as LibretroFrontend.FrontendError {
             print("[Libretro] start failed: \(error.diagnosticDescription)")
@@ -184,6 +282,8 @@ final class LibretroSession: NSObject {
         // connect/disconnect events.
         controllerInput.detach(from: attachedController)
         attachedController = nil
+        // Back to the device haptics until a controller shows up again.
+        rumbleOutput.attach(controller: nil)
         attachControllerIfPresent()
     }
 
@@ -191,11 +291,27 @@ final class LibretroSession: NSObject {
         guard let controller = GCController.controllers().first else { return }
         attachedController = controller
         controllerInput.attach(to: controller)
+        rumbleOutput.attach(controller: controller)
         print("[Libretro] physical controller attached: \(controller.vendorName ?? "unknown")")
     }
 
     func reloadAspectRatio() {
         viewController.applyAspectConstraints()
+    }
+
+    /// Picks up the face-button swap and the menu shortcut changed in the
+    /// in-game menu, live. Both only affect how the input bridge reads the pad,
+    /// so nothing about the running core has to be touched.
+    func reloadControllerPreferences() {
+        controllerInput.reloadPreferences(for: attachedController)
+    }
+
+    /// Picks up an intensity changed from the in-game menu, live. Only the
+    /// scale is re-read: the on/off switch decides the controller port at load
+    /// time and cannot be flipped while the core is running.
+    func reloadRumbleIntensity() {
+        guard isRumbleActive, let preference = rumblePreference else { return }
+        rumbleOutput.scale = preference.intensity.scale
     }
 
 
@@ -211,6 +327,8 @@ final class LibretroSession: NSObject {
         externalRenderTarget = nil
         frontend.videoSink = nil
         frontend.stop()
+        rumbleOutput.stop()
+        isRumbleActive = false
         flushBatteryFromSaveDir()
     }
 
@@ -368,6 +486,7 @@ final class LibretroGameViewController: UIViewController {
         switch core {
         case .beetlePCEFast: controllerLayout = .pcEngine
         case .genesisPlusGX: controllerLayout = .genesis
+        case .flycast: controllerLayout = .dreamcast
         default: controllerLayout = .standard
         }
         self.controllerView = LibretroTouchControllerView(layout: controllerLayout)

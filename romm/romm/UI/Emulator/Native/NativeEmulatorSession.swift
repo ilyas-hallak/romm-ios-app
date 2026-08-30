@@ -187,6 +187,10 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     let screenPositionPreference: PEmulatorScreenPositionPreference
     private let faceButtonPreference: PGamepadFaceButtonPreference?
 
+    /// Watches the pad for the configured menu shortcut. Held strongly because
+    /// DeltaCore keeps its receivers weakly.
+    private let menuShortcutInput: NativeMenuShortcutInput
+
     var onMenuRequested: (() -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
     /// SwiftUI layer can show a standalone menu button in their place.
@@ -210,7 +214,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.emulatorCore
     }
 
-    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, controllerSkinURL: URL? = nil, faceButtonPreference: PGamepadFaceButtonPreference? = nil, cloudSync: CloudSaveSyncService? = nil) {
+    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, controllerSkinURL: URL? = nil, faceButtonPreference: PGamepadFaceButtonPreference? = nil, menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil, cloudSync: CloudSaveSyncService? = nil) {
         self.gameURL = gameURL
         self.gameType = gameType
         self.romId = romId
@@ -218,6 +222,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         self.cloudSync = cloudSync
         self.screenPositionPreference = screenPositionPreference
         self.faceButtonPreference = faceButtonPreference
+        self.menuShortcutInput = NativeMenuShortcutInput(menuShortcutPreference: menuShortcutPreference)
 
         let vc = RommGameViewController()
         vc.screenPositionPreference = screenPositionPreference
@@ -232,6 +237,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         self.viewController = vc
         super.init()
         vc.delegate = self
+        // Routed through the same entry point as DeltaCore's own `.menu` input
+        // below, so the menu opens the same way whichever path got there.
+        menuShortcutInput.onMenuRequested = { [weak self] in
+            self?.onMenuRequested?()
+        }
     }
 
     /// Loads the `.deltaskin` at `url`, or returns `nil` to stay on the built-in
@@ -381,13 +391,47 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             : controller.defaultInputMapping
         controller.addReceiver(core, inputMapping: mapping)
         controller.addReceiver(viewController, inputMapping: mapping)
+        // Registers itself with the controller's default mapping, on purpose:
+        // the shortcut is about physical buttons, not about what the running
+        // system calls them. See NativeMenuShortcutInput.
+        menuShortcutInput.attach(to: controller)
+    }
+
+    /// Re-applies the face-button swap to every connected controller after it
+    /// changed in the in-game menu, live.
+    ///
+    /// DeltaCore keeps one mapping per receiver in a map table, so calling
+    /// `addReceiver` again simply overwrites the previous entry, no
+    /// `removeReceiver` in between (which would also drop the receiver for a
+    /// frame). What does need care is anything still held: its press was routed
+    /// through the old mapping and its release would go to the new target,
+    /// leaving the old input stuck down in the core, so held inputs are lifted
+    /// before the swap.
+    func reloadFaceButtonMapping() {
+        guard let core = emulatorCore else { return }
+        for controller in ExternalGameControllerManager.shared.connectedControllers {
+            for input in controller.activatedInputs.keys {
+                controller.deactivate(input)
+            }
+            attach(controller, to: core)
+        }
+    }
+
+    /// Picks up a menu shortcut changed in the in-game menu, live. Only the combo
+    /// is re-read, the controllers stay wired exactly as they are.
+    func reloadMenuShortcut() {
+        menuShortcutInput.reloadPreferences()
     }
 
     private func detachExternalControllers() {
+        // Unconditional: the core can already be gone when a session is torn down
+        // early, and a button held at that point must not survive into the next one.
+        menuShortcutInput.reset()
         guard let core = emulatorCore else { return }
         for controller in ExternalGameControllerManager.shared.connectedControllers {
             controller.removeReceiver(core)
             controller.removeReceiver(viewController)
+            menuShortcutInput.detach(from: controller)
         }
     }
 
@@ -437,6 +481,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
               let core = emulatorCore else { return }
         controller.removeReceiver(core)
         controller.removeReceiver(viewController)
+        menuShortcutInput.detach(from: controller)
         updateOnScreenControlsVisibility()
     }
 

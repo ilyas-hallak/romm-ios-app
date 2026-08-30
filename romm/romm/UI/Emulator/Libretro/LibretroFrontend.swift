@@ -33,6 +33,33 @@ final class LibretroFrontend {
     private var frameAccumulator: Double = 0
     var frameCount: UInt64 = 0
 
+    // MARK: - HW render readback
+    /// Zielpuffer für `hwRenderReadbackCurrentFBO`. Bewusst manuell alloziert
+    /// und über Frames hinweg wiederverwendet: der HW-Pfad läuft pro Frame,
+    /// eine Allokation je Frame wäre reiner Ballast. Der Zeiger bleibt stabil,
+    /// solange der Video-Sink daraus liest.
+    private var hwReadbackStorage: UnsafeMutableRawPointer?
+    private var hwReadbackCapacity: Int = 0
+
+    /// Startgröße, falls `retro_get_system_av_info` keine brauchbare Geometrie
+    /// liefert. Nur dafür da, dass überhaupt ein FBO existiert und der Core sein
+    /// `context_reset` bekommt.
+    private static let hwRenderFallbackSize: (Int32, Int32) = (640, 480)
+
+    /// Liefert einen mindestens `byteCount` großen Puffer, ohne pro Frame neu
+    /// zu allozieren.
+    func hwReadbackBuffer(byteCount: Int) -> UnsafeMutableRawPointer? {
+        guard byteCount > 0 else { return nil }
+        if let buffer = hwReadbackStorage, hwReadbackCapacity >= byteCount {
+            return buffer
+        }
+        hwReadbackStorage?.deallocate()
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: 4)
+        hwReadbackStorage = buffer
+        hwReadbackCapacity = byteCount
+        return buffer
+    }
+
     // Symbols
     private var retro_init: LibretroABI.RetroInit?
     private var retro_deinit: LibretroABI.RetroDeinit?
@@ -71,6 +98,62 @@ final class LibretroFrontend {
         for i in 0..<buttonState.count { buttonState[i] = false }
     }
 
+    // MARK: - Rumble state (port 0)
+
+    /// Called whenever a motor level actually changes, with both channels
+    /// normalized to 0...1.
+    var onRumbleChanged: ((Float, Float) -> Void)?
+
+    /// What the core last asked for.
+    private var rumbleStrong: UInt16 = 0
+    private var rumbleWeak: UInt16 = 0
+    /// What we last handed to `onRumbleChanged`. Tracked separately from the core
+    /// state so pausing can silence the motors without making the core's next
+    /// (unchanged) value look like a no-op after resuming.
+    private var reportedStrong: UInt16 = 0
+    private var reportedWeak: UInt16 = 0
+
+    /// Logged once, to tell "the core never calls" apart from "the core calls
+    /// but only ever asks for zero".
+    private var loggedFirstRumbleCall = false
+
+    func setRumbleState(port: UInt32, effect: UInt32, strength: UInt16) {
+        if !loggedFirstRumbleCall {
+            loggedFirstRumbleCall = true
+            print("[Libretro] first set_rumble_state: port=\(port) effect=\(effect) strength=\(strength)")
+        }
+        guard port == 0 else { return }
+        switch effect {
+        case LibretroABI.RUMBLE_STRONG: rumbleStrong = strength
+        case LibretroABI.RUMBLE_WEAK: rumbleWeak = strength
+        default: return
+        }
+        notifyRumbleIfChanged()
+    }
+
+    /// The core may call the rumble interface every frame, so only a real change
+    /// is forwarded.
+    private func notifyRumbleIfChanged() {
+        guard rumbleStrong != reportedStrong || rumbleWeak != reportedWeak else { return }
+        reportedStrong = rumbleStrong
+        reportedWeak = rumbleWeak
+        // A change is rare enough to log, unlike the per frame calls above.
+        print("[Libretro] rumble strong=\(rumbleStrong) weak=\(rumbleWeak)")
+        onRumbleChanged?(
+            Float(rumbleStrong) / Float(UInt16.max),
+            Float(rumbleWeak) / Float(UInt16.max)
+        )
+    }
+
+    /// Silences the motors without touching the core state, so the next core
+    /// value gets through again even if it is the one from before the pause.
+    private func silenceRumble() {
+        guard reportedStrong != 0 || reportedWeak != 0 else { return }
+        reportedStrong = 0
+        reportedWeak = 0
+        onRumbleChanged?(0, 0)
+    }
+
     // MARK: - Audio state (Implementation in LibretroFrontend+Audio.swift)
     let audioEngine = AVAudioEngine()
     var audioSourceNode: AVAudioSourceNode?
@@ -99,7 +182,18 @@ final class LibretroFrontend {
         }
     }
 
-    func load(corePath: String, gamePath: String, systemDir: String, saveDir: String) throws {
+    /// - Parameter portDevice: Device reported for controller port 0, usually
+    ///   `LibretroABI.DEVICE_JOYPAD`. It is applied after `retro_load_game`,
+    ///   which resets the port to a plain pad internally. No default here: the
+    ///   constants are main-actor isolated, and a default argument is evaluated
+    ///   in the caller's (nonisolated) context.
+    func load(
+        corePath: String,
+        gamePath: String,
+        systemDir: String,
+        saveDir: String,
+        portDevice: UInt32
+    ) throws {
         guard FileManager.default.fileExists(atPath: corePath) else {
             throw FrontendError.dylibNotFound(corePath)
         }
@@ -183,7 +277,40 @@ final class LibretroFrontend {
         self.avInfo = av
         print("[Libretro] AV: \(av.geometry.base_width)x\(av.geometry.base_height) @\(av.timing.fps)Hz audio=\(av.timing.sample_rate)Hz")
 
-        retro_set_controller_port_device?(0, LibretroABI.DEVICE_JOYPAD)
+        // HW-Render-Pfad scharf schalten, bevor die Run-Loop startet. Reihenfolge
+        // ist Vertrag: erst GL-Kontext, dann FBO, erst danach context_reset —
+        // der Core legt darin seine GL-Ressourcen an und fragt sofort
+        // get_current_framebuffer ab. Alles auf dem Main-Thread, auf dem auch
+        // retro_run und der Readback laufen; ein EAGL-Kontext ist threadgebunden.
+        if hwRenderIsActive() {
+            let depth = hwRenderWantsDepth()
+            let stencil = hwRenderWantsStencil()
+            print("[Libretro] hw render: creating GLES3 context")
+            if hwRenderMakeContext() {
+                // Bewusst base_width/base_height: max_* ist Flycasts Obergrenze
+                // für Upscaling, nicht die tatsächliche Framegröße.
+                //
+                // Notnagel gegen 0: meldet ein Core hier keine Geometrie, gäbe es
+                // kein FBO und damit auch kein context_reset — der Core würde beim
+                // ersten GL-Zugriff segfaulten. Lieber mit einer Startgröße
+                // aufbauen; `hwRenderReadbackCurrentFBO` baut das FBO ohnehin neu,
+                // sobald der erste echte Frame eine andere Größe meldet.
+                var fbWidth = Int32(av.geometry.base_width)
+                var fbHeight = Int32(av.geometry.base_height)
+                if fbWidth <= 0 || fbHeight <= 0 {
+                    print("[Libretro] hw render: Core meldet Geometrie \(fbWidth)x\(fbHeight) — Fallback auf \(Self.hwRenderFallbackSize.0)x\(Self.hwRenderFallbackSize.1)")
+                    fbWidth = Self.hwRenderFallbackSize.0
+                    fbHeight = Self.hwRenderFallbackSize.1
+                }
+                print("[Libretro] hw render: FBO \(fbWidth)x\(fbHeight) depth=\(depth) stencil=\(stencil) bottomLeftOrigin=\(hwRenderBottomLeftOrigin())")
+                hwRenderSetupFramebufferEx(fbWidth, fbHeight, depth, stencil)
+                hwRenderInvokeContextReset()
+            } else {
+                print("[Libretro] hw render: GLES3 context creation failed, core will render into nothing")
+            }
+        }
+
+        retro_set_controller_port_device?(0, portDevice)
 
         startAudio(sampleRate: av.timing.sample_rate > 0 ? av.timing.sample_rate : 44100)
     }
@@ -193,6 +320,8 @@ final class LibretroFrontend {
         #if DEBUG
         frameRateWindowStart = 0
         frameRateWindowCount = 0
+        frameRateWindowThrottled = 0
+        frameRateWindowFrameBase = frameCount
         #endif
         let driver = DisplayLinkDriver { [weak self] displayFrameDuration in
             MainActor.assumeIsolated {
@@ -204,7 +333,33 @@ final class LibretroFrontend {
     }
 
     private var coreFPS: Double {
-        avInfo.timing.fps > 0 ? avInfo.timing.fps : 60
+        // Bounded, not just checked against zero: the core can rewrite the rate
+        // at runtime and a bogus value would freeze or fast-forward the loop.
+        (1...1000).contains(avInfo.timing.fps) ? avInfo.timing.fps : 60
+    }
+
+    /// Takes over the timings a core reports after loading. Flycast recomputes
+    /// its frame rate from the SPG registers on every video mode change, so the
+    /// value from `retro_get_system_av_info` is only the starting point.
+    func applyAVInfo(_ info: LibretroABI.SystemAVInfo) {
+        let previousFPS = avInfo.timing.fps
+        avInfo = info
+        if info.timing.fps != previousFPS {
+            Logger.performance.info(String(
+                format: "core retimed: %.4f Hz -> %.4f Hz", previousFPS, info.timing.fps
+            ))
+            // The backlog was measured against the old interval.
+            frameAccumulator = 0
+        }
+        // Retuning would mean rebuilding the source node mid-frame. No core we
+        // ship does this, so log it instead of carrying the machinery.
+        if info.timing.sample_rate > 0, info.timing.sample_rate != Self.audioActiveSampleRate {
+            Logger.general.notice("core changed sample rate to \(info.timing.sample_rate)Hz, engine stays at \(Self.audioActiveSampleRate)Hz")
+        }
+    }
+
+    func applyGeometry(_ geometry: LibretroABI.GameGeometry) {
+        avInfo.geometry = geometry
     }
 
     /// Runs as many core frames as the elapsed display time calls for. Usually
@@ -217,9 +372,16 @@ final class LibretroFrontend {
         // Capped so that after a stall (a load, a resume) the backlog is not
         // burned off in one burst, which would fast-forward the game.
         var runs = 0
+        var throttled = 0
         while frameAccumulator >= coreInterval && runs < 4 {
-            retro_run?()
+            // Debited before the check: a frame we skip is dropped, not owed.
             frameAccumulator -= coreInterval
+            // The display clock only paces cores where one `retro_run` is exactly
+            // one video frame of emulated time. PPSSPP and Flycast instead run
+            // until the game presents, so a 30 Hz title advances two frames per
+            // call and would run at double speed.
+            guard !coreIsAheadOfAudio() else { throttled += 1; break }
+            retro_run?()
             runs += 1
         }
 
@@ -232,7 +394,7 @@ final class LibretroFrontend {
         }
 
         #if DEBUG
-        countFrames(ran: runs)
+        countFrames(ran: runs, throttled: throttled)
         #endif
     }
 
@@ -241,27 +403,48 @@ final class LibretroFrontend {
 
     private var frameRateWindowStart: CFTimeInterval = 0
     private var frameRateWindowCount = 0
+    private var frameRateWindowThrottled = 0
+    private var frameRateWindowFrameBase: UInt64 = 0
 
-    /// Reports the rate the core actually achieves versus what it asked for, plus
-    /// how much audio is queued and how often the render callback ran dry. A gap
-    /// between measured and expected is the first thing to look at when audio
-    /// drifts, since the core produces its samples per frame.
-    private func countFrames(ran: Int) {
+    /// Reports what the core achieves versus what it asked for.
+    ///
+    /// The three values exist to tell causes apart that otherwise look alike:
+    /// `throttled` separates a core that cannot keep up (zero) from one held back
+    /// by the audio clock; `runs` versus `video` shows cores that return zero or
+    /// several frames per call; the audio rate is the only figure measuring
+    /// emulated time rather than call counts.
+    private func countFrames(ran: Int, throttled: Int) {
         frameRateWindowCount += ran
+        frameRateWindowThrottled += throttled
         let now = CACurrentMediaTime()
         if frameRateWindowStart == 0 {
             frameRateWindowStart = now
+            frameRateWindowFrameBase = frameCount
             return
         }
         let elapsed = now - frameRateWindowStart
-        guard elapsed >= 3 else { return }
-        let measured = Double(frameRateWindowCount) / elapsed
-        print(String(
-            format: "[Libretro] pacing: %.2f fps measured, %.2f expected, audio buffered %.0f ms, underruns %d",
-            measured, coreFPS, audioBufferedMilliseconds(), Self.audioUnderruns
+        guard elapsed >= 1 else { return }
+        let runs = Double(frameRateWindowCount) / elapsed
+        let video = Double(frameCount - frameRateWindowFrameBase) / elapsed
+        Logger.performance.debug(String(
+            format: "pacing: %.2f runs/s, %.2f expected, %.2f video/s, %d throttled, audio buffered %.0f ms, underruns %d",
+            runs, coreFPS, video, frameRateWindowThrottled, audioBufferedMilliseconds(), Self.audioUnderruns
+        ))
+        // Roughly the core's sample rate means real time, double means double
+        // speed. A non-zero trim figure means the fill level is being held in
+        // place and cannot be read as a speed signal.
+        Logger.performance.debug(String(
+            format: "audio rate: %.0f Hz from core, %.0f Hz expected, %.0f Hz trimmed away",
+            Double(Self.audioFramesProduced) / elapsed,
+            Self.audioActiveSampleRate,
+            Double(Self.audioFramesTrimmed) / elapsed
         ))
         frameRateWindowStart = now
         frameRateWindowCount = 0
+        frameRateWindowThrottled = 0
+        frameRateWindowFrameBase = frameCount
+        Self.audioFramesProduced = 0
+        Self.audioFramesTrimmed = 0
     }
     #endif
 
@@ -271,17 +454,29 @@ final class LibretroFrontend {
         displayLink = nil
         stopAudio()
         clearAllButtons()
+        rumbleStrong = 0
+        rumbleWeak = 0
+        reportedStrong = 0
+        reportedWeak = 0
+        onRumbleChanged?(0, 0)
         writeSRAMToDisk()
         sramURL = nil
         retro_unload_game?()
         retro_deinit?()
+        // Muss VOR dem dlclose laufen: der Teardown verwirft den gemerkten
+        // context_reset/context_destroy des Cores, der sonst als Dangling
+        // Pointer in die gleich entladene Dylib zeigen würde. Gibt zusätzlich
+        // EAGL-Kontext und FBO frei, damit die nächste Session sauber startet.
+        hwRenderTeardown()
         if let h = handle {
             dlclose(h)
             handle = nil
         }
         // Drop stale C function pointers into the now-unmapped dylib so a
         // delayed pause/resume from a stray scenePhase callback can't jump
-        // into freed text segments.
+        // into freed text segments. The rumble hook goes with them: the session
+        // that owns its haptics is on its way out too.
+        onRumbleChanged = nil
         retro_init = nil; retro_deinit = nil
         retro_get_system_info = nil; retro_get_system_av_info = nil
         retro_set_environment = nil; retro_set_video_refresh = nil
@@ -299,6 +494,7 @@ final class LibretroFrontend {
         guard let link = displayLink, !link.isPaused else { return }
         link.isPaused = true
         clearAllButtons()
+        silenceRumble()
         pauseAudio()
         writeSRAMToDisk()
     }
