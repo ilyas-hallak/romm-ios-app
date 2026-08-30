@@ -46,6 +46,10 @@ enum LibretroABI {
     static let ENVIRONMENT_GET_RUMBLE_INTERFACE: UInt32 = 23
     static let ENVIRONMENT_GET_LOG_INTERFACE: UInt32 = 27
     static let ENVIRONMENT_GET_SAVE_DIRECTORY: UInt32 = 31
+    /// Core reports changed timings at runtime, Flycast on every video mode change.
+    static let ENVIRONMENT_SET_SYSTEM_AV_INFO: UInt32 = 32
+    /// As above, geometry only — timings stay.
+    static let ENVIRONMENT_SET_GEOMETRY: UInt32 = 37
     static let ENVIRONMENT_GET_INPUT_BITMASKS: UInt32 = 51 | 0x10000
 
     // MARK: - Memory types (retro_get_memory_data/size)
