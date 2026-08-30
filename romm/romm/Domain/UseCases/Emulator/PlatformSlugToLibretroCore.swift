@@ -4,6 +4,7 @@ enum LibretroCore: String, Codable, Sendable {
     case pcsxRearmed = "pcsx_rearmed"
     case beetlePCEFast = "beetle_pce_fast"
     case genesisPlusGX = "genesis_plus_gx"
+    case flycast = "flycast"
     case ppsspp = "ppsspp"
     // Zukünftig: case beetlePsx, ...
 
@@ -12,6 +13,7 @@ enum LibretroCore: String, Codable, Sendable {
         case .pcsxRearmed: return "pcsx_rearmed_libretro_ios"
         case .beetlePCEFast: return "mednafen_pce_fast_libretro_ios"
         case .genesisPlusGX: return "genesis_plus_gx_libretro_ios"
+        case .flycast: return "flycast_libretro_ios"
         case .ppsspp: return "ppsspp_libretro_ios"
         }
     }
@@ -21,6 +23,7 @@ enum LibretroCore: String, Codable, Sendable {
         case .pcsxRearmed: return "PlayStation (PCSX ReARMed)"
         case .beetlePCEFast: return "PC Engine / TurboGrafx-16 (Beetle PCE FAST)"
         case .genesisPlusGX: return "Sega Master System / Game Gear / CD (Genesis Plus GX)"
+        case .flycast: return "Sega Dreamcast (Flycast)"
         case .ppsspp: return "PlayStation Portable (PPSSPP)"
         }
     }
@@ -39,6 +42,9 @@ enum LibretroCore: String, Codable, Sendable {
             // (.md/.gen/.smd/.bin) and Sega CD images (.cue/.iso/.chd). No archives.
             return ["sms", "gg", "sg", "md", "gen", "smd", "mdx", "bin",
                     "cue", "iso", "chd", "m3u", "toc"]
+        case .flycast:
+            // GD-ROM images (.chd/.gdi/.cdi) plus generic CD images. No archives.
+            return ["chd", "gdi", "cdi", "cue", "bin", "iso", "m3u"]
         case .ppsspp:
             // UMD images (.iso/.cso), PBP homebrew/PSN dumps, CHD and raw ELF.
             // No archives — the resolver hands the extracted ROM to the core.
@@ -72,6 +78,10 @@ enum PlatformSlugToLibretroCore {
             || s == "segacd" || s == "sega-cd" || s == "mega-cd" || s == "megacd"
             || s == "sega-cd-32x" || s.contains("sega cd") || s.contains("mega cd") {
             return .genesisPlusGX
+        }
+        if s == "dc" || s == "dreamcast" || s == "sega-dreamcast" || s == "segadc"
+            || s.contains("dreamcast") {
+            return .flycast
         }
         // Must stay after the PS1 branch: none of its patterns match "psp" or
         // "playstation-portable", so the order is only about keeping the more

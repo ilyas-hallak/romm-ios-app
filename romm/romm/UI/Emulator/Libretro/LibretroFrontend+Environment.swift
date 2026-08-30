@@ -142,6 +142,10 @@ extension LibretroFrontend {
             // which collides with our own L1+R1 menu shortcut. We do not support
             // analog sticks anyway, so a manual toggle buys nothing.
             case "pcsx_rearmed_analog_combo": answer = "disabled"
+            // Flycast would otherwise render on its own thread, which has no
+            // current EAGL context -- our context lives on the main thread that
+            // drives retro_run. Threaded rendering there means no output at all.
+            case "reicast_threaded_rendering": answer = "disabled"
             // PPSSPP defaults ppsspp_cpu_core to "JIT" (libretro_core_options.h:138).
             // iOS app processes have no JIT entitlement, and without an answer here
             // the core keeps the plain interpreter it presets in retro_load_game --
