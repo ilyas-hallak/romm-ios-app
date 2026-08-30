@@ -188,6 +188,8 @@ class RomDetailViewModel {
                         platformId: romDetails.platformId,
                         isFavourite: newFavoriteState,
                         hasRetroAchievements: romDetails.hasRetroAchievements,
+                        retroAchievementsGameId: romDetails.retroAchievementsGameId,
+                        retroAchievements: romDetails.retroAchievements,
                         genre: romDetails.genre,
                         developer: romDetails.developer,
                         publisher: romDetails.publisher,

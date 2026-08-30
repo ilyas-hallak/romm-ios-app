@@ -699,6 +699,10 @@ struct RomDetailView: View {
                 
                 // Game Information Section
                 gameInfoSection
+
+                if details.hasRetroAchievements {
+                    retroAchievementsSection(details)
+                }
             }
                         
             if let summary = rom.summary, !summary.isEmpty {
@@ -880,6 +884,103 @@ struct RomDetailView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func retroAchievementsSection(_ details: RomDetails) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("RetroAchievements", systemImage: "trophy.fill")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+                Spacer()
+                Text("\(details.retroAchievements.count) achievements")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 16)
+
+            if let progress = retroAchievementsProgress(for: details) {
+                let maximum = progress.maximumCount ?? details.retroAchievements.count
+                let awarded = progress.awardedCount ?? progress.earnedAchievements.count
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("\(awarded) of \(maximum) earned")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    ProgressView(value: Double(awarded), total: Double(max(maximum, 1)))
+                        .tint(.orange)
+                }
+            } else if appData.currentUser?.retroAchievementsUsername != nil {
+                Text("No progress has been reported for this game yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if details.retroAchievements.isEmpty {
+                Text("Achievement details are not available from this server.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }) { achievement in
+                    let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(id: achievement.id)
+                    HStack(alignment: .top, spacing: 12) {
+                        if let badgeURL = earnedAchievement == nil ? achievement.lockedBadgeURL : achievement.badgeURL {
+                            CachedKFImage(urlString: badgeURL) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                            } placeholder: {
+                                achievementStatusIcon(isEarned: earnedAchievement != nil)
+                            }
+                            .frame(width: 40, height: 40)
+                        } else {
+                            achievementStatusIcon(isEarned: earnedAchievement != nil)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text(achievement.title)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Spacer()
+                                if let points = achievement.points {
+                                    Text("\(points) pts")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if let description = achievement.description, !description.isEmpty {
+                                Text(description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let earnedAchievement {
+                                Text(
+                                    earnedAchievement.earnedHardcoreAt == nil
+                                        ? "Unlocked \(earnedAchievement.earnedAt)"
+                                        : "Unlocked in hardcore mode \(earnedAchievement.earnedAt)"
+                                )
+                                    .font(.caption)
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    private func retroAchievementsProgress(for details: RomDetails) -> RetroAchievementsProgression? {
+        guard let gameId = details.retroAchievementsGameId else { return nil }
+        return appData.currentUser?.retroAchievementsProgression.first { $0.gameId == gameId }
+    }
+
+    private func achievementStatusIcon(isEarned: Bool) -> some View {
+        Image(systemName: isEarned ? "checkmark.seal.fill" : "seal")
+            .font(.title3)
+            .foregroundStyle(isEarned ? .green : .secondary)
+            .frame(width: 40, height: 40)
     }
     
     @ViewBuilder
