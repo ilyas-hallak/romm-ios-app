@@ -215,10 +215,19 @@ final class LibretroSession: NSObject {
 
         do {
             let corePath = try locateCoreDylib()
-            let systemDir = libretroSystemDirectory().path
+            let systemDirURL = libretroSystemDirectory()
+            let systemDir = systemDirURL.path
             let saveDir = libretroSaveDirectory().path
             print("[Libretro] core=\(corePath)")
             print("[Libretro] system=\(systemDir) save=\(saveDir)")
+
+            // PPSSPP reads its runtime assets from <systemDir>/PPSSPP/ and only
+            // warns when they are absent. They ship in the app bundle, so put
+            // them in place before retro_init reads the system directory. No-op
+            // once the files are there; other cores never touch this path.
+            if core == .ppsspp {
+                PPSSPPAssetsInstaller.installIfNeeded(into: systemDirURL)
+            }
 
             // pcsx_rearmed only reports rumble on a DualShock port, and that port
             // also changes what the core expects from us. With rumble switched
