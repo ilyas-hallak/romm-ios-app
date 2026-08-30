@@ -151,6 +151,20 @@ extension LibretroFrontend {
             v.pointee.value = nil
             return false
 
+        case LibretroABI.ENVIRONMENT_SET_SYSTEM_AV_INFO:
+            // Ignoring this leaves us pacing against the rate that applied at
+            // load time; Flycast renegotiates on every video mode change.
+            guard let data = data else { return false }
+            applyAVInfo(data.assumingMemoryBound(to: LibretroABI.SystemAVInfo.self).pointee)
+            return true
+
+        case LibretroABI.ENVIRONMENT_SET_GEOMETRY:
+            // PPSSPP passes a full retro_system_av_info here, which starts with
+            // the geometry, so the cast holds for both cores.
+            guard let data = data else { return false }
+            applyGeometry(data.assumingMemoryBound(to: LibretroABI.GameGeometry.self).pointee)
+            return true
+
         case LibretroABI.ENVIRONMENT_SET_PERFORMANCE_LEVEL,
              LibretroABI.ENVIRONMENT_SET_VARIABLES,
              LibretroABI.ENVIRONMENT_SET_INPUT_DESCRIPTORS,
