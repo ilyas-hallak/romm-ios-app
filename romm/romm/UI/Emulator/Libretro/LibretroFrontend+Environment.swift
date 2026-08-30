@@ -16,6 +16,25 @@ extension LibretroFrontend {
             if s.frameCount <= 5 || s.frameCount % 60 == 0 {
                 print("[Libretro] frame #\(s.frameCount) data=\(data != nil ? "ptr" : "nil") \(width)x\(height) pitch=\(pitch) fmt=\(s.pixelFormat)")
             }
+
+            // RETRO_HW_FRAME_BUFFER_VALID ist (void*)-1, also gerade NICHT nil:
+            // ungeprüft würde der Software-Blit diesen Zeiger dereferenzieren
+            // und sofort crashen. Stattdessen das FBO zurücklesen.
+            if data == LibretroABI.HW_FRAME_BUFFER_VALID {
+                let w = Int(width)
+                let h = Int(height)
+                guard w > 0, h > 0,
+                      let buffer = s.hwReadbackBuffer(byteCount: w * h * 4),
+                      hwRenderReadbackCurrentFBO(buffer, Int32(w), Int32(h)) else {
+                    return
+                }
+                s.videoSink?.libretroDidProduceFrame(
+                    data: UnsafeRawPointer(buffer), width: width, height: height,
+                    pitch: w * 4, pixelFormat: .rgba8888
+                )
+                return
+            }
+
             s.videoSink?.libretroDidProduceFrame(
                 data: data, width: width, height: height, pitch: pitch,
                 pixelFormat: s.pixelFormat
@@ -71,6 +90,16 @@ extension LibretroFrontend {
             print("[Libretro] pixel format: \(pf)")
             return true
 
+        case LibretroABI.ENVIRONMENT_SET_HW_RENDER:
+            // Die retro_hw_render_callback-struct wird ausschliesslich in
+            // ObjC++ gegen die echte libretro.h ausgewertet.
+            guard hwRenderHandleSetHWRender(data) else { return false }
+            // glReadPixels liefert RGBA in Speicherreihenfolge; die View muss
+            // den Readback entsprechend interpretieren.
+            self.pixelFormat = .rgba8888
+            print("[Libretro] hw render accepted, pixel format forced to \(self.pixelFormat)")
+            return true
+
         case LibretroABI.ENVIRONMENT_GET_SYSTEM_DIRECTORY:
             writeCString(systemDir, into: data)
             return true
@@ -78,6 +107,13 @@ extension LibretroFrontend {
         case LibretroABI.ENVIRONMENT_GET_SAVE_DIRECTORY:
             writeCString(saveDir, into: data)
             return true
+
+        case LibretroABI.ENVIRONMENT_GET_LOG_INTERFACE:
+            // Ablehnen ist laut Spec erlaubt, aber PPSSPP prueft seinen log_cb
+            // nicht gegen NULL und ruft ihn noch in retro_init auf — das killt
+            // den Prozess. Siehe LibretroLog.h. Die struct wird in ObjC++
+            // befuellt, weil retro_log_printf_t C-variadisch ist.
+            return libretroInstallLogInterface(data)
 
         case LibretroABI.ENVIRONMENT_GET_VARIABLE_UPDATE:
             data?.assumingMemoryBound(to: Bool.self).pointee = false
@@ -122,9 +158,21 @@ extension LibretroFrontend {
             return true
 
         default:
-            // print("[Libretro] unhandled env cmd: \(cmd)")
+            logUnhandledEnv(cmd)
             return false
         }
+    }
+
+    /// Unbeantwortete Environment-Kommandos haben hier schon zweimal erst viel
+    /// spaeter zugeschlagen (Absturz statt Fehlermeldung). Cores fragen manche
+    /// davon pro Frame, deshalb jede ID nur einmal loggen.
+    nonisolated(unsafe) private static var loggedUnhandledEnv: Set<UInt32> = []
+
+    private func logUnhandledEnv(_ cmd: UInt32) {
+        guard Self.loggedUnhandledEnv.insert(cmd).inserted else { return }
+        // Das Experimental-Bit gehoert nicht zur Kommandonummer in libretro.h.
+        let base = cmd & ~UInt32(0x10000)
+        print("[Libretro] unhandled env cmd: \(cmd)\(base != cmd ? " (base \(base))" : "")")
     }
 
     // C-Strings ablegen, sodass libretro sie referenzieren kann.

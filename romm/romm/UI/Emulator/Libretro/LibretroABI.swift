@@ -13,6 +13,11 @@ enum LibretroABI {
         case rgb1555 = 0   // 0RGB1555, native endian
         case xrgb8888 = 1  // XRGB8888, native endian
         case rgb565 = 2    // RGB565, native endian
+        /// Kein libretro-Standardwert: interner Fall fuer den HW-Render-Pfad
+        /// (glReadPixels liefert RGBA8888 in Speicherreihenfolge). Bewusst
+        /// weit weg von 0...2, damit ein Core ihn nie versehentlich per
+        /// ENVIRONMENT_SET_PIXEL_FORMAT setzt.
+        case rgba8888 = 100 // RGBA in memory order (R,G,B,A), 8 bit/component
     }
 
     // MARK: - Environment callback commands (subset)
@@ -24,6 +29,17 @@ enum LibretroABI {
     static let ENVIRONMENT_GET_SYSTEM_DIRECTORY: UInt32 = 9
     static let ENVIRONMENT_SET_PIXEL_FORMAT: UInt32 = 10
     static let ENVIRONMENT_SET_INPUT_DESCRIPTORS: UInt32 = 11
+    /// Der Core reicht ein `struct retro_hw_render_callback *` herein. Die
+    /// struct wird bewusst nicht in Swift gespiegelt (drei einzelne bools
+    /// zwischen Pointern = Padding-Risiko), sondern in LibretroHWRender.mm
+    /// gegen die eingecheckte libretro.h gecastet.
+    static let ENVIRONMENT_SET_HW_RENDER: UInt32 = 14
+
+    /// `RETRO_HW_FRAME_BUFFER_VALID`, in libretro.h `((void*)-1)`. Ein Core im
+    /// HW-Render-Modus übergibt genau diesen Zeiger an retro_video_refresh,
+    /// statt eines echten Puffers. Er ist NICHT nil und darf nie dereferenziert
+    /// werden.
+    static let HW_FRAME_BUFFER_VALID = UnsafeRawPointer(bitPattern: ~0 as UInt)
     static let ENVIRONMENT_GET_VARIABLE: UInt32 = 15
     static let ENVIRONMENT_SET_VARIABLES: UInt32 = 16
     static let ENVIRONMENT_GET_VARIABLE_UPDATE: UInt32 = 17
