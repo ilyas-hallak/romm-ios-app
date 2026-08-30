@@ -429,8 +429,11 @@ final class LibretroTouchControllerView: UIView {
 
         // D-Pad ownership: claimed by first touch that lands inside dpad.frame
         // (mit dpadSlop), released when that touch lifts (slide outside is allowed).
+        // Ein Touch, der direkt auf einem Button liegt, gehoert diesem Button:
+        // sonst verschluckt der dpadSlop-Rand angrenzende Buttons (z.B. Start).
         if dpadTouch == nil, !ended,
-           dpad.frame.insetBy(dx: -dpadSlop, dy: -dpadSlop).contains(point) {
+           dpad.frame.insetBy(dx: -dpadSlop, dy: -dpadSlop).contains(point),
+           !faceButtons.contains(where: { $0.frame.contains(point) }) {
             dpadTouch = touch
         }
         if dpadTouch === touch {
