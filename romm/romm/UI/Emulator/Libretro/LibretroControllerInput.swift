@@ -30,6 +30,12 @@ final class LibretroControllerInput {
     /// while the buttons stay held.
     private var comboLatched = false
 
+    /// The configured combo, resolved here instead of on every button event: the
+    /// preference sits in UserDefaults and changes at most a handful of times per
+    /// session, while `send` runs up to once a frame. Kept current by
+    /// `reloadPreferences(for:)`.
+    private var comboButtons: Set<LibretroABI.JoypadButton>
+
     init(
         frontend: LibretroFrontend,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
@@ -38,6 +44,7 @@ final class LibretroControllerInput {
         self.frontend = frontend
         self.menuShortcutPreference = menuShortcutPreference
         self.faceButtonPreference = faceButtonPreference
+        self.comboButtons = Self.comboButtons(for: menuShortcutPreference?.current ?? .none)
     }
 
     // MARK: - Connect / Disconnect
@@ -58,15 +65,7 @@ final class LibretroControllerInput {
         pad.dpad.left.valueChangedHandler  = handler(for: .left)
         pad.dpad.right.valueChangedHandler = handler(for: .right)
 
-        // Face buttons (SNES/libretro layout: bottom = B, right = A, left = Y, top = X)
-        // GCController uses Xbox names: buttonA = bottom, buttonB = right,
-        // buttonX = left, buttonY = top. The pairs flip when the player has told
-        // us their pad is labelled the other way round.
-        let swapped = faceButtonPreference?.isSwapped ?? false
-        pad.buttonA.valueChangedHandler = handler(for: Self.faceButton(.bottom, swapped: swapped))
-        pad.buttonB.valueChangedHandler = handler(for: Self.faceButton(.right, swapped: swapped))
-        pad.buttonX.valueChangedHandler = handler(for: Self.faceButton(.left, swapped: swapped))
-        pad.buttonY.valueChangedHandler = handler(for: Self.faceButton(.top, swapped: swapped))
+        installFaceButtonHandlers(on: pad)
 
         // Shoulders
         pad.leftShoulder.valueChangedHandler  = handler(for: .l)
@@ -88,6 +87,20 @@ final class LibretroControllerInput {
         // shortcut combo below.
         pad.buttonMenu.valueChangedHandler = handler(for: .start)
         pad.buttonOptions?.valueChangedHandler = handler(for: .select)
+    }
+
+    /// Picks up the face-button swap and the menu shortcut after they changed in
+    /// the in-game menu, without restarting the core. Rebinding the four face
+    /// handlers is what makes the swap live: the alternative, resolving the
+    /// preference inside every handler, would pay a UserDefaults read per button
+    /// event for a value that hardly ever changes.
+    func reloadPreferences(for controller: GCController?) {
+        comboButtons = Self.comboButtons(for: menuShortcutPreference?.current ?? .none)
+        // A face button held while the swap lands would send its release to the
+        // newly mapped button and leave the old one stuck down in the core.
+        releaseFaceButtons()
+        guard let pad = controller?.extendedGamepad else { return }
+        installFaceButtonHandlers(on: pad)
     }
 
     /// Removes all handlers from the controller and clears any latched buttons.
@@ -117,6 +130,26 @@ final class LibretroControllerInput {
     }
 
     // MARK: - Private helpers
+
+    /// Face buttons (SNES/libretro layout: bottom = B, right = A, left = Y, top = X).
+    /// GCController uses Xbox names: buttonA = bottom, buttonB = right,
+    /// buttonX = left, buttonY = top. The pairs flip when the player has told us
+    /// their pad is labelled the other way round.
+    private func installFaceButtonHandlers(on pad: GCExtendedGamepad) {
+        let swapped = faceButtonPreference?.isSwapped ?? false
+        pad.buttonA.valueChangedHandler = handler(for: Self.faceButton(.bottom, swapped: swapped))
+        pad.buttonB.valueChangedHandler = handler(for: Self.faceButton(.right, swapped: swapped))
+        pad.buttonX.valueChangedHandler = handler(for: Self.faceButton(.left, swapped: swapped))
+        pad.buttonY.valueChangedHandler = handler(for: Self.faceButton(.top, swapped: swapped))
+    }
+
+    /// Lifts all four face buttons in the core, whichever way round they are
+    /// currently mapped.
+    private func releaseFaceButtons() {
+        for button in [LibretroABI.JoypadButton.a, .b, .x, .y] {
+            send(button, pressed: false)
+        }
+    }
 
     /// Builds a handler that forwards one physical button to one libretro button.
     /// `handlerQueue` is pinned to `.main` in `attach`, so the assumeIsolated is
@@ -157,8 +190,8 @@ final class LibretroControllerInput {
         onMenuRequested?()
     }
 
-    private var comboButtons: Set<LibretroABI.JoypadButton> {
-        switch menuShortcutPreference?.current ?? .none {
+    private static func comboButtons(for shortcut: EmulatorMenuShortcut) -> Set<LibretroABI.JoypadButton> {
+        switch shortcut {
         case .none: return []
         case .l3r3: return [.l3, .r3]
         case .l1r1: return [.l, .r]

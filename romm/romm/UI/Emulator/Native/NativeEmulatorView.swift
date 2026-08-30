@@ -68,6 +68,8 @@ struct NativeEmulatorView: View {
         .sheet(isPresented: $showMenu) {
             EmulatorMenuSheet(
                 session: viewModel.session,
+                faceButtonPreference: viewModel.gamepadFaceButtonPreference,
+                menuShortcutPreference: viewModel.emulatorMenuShortcutPreference,
                 onResume: { showMenu = false },
                 onQuit: {
                     showMenu = false

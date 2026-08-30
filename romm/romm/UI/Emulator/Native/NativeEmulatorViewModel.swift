@@ -44,6 +44,14 @@ final class NativeEmulatorViewModel {
         self.factory = factory
     }
 
+    /// The same instance the session is handed, so the in-game menu writes the
+    /// swap where the session reads it back from.
+    var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { factory.gamepadFaceButtonPreference }
+
+    /// Same idea for the menu shortcut: the in-game menu writes it where the
+    /// session's input bridge reads it back from.
+    var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { factory.emulatorMenuShortcutPreference }
+
     /// Save-state slot to auto-load once the core is running (chosen in the
     /// pre-launch sheet), or `nil` for a fresh start.
     private var resumeSlot: Int?
@@ -78,6 +86,7 @@ final class NativeEmulatorViewModel {
                 screenPositionPreference: factory.emulatorScreenPositionPreference,
                 controllerSkinURL: skinURL,
                 faceButtonPreference: factory.gamepadFaceButtonPreference,
+                menuShortcutPreference: factory.emulatorMenuShortcutPreference,
                 cloudSync: cloudSync
             )
             session?.onControlsHiddenChanged = { [weak self] hidden in

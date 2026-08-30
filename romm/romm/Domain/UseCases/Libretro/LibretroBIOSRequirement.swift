@@ -10,6 +10,38 @@ struct LibretroBIOSFile: Hashable, Sendable {
     let required: Bool
     /// Menschenlesbare Beschreibung.
     let note: String?
+    /// Unterverzeichnis relativ zum `LibretroSystem`-Verzeichnis. `nil` = flach
+    /// direkt in systemDir (PS1, Sega CD). Flycast erwartet seine BIOS-Dateien
+    /// dagegen in `<systemDir>/dc/`.
+    let subdirectory: String?
+
+    init(
+        fileName: String,
+        canonicalMD5: String?,
+        required: Bool,
+        note: String?,
+        subdirectory: String? = nil
+    ) {
+        self.fileName = fileName
+        self.canonicalMD5 = canonicalMD5
+        self.required = required
+        self.note = note
+        self.subdirectory = subdirectory
+    }
+}
+
+extension LibretroBIOSFile {
+    /// Erwarteter Ablageort dieser Datei unterhalb von `systemDir`. Einzige
+    /// Stelle, an der aus Requirement + systemDir ein Pfad wird, damit Lesen
+    /// (Status) und Schreiben (Download) nicht auseinanderlaufen können.
+    func localURL(in systemDir: URL) -> URL {
+        guard let subdirectory else {
+            return systemDir.appendingPathComponent(fileName)
+        }
+        return systemDir
+            .appendingPathComponent(subdirectory, isDirectory: true)
+            .appendingPathComponent(fileName)
+    }
 }
 
 /// BIOS-Anforderungen pro libretro-Core. Quelle: libretro-docs für PCSX ReARMed.
@@ -63,6 +95,29 @@ enum LibretroBIOSRequirement {
                     note: "Sega CD BIOS – Japan"
                 )
             ]
+        case .flycast:
+            // Flycast liest beide Dateien aus <systemDir>/dc/, nicht flach.
+            return [
+                LibretroBIOSFile(
+                    fileName: "dc_boot.bin",
+                    canonicalMD5: "e10c53c2f8b90bab96ead2d368858623",
+                    required: true,
+                    note: "Dreamcast Boot ROM",
+                    subdirectory: "dc"
+                ),
+                LibretroBIOSFile(
+                    fileName: "dc_flash.bin",
+                    canonicalMD5: "0a93f7940c455905bea6e392dfde92a4",
+                    required: true,
+                    note: "Dreamcast Flash ROM",
+                    subdirectory: "dc"
+                )
+            ]
+        case .ppsspp:
+            // PSP-Spiele booten ohne BIOS: PPSSPP emuliert die Firmware per HLE.
+            // Die Assets (ppge_atlas, flash0/font, vfpu-Tabellen) liefert die App
+            // selbst mit, siehe PPSSPPAssetsInstaller.
+            return []
         }
     }
 
@@ -78,6 +133,13 @@ enum LibretroBIOSRequirement {
             // No hard gate: SMS/GG/SG-1000/Genesis carts boot without any BIOS.
             // Sega CD BIOS is optional and only needed for CD images.
             return nil
+        case .flycast:
+            // Kein "eines von mehreren": dc_boot.bin UND dc_flash.bin sind beide
+            // required, das deckt `files(for:)` mit required: true bereits ab.
+            return nil
+        case .ppsspp:
+            // Kein BIOS, also auch kein Start-Gate.
+            return nil
         }
     }
 
@@ -92,6 +154,10 @@ enum LibretroBIOSRequirement {
             return ["pce", "pc-engine", "turbografx-16", "tg16"]
         case .genesisPlusGX:
             return ["sms", "master-system", "gamegear", "game-gear", "sg1000", "segacd", "sega-cd"]
+        case .flycast:
+            return ["dc", "dreamcast"]
+        case .ppsspp:
+            return ["psp", "playstation-portable"]
         }
     }
 }

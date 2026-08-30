@@ -13,6 +13,11 @@ enum LibretroABI {
         case rgb1555 = 0   // 0RGB1555, native endian
         case xrgb8888 = 1  // XRGB8888, native endian
         case rgb565 = 2    // RGB565, native endian
+        /// Kein libretro-Standardwert: interner Fall fuer den HW-Render-Pfad
+        /// (glReadPixels liefert RGBA8888 in Speicherreihenfolge). Bewusst
+        /// weit weg von 0...2, damit ein Core ihn nie versehentlich per
+        /// ENVIRONMENT_SET_PIXEL_FORMAT setzt.
+        case rgba8888 = 100 // RGBA in memory order (R,G,B,A), 8 bit/component
     }
 
     // MARK: - Environment callback commands (subset)
@@ -24,11 +29,27 @@ enum LibretroABI {
     static let ENVIRONMENT_GET_SYSTEM_DIRECTORY: UInt32 = 9
     static let ENVIRONMENT_SET_PIXEL_FORMAT: UInt32 = 10
     static let ENVIRONMENT_SET_INPUT_DESCRIPTORS: UInt32 = 11
+    /// Der Core reicht ein `struct retro_hw_render_callback *` herein. Die
+    /// struct wird bewusst nicht in Swift gespiegelt (drei einzelne bools
+    /// zwischen Pointern = Padding-Risiko), sondern in LibretroHWRender.mm
+    /// gegen die eingecheckte libretro.h gecastet.
+    static let ENVIRONMENT_SET_HW_RENDER: UInt32 = 14
+
+    /// `RETRO_HW_FRAME_BUFFER_VALID`, in libretro.h `((void*)-1)`. Ein Core im
+    /// HW-Render-Modus übergibt genau diesen Zeiger an retro_video_refresh,
+    /// statt eines echten Puffers. Er ist NICHT nil und darf nie dereferenziert
+    /// werden.
+    static let HW_FRAME_BUFFER_VALID = UnsafeRawPointer(bitPattern: ~0 as UInt)
     static let ENVIRONMENT_GET_VARIABLE: UInt32 = 15
     static let ENVIRONMENT_SET_VARIABLES: UInt32 = 16
     static let ENVIRONMENT_GET_VARIABLE_UPDATE: UInt32 = 17
+    static let ENVIRONMENT_GET_RUMBLE_INTERFACE: UInt32 = 23
     static let ENVIRONMENT_GET_LOG_INTERFACE: UInt32 = 27
     static let ENVIRONMENT_GET_SAVE_DIRECTORY: UInt32 = 31
+    /// Core reports changed timings at runtime, Flycast on every video mode change.
+    static let ENVIRONMENT_SET_SYSTEM_AV_INFO: UInt32 = 32
+    /// As above, geometry only — timings stay.
+    static let ENVIRONMENT_SET_GEOMETRY: UInt32 = 37
     static let ENVIRONMENT_GET_INPUT_BITMASKS: UInt32 = 51 | 0x10000
 
     // MARK: - Memory types (retro_get_memory_data/size)
@@ -43,6 +64,14 @@ enum LibretroABI {
     static let DEVICE_MOUSE: UInt32 = 2
     static let DEVICE_KEYBOARD: UInt32 = 3
     static let DEVICE_ANALOG: UInt32 = 5
+
+    /// RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_ANALOG, 1), i.e. ((1 + 1) << 8) | 5 = 517.
+    /// PCSX ReARMed only reports rumble while the port is set to DualShock.
+    static let DEVICE_PSE_DUALSHOCK: UInt32 = 517
+
+    // MARK: - Rumble effects
+    static let RUMBLE_STRONG: UInt32 = 0
+    static let RUMBLE_WEAK: UInt32 = 1
 
     // MARK: - Joypad buttons
     enum JoypadButton: UInt32 {
@@ -91,6 +120,12 @@ enum LibretroABI {
         var value: UnsafePointer<CChar>?
     }
 
+    /// retro_rumble_interface. The core only copies the function pointer out of
+    /// this struct, so it may live on the stack.
+    struct RumbleInterface {
+        var set_rumble_state: SetRumbleStateFn?
+    }
+
     // MARK: - Function pointer typedefs
     typealias EnvironmentFn = @convention(c) (UInt32, UnsafeMutableRawPointer?) -> Bool
     typealias VideoRefreshFn = @convention(c) (UnsafeRawPointer?, UInt32, UInt32, Int) -> Void
@@ -98,6 +133,8 @@ enum LibretroABI {
     typealias AudioSampleBatchFn = @convention(c) (UnsafePointer<Int16>?, Int) -> Int
     typealias InputPollFn = @convention(c) () -> Void
     typealias InputStateFn = @convention(c) (UInt32, UInt32, UInt32, UInt32) -> Int16
+    /// (port, effect, strength 0...0xffff) -> handled
+    typealias SetRumbleStateFn = @convention(c) (UInt32, UInt32, UInt16) -> Bool
 
     typealias RetroInit = @convention(c) () -> Void
     typealias RetroDeinit = @convention(c) () -> Void
