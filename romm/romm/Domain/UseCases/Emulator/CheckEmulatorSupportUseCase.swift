@@ -33,6 +33,10 @@ class CheckEmulatorSupportUseCase: PCheckEmulatorSupportUseCase {
         "sg1000", "sg-1000",
         "segacd", "sega cd", "mega-cd", "megacd",
         "saturn", "sega saturn",
+        // Dreamcast ("dc") ist bewusst deaktiviert: Flycast laeuft zwar inkl.
+        // HW-Rendering, die Audioausgabe ist aber zeitweise zu schnell. Zum
+        // Freischalten hier und in PlatformROMsListView.isPlatformSupported "dc"
+        // ergaenzen.
         "dreamcast", "sega dreamcast",
 
         // Sony

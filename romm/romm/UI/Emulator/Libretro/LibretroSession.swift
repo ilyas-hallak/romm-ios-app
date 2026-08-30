@@ -486,6 +486,7 @@ final class LibretroGameViewController: UIViewController {
         switch core {
         case .beetlePCEFast: controllerLayout = .pcEngine
         case .genesisPlusGX: controllerLayout = .genesis
+        case .flycast: controllerLayout = .dreamcast
         default: controllerLayout = .standard
         }
         self.controllerView = LibretroTouchControllerView(layout: controllerLayout)
