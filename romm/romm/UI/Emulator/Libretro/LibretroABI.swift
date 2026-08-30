@@ -46,6 +46,12 @@ enum LibretroABI {
     static let ENVIRONMENT_GET_RUMBLE_INTERFACE: UInt32 = 23
     static let ENVIRONMENT_GET_LOG_INTERFACE: UInt32 = 27
     static let ENVIRONMENT_GET_SAVE_DIRECTORY: UInt32 = 31
+    /// Der Core meldet geänderte Timings/Geometrie zur Laufzeit. Flycast schickt
+    /// das bei jedem Videomodus-Wechsel (spg.cpp: CalculateSync ->
+    /// retro_refresh_av_info), PPSSPP bei geänderter interner Auflösung.
+    static let ENVIRONMENT_SET_SYSTEM_AV_INFO: UInt32 = 32
+    /// Wie oben, aber nur Geometrie – Timings bleiben.
+    static let ENVIRONMENT_SET_GEOMETRY: UInt32 = 37
     static let ENVIRONMENT_GET_INPUT_BITMASKS: UInt32 = 51 | 0x10000
 
     // MARK: - Memory types (retro_get_memory_data/size)

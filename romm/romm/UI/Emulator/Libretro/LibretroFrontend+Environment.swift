@@ -151,6 +151,23 @@ extension LibretroFrontend {
             v.pointee.value = nil
             return false
 
+        case LibretroABI.ENVIRONMENT_SET_SYSTEM_AV_INFO:
+            // Timing-relevant, nicht kosmetisch: Flycast rechnet die echte
+            // Bildrate aus den SPG-Registern und meldet sie bei jedem
+            // Videomodus-Wechsel nach (spg.cpp:67). Ohne Antwort pacen wir
+            // ewig gegen die Rate, die beim Laden galt.
+            guard let data = data else { return false }
+            applyAVInfo(data.assumingMemoryBound(to: LibretroABI.SystemAVInfo.self).pointee)
+            return true
+
+        case LibretroABI.ENVIRONMENT_SET_GEOMETRY:
+            // Nur Geometrie, die Timings bleiben stehen. PPSSPP reicht hier eine
+            // ganze retro_system_av_info herein (libretro.cpp:1134) — die
+            // beginnt mit der Geometrie, der Cast passt also fuer beide Cores.
+            guard let data = data else { return false }
+            applyGeometry(data.assumingMemoryBound(to: LibretroABI.GameGeometry.self).pointee)
+            return true
+
         case LibretroABI.ENVIRONMENT_SET_PERFORMANCE_LEVEL,
              LibretroABI.ENVIRONMENT_SET_VARIABLES,
              LibretroABI.ENVIRONMENT_SET_INPUT_DESCRIPTORS,
