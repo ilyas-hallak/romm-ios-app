@@ -31,10 +31,60 @@ extension LibretroFrontend {
     private static let audioTrimThresholdMs: Double = 80
     private static let audioTrimTargetMs: Double = 50
 
+    /// Fill level from which the core counts as running ahead of the audio
+    /// clock.
+    ///
+    /// Note what this cannot do, measured rather than assumed: the trim below
+    /// runs inside `enqueueAudio`, so the level is already back at the target
+    /// by the time the next tick reads it. With a core handing over 33 ms per
+    /// call the level sawtooths between roughly 33 and 50 ms and never reaches
+    /// this limit — the device log showed exactly that, `0 throttled` while the
+    /// game ran at double speed. Back pressure is a safety net against a core
+    /// that outruns us in bursts, not a speed regulator; getting the emulated
+    /// time per `retro_run` right is the frontend's job (see the PPSSPP
+    /// `ppsspp_frame_duplication` answer in LibretroFrontend+Environment).
+    private static let audioRunAheadLimitMs: Double = 70
+
+    /// Whether the next `retro_run` would only produce samples the trim is going
+    /// to throw away again.
+    ///
+    /// The samples a core hands over are proportional to *emulated* time, which
+    /// makes a ring that keeps filling the one reliable signal that the core is
+    /// running faster than real time — the frame counter cannot see it, because
+    /// a core that advances two emulated frames per call still looks like a
+    /// perfect 60 fps from the outside.
+    ///
+    /// Only meaningful while the engine actually drains the ring. With no
+    /// consumer the trim in `enqueueAudio` parks the fill level inside the
+    /// window all by itself, and reading it would stall the core for good.
+    func coreIsAheadOfAudio() -> Bool {
+        guard audioEngine.isRunning else { return false }
+        return audioBufferedMilliseconds() >= Self.audioRunAheadLimitMs
+    }
+
     /// Incremented whenever the render callback runs out of samples and has to
     /// emit silence. Anything above zero during steady play means the trim window
     /// is too tight.
     nonisolated(unsafe) static var audioUnderruns: Int = 0
+
+    /// Frames (sample pairs) handed over by the core since the last pacing
+    /// report, and frames the trim threw away again in the same window.
+    ///
+    /// The production rate is the only direct measure of *emulated* time we get:
+    /// cores schedule their mixer off the emulated clock (PPSSPP every 64
+    /// samples, `__sceAudio.cpp:63`), so 44100 frames per real second means the
+    /// core is running at real time and 88200 means double speed. The frame
+    /// counter cannot show this, because a core that advances two emulated
+    /// frames per `retro_run` still looks like a clean 60 fps from outside.
+    ///
+    /// The trim counter belongs next to it: while it is discarding samples the
+    /// fill level says nothing about the production rate, and every regulation
+    /// built on that level — `coreIsAheadOfAudio()` included — is reading a
+    /// number the trim itself has pinned inside its window.
+    ///
+    /// Counted per batch (about 60 calls a second), not per sample.
+    nonisolated(unsafe) static var audioFramesProduced: Int = 0
+    nonisolated(unsafe) static var audioFramesTrimmed: Int = 0
 
     /// How much audio is waiting to be played. This, not the ring's size, is the
     /// audio latency: the ring is 2 seconds deep, what matters is how full it is.
@@ -48,6 +98,8 @@ extension LibretroFrontend {
     func startAudio(sampleRate: Double) {
         Self.audioActiveSampleRate = sampleRate > 0 ? sampleRate : Double(Self.audioSampleRateHz)
         Self.audioUnderruns = 0
+        Self.audioFramesProduced = 0
+        Self.audioFramesTrimmed = 0
         // Ask for a short hardware buffer. The default under .playback is around
         // 20 ms, chosen for power rather than latency, and every millisecond here
         // is a millisecond between the core producing a sample and it being
@@ -56,9 +108,13 @@ extension LibretroFrontend {
         // over AirPlay it usually ignores this entirely, hence the log below.
         EmulatorAudioSession.activate(preferredIOBufferDuration: 0.005)
         let session = AVAudioSession.sharedInstance()
+        // Core rate and hardware rate are logged side by side because they
+        // differ on every iPhone (cores are 44.1 kHz, the built-in speaker runs
+        // at 48 kHz). The conversion is the mixer's job below, and this line is
+        // what shows whether it is actually happening.
         print(String(
-            format: "[Libretro] audio out: io buffer %.1f ms, route latency %.1f ms",
-            session.ioBufferDuration * 1000, session.outputLatency * 1000
+            format: "[Libretro] audio out: core %.0f Hz, hardware %.0f Hz, io buffer %.1f ms, route latency %.1f ms",
+            sampleRate, session.sampleRate, session.ioBufferDuration * 1000, session.outputLatency * 1000
         ))
 
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
@@ -71,7 +127,17 @@ extension LibretroFrontend {
         audioEngine.connect(node, to: audioEngine.mainMixerNode, format: format)
         do {
             try audioEngine.start()
-            print("[Libretro] audio engine started @\(sampleRate)Hz")
+            // The source node is created without a format, so the render block
+            // is driven at the connection format above — the mixer resamples to
+            // the output rate. If those two ever printed the same rate while the
+            // hardware ran at another, the block would be pulled at the wrong
+            // speed and everything would play sharp.
+            print(String(
+                format: "[Libretro] audio graph: source %.0f Hz -> mixer out %.0f Hz -> device %.0f Hz",
+                sampleRate,
+                audioEngine.mainMixerNode.outputFormat(forBus: 0).sampleRate,
+                audioEngine.outputNode.outputFormat(forBus: 0).sampleRate
+            ))
         } catch {
             print("[Libretro] audio start failed: \(error)")
         }
@@ -110,6 +176,7 @@ extension LibretroFrontend {
     func enqueueAudio(_ samples: UnsafePointer<Int16>, frames: Int) {
         let count = frames * 2 // stereo
         Self.audioRingLock.lock()
+        Self.audioFramesProduced += frames
         for i in 0..<count {
             Self.audioRing[Self.audioWriteIdx] = samples[i]
             Self.audioWriteIdx = (Self.audioWriteIdx + 1) % Self.audioRing.count
@@ -133,6 +200,7 @@ extension LibretroFrontend {
         if queued > threshold {
             // Advance the reader rather than rewinding the writer: the newest
             // audio is the part that belongs with the picture on screen now.
+            Self.audioFramesTrimmed += (queued - target) / Self.audioChannelCount
             Self.audioReadIdx = (Self.audioWriteIdx - target + Self.audioRing.count) % Self.audioRing.count
         }
         Self.audioRingLock.unlock()

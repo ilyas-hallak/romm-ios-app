@@ -320,6 +320,8 @@ final class LibretroFrontend {
         #if DEBUG
         frameRateWindowStart = 0
         frameRateWindowCount = 0
+        frameRateWindowThrottled = 0
+        frameRateWindowFrameBase = frameCount
         #endif
         let driver = DisplayLinkDriver { [weak self] displayFrameDuration in
             MainActor.assumeIsolated {
@@ -331,7 +333,33 @@ final class LibretroFrontend {
     }
 
     private var coreFPS: Double {
-        avInfo.timing.fps > 0 ? avInfo.timing.fps : 60
+        // Bounded rather than just checked against zero: the rate can now be
+        // rewritten at runtime by the core (SET_SYSTEM_AV_INFO), and a bogus
+        // value would either freeze the run loop or fast-forward it.
+        (1...1000).contains(avInfo.timing.fps) ? avInfo.timing.fps : 60
+    }
+
+    /// Takes over the timings a core reports after loading. Flycast recomputes
+    /// its frame rate from the SPG registers on every video mode change, so the
+    /// value from `retro_get_system_av_info` is only the starting point.
+    func applyAVInfo(_ info: LibretroABI.SystemAVInfo) {
+        let previousFPS = avInfo.timing.fps
+        avInfo = info
+        if info.timing.fps != previousFPS {
+            print(String(format: "[Libretro] core retimed: %.4f Hz -> %.4f Hz", previousFPS, info.timing.fps))
+            // The backlog was measured against the old interval.
+            frameAccumulator = 0
+        }
+        // Retuning the engine would mean tearing down and rebuilding the source
+        // node mid-frame. Neither core actually does this — both are pinned to
+        // 44.1 kHz — so log it rather than carry the machinery for it.
+        if info.timing.sample_rate > 0, info.timing.sample_rate != Self.audioActiveSampleRate {
+            print("[Libretro] core changed sample rate to \(info.timing.sample_rate)Hz, engine stays at \(Self.audioActiveSampleRate)Hz")
+        }
+    }
+
+    func applyGeometry(_ geometry: LibretroABI.GameGeometry) {
+        avInfo.geometry = geometry
     }
 
     /// Runs as many core frames as the elapsed display time calls for. Usually
@@ -344,9 +372,22 @@ final class LibretroFrontend {
         // Capped so that after a stall (a load, a resume) the backlog is not
         // burned off in one burst, which would fast-forward the game.
         var runs = 0
+        var throttled = 0
         while frameAccumulator >= coreInterval && runs < 4 {
-            retro_run?()
+            // Debited before the check on purpose: a frame we decide not to run
+            // is dropped, not owed. Otherwise the accumulator would saturate and
+            // the next tick would burst.
             frameAccumulator -= coreInterval
+            // The display clock alone only paces cores where one `retro_run` is
+            // exactly one video frame of emulated time — PCSX ReARMed, Beetle
+            // PCE and Genesis Plus GX all are. PPSSPP and Flycast instead run
+            // until the game presents a frame (sceDisplay.cpp:670,
+            // Renderer_if.cpp:270), so a title drawing at 30 Hz advances two
+            // frames of emulated time per call and calling it at the reported
+            // ~60 Hz runs it at double speed. Skipping the call is what pins
+            // those back to real time.
+            guard !coreIsAheadOfAudio() else { throttled += 1; break }
+            retro_run?()
             runs += 1
         }
 
@@ -359,7 +400,7 @@ final class LibretroFrontend {
         }
 
         #if DEBUG
-        countFrames(ran: runs)
+        countFrames(ran: runs, throttled: throttled)
         #endif
     }
 
@@ -368,27 +409,57 @@ final class LibretroFrontend {
 
     private var frameRateWindowStart: CFTimeInterval = 0
     private var frameRateWindowCount = 0
+    private var frameRateWindowThrottled = 0
+    private var frameRateWindowFrameBase: UInt64 = 0
 
     /// Reports the rate the core actually achieves versus what it asked for, plus
     /// how much audio is queued and how often the render callback ran dry. A gap
     /// between measured and expected is the first thing to look at when audio
     /// drifts, since the core produces its samples per frame.
-    private func countFrames(ran: Int) {
+    ///
+    /// `throttled` tells the two reasons for a low measured rate apart: a core
+    /// that cannot keep up shows zero there, one that was held back by the audio
+    /// clock because it advances more than a frame per call shows the difference.
+    ///
+    /// `runs` and `video` are counted separately because they are not the same
+    /// question. `runs` is how often we called the core, `video` how many frames
+    /// it handed back — PPSSPP and Flycast may return zero or several per call,
+    /// and only the second line below can say how much *emulated* time went by
+    /// while that happened.
+    private func countFrames(ran: Int, throttled: Int) {
         frameRateWindowCount += ran
+        frameRateWindowThrottled += throttled
         let now = CACurrentMediaTime()
         if frameRateWindowStart == 0 {
             frameRateWindowStart = now
+            frameRateWindowFrameBase = frameCount
             return
         }
         let elapsed = now - frameRateWindowStart
-        guard elapsed >= 3 else { return }
-        let measured = Double(frameRateWindowCount) / elapsed
+        guard elapsed >= 1 else { return }
+        let runs = Double(frameRateWindowCount) / elapsed
+        let video = Double(frameCount - frameRateWindowFrameBase) / elapsed
         print(String(
-            format: "[Libretro] pacing: %.2f fps measured, %.2f expected, audio buffered %.0f ms, underruns %d",
-            measured, coreFPS, audioBufferedMilliseconds(), Self.audioUnderruns
+            format: "[Libretro] pacing: %.2f runs/s, %.2f expected, %.2f video/s, %d throttled, audio buffered %.0f ms, underruns %d",
+            runs, coreFPS, video, frameRateWindowThrottled, audioBufferedMilliseconds(), Self.audioUnderruns
+        ))
+        // Second line on purpose: this is the one number that measures emulated
+        // time rather than call counts. Roughly the core's sample rate means the
+        // core runs at real time; double it means double speed; a non-zero trim
+        // figure means the fill level is being held in place by force and cannot
+        // be trusted as a speed signal.
+        print(String(
+            format: "[Libretro] audio rate: %.0f Hz from core, %.0f Hz expected, %.0f Hz trimmed away",
+            Double(Self.audioFramesProduced) / elapsed,
+            Self.audioActiveSampleRate,
+            Double(Self.audioFramesTrimmed) / elapsed
         ))
         frameRateWindowStart = now
         frameRateWindowCount = 0
+        frameRateWindowThrottled = 0
+        frameRateWindowFrameBase = frameCount
+        Self.audioFramesProduced = 0
+        Self.audioFramesTrimmed = 0
     }
     #endif
 
