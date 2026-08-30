@@ -13,7 +13,7 @@ final class BIOSSettingsViewModel: ObservableObject {
     }
 
     private let useCase: PBIOSSyncUseCase
-    private let cores: [LibretroCore] = [.pcsxRearmed]
+    private let cores: [LibretroCore] = [.pcsxRearmed, .flycast]
 
     init(useCase: PBIOSSyncUseCase) {
         self.useCase = useCase
