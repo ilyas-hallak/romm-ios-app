@@ -9,6 +9,27 @@ import Foundation
 
 // MARK: - Heartbeat API Wrapper
 extension RommAPIClient {
+
+    /// Own session for the reachability check during setup.
+    ///
+    /// The shared session allows an hour per resource, which is right for a ROM
+    /// download and wrong here: a mistyped or unreachable address does not fail,
+    /// it just never answers, and the user watches a spinner until they give up.
+    /// A short, self-contained budget turns that into an error message.
+    private static let setupSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = RommAPIClient.setupTimeout
+        configuration.timeoutIntervalForResource = RommAPIClient.setupTimeout
+        // Queueing the request until the network looks better would bring the
+        // endless spinner back in another shape.
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Long enough for a slow home server behind a proxy, short enough that
+    /// nobody wonders whether the app is still doing anything.
+    private static let setupTimeout: TimeInterval = 15
+
     func getHeartbeat() async throws -> HeartbeatResponse {
         return try await get("api/heartbeat", responseType: HeartbeatResponse.self)
     }
@@ -23,12 +44,12 @@ extension RommAPIClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 30.0
+        request.timeoutInterval = Self.setupTimeout
 
         logger.info("🔍 [Network] - Fetching heartbeat from: \(url.absoluteString)")
 
         do {
-            let (data, response) = try await urlSession.data(for: request)
+            let (data, response) = try await Self.setupSession.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 logger.error("Invalid response type for heartbeat")
