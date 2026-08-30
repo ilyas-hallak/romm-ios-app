@@ -40,6 +40,7 @@
 		A1B2C3D4E5F600000000CE31 /* ppsspp_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE41 /* PPSSPPAssets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */; };
 		5DCA1106000000000000C102 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
+		5DFA9001000000000000F102 /* FAQ.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DFA9001000000000000F101 /* FAQ.md */; };
 		5DCB1107000000000000D103 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
 		5DBEEF00000000000000F002 /* OpenGLES.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DBEEF00000000000000F001 /* OpenGLES.framework */; };
 /* End PBXBuildFile section */
@@ -189,6 +190,7 @@
 		A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = ppsspp_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = PPSSPPAssets; sourceTree = "<group>"; };
 		5DCA1106000000000000C101 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = CHANGELOG.md; path = ../CHANGELOG.md; sourceTree = SOURCE_ROOT; };
+		5DFA9001000000000000F101 /* FAQ.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = FAQ.md; path = ../FAQ.md; sourceTree = SOURCE_ROOT; };
 		5DBEEF00000000000000F001 /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = System/Library/Frameworks/OpenGLES.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -335,6 +337,7 @@
 			isa = PBXGroup;
 			children = (
 				5DCA1106000000000000C101 /* CHANGELOG.md */,
+				5DFA9001000000000000F101 /* FAQ.md */,
 				5D93A8952FC2419700086CE8 /* Libretro */,
 				5D93A15F2FBF67EF00086CE8 /* GBCDeltaCore.xcodeproj */,
 				5D93A1532FBF67E900086CE8 /* MelonDSDeltaCore.xcodeproj */,
@@ -606,6 +609,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5DCA1106000000000000C102 /* CHANGELOG.md in Resources */,
+				5DFA9001000000000000F102 /* FAQ.md in Resources */,
 				A1B2C3D4E5F600000000CE41 /* PPSSPPAssets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
