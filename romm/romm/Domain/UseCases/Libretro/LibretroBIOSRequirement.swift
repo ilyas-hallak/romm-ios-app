@@ -63,6 +63,11 @@ enum LibretroBIOSRequirement {
                     note: "Sega CD BIOS – Japan"
                 )
             ]
+        case .ppsspp:
+            // PSP-Spiele booten ohne BIOS: PPSSPP emuliert die Firmware per HLE.
+            // Die Assets (ppge_atlas, flash0/font, vfpu-Tabellen) liefert die App
+            // selbst mit, siehe PPSSPPAssetsInstaller.
+            return []
         }
     }
 
@@ -78,6 +83,9 @@ enum LibretroBIOSRequirement {
             // No hard gate: SMS/GG/SG-1000/Genesis carts boot without any BIOS.
             // Sega CD BIOS is optional and only needed for CD images.
             return nil
+        case .ppsspp:
+            // Kein BIOS, also auch kein Start-Gate.
+            return nil
         }
     }
 
@@ -92,6 +100,8 @@ enum LibretroBIOSRequirement {
             return ["pce", "pc-engine", "turbografx-16", "tg16"]
         case .genesisPlusGX:
             return ["sms", "master-system", "gamegear", "game-gear", "sg1000", "segacd", "sega-cd"]
+        case .ppsspp:
+            return ["psp", "playstation-portable"]
         }
     }
 }
