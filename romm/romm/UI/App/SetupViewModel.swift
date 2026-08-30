@@ -247,6 +247,13 @@ final class SetupViewModel {
     }
 
     func parseConnectionError(_ error: Error) -> (message: String, details: String?) {
+        // The heartbeat wraps the API error, and unwrapping it is what makes the
+        // specific cases below reachable at all. Without this everything falls
+        // through to `localizedDescription`, which for an HTTP error is the
+        // entire response body — users were shown raw HTML of a 404 page.
+        if let heartbeatError = error as? HeartbeatError, case .networkError(let underlying) = heartbeatError {
+            return parseConnectionError(underlying)
+        }
         if let apiError = error as? APIClientError {
             switch apiError {
             case .cloudflareProtection:
@@ -260,6 +267,13 @@ final class SetupViewModel {
             case .noCredentials:
                 return ("Credentials missing", "Please provide username and password")
             case .invalidResponse(let code, _):
+                // Something answered, so the address and port are reachable, but
+                // it does not serve RomM. Usually a different service on that
+                // port, or a proxy that routes elsewhere.
+                if code == 404 {
+                    return ("No RomM server at this address",
+                            "Something answered, but it is not RomM. Check the port and whether your reverse proxy points at RomM.")
+                }
                 return ("Server error (\(code))", "The server returned an error response")
             case .decodingError:
                 return ("Invalid response", "The server did not return a valid RomM response")
@@ -270,7 +284,45 @@ final class SetupViewModel {
         return parseGeneralConnectionError(error)
     }
 
+    /// The failures a self-hosted setup actually produces, keyed by code so the
+    /// phone's language cannot change the outcome.
+    private func messageForURLError(_ code: URLError.Code) -> (message: String, details: String?)? {
+        switch code {
+        case .timedOut:
+            return ("Connection timed out",
+                    "The server did not answer in time. Check that the address and port are right and that the server is reachable from this network.")
+        case .cannotConnectToHost, .networkConnectionLost:
+            return ("Connection failed",
+                    "Nothing is listening at that address. Check the port, and whether the server is running.")
+        case .cannotFindHost, .dnsLookupFailed:
+            return ("Server not found",
+                    "The address could not be resolved. Check the spelling, and whether this network can see your server.")
+        case .notConnectedToInternet:
+            return ("No connection",
+                    "This device is not connected to a network.")
+        case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid, .clientCertificateRejected:
+            return ("Certificate problem",
+                    "The secure connection could not be established. A self-signed certificate has to be trusted on this device, or use http:// instead.")
+        case .unsupportedURL, .badURL:
+            return ("Invalid address",
+                    "Start the address with http:// or https://, for example http://192.168.1.50:8080.")
+        case .appTransportSecurityRequiresSecureConnection:
+            return ("Insecure connection blocked",
+                    "iOS refused the plain http connection to this address.")
+        default:
+            return nil
+        }
+    }
+
     func parseGeneralConnectionError(_ error: Error) -> (message: String, details: String?) {
+        // Match the error code before its text. `localizedDescription` is
+        // localized, so on a phone that is not set to English none of the string
+        // checks below can ever match and every failure looks identical.
+        if let urlError = error as? URLError, let known = messageForURLError(urlError.code) {
+            return known
+        }
+
         let errorString = error.localizedDescription
 
         if errorString.contains("certificate") || errorString.contains("SSL") || errorString.contains("TLS") {
