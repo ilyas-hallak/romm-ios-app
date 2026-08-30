@@ -173,6 +173,8 @@ struct PlatformROMsListView: View {
     private func isPlatformSupported(_ platformSlug: String) -> Bool {
         let supportedPlatforms: Set<String> = [
             "nes", "snes", "n64", "gba", "gbc", "gb", "nds",
+            // "dc" fehlt bewusst: Dreamcast ist wegen der Audioausgabe deaktiviert,
+            // siehe CheckEmulatorSupportUseCase.supportedPlatforms.
             "genesis", "megadrive", "mastersystem", "gamegear", "saturn", "dreamcast",
             "sms", "master-system", "game-gear", "sg1000", "sg-1000", "segacd", "sega-cd", "mega-cd",
             "psx", "ps1", "playstation", "psp",

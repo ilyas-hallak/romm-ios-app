@@ -175,6 +175,7 @@ final class LibretroTouchControllerView: UIView {
         case standard   // D-pad + △○✕□ + shoulders + Start/Select (PSX-style)
         case pcEngine   // D-pad + II / I + Select / Run
         case genesis    // D-pad + A / B / C + Mode / Start (Sega 3-button)
+        case dreamcast  // D-pad + A / B / X / Y diamond + L / R triggers + Start
     }
     private let layout: Layout
 
@@ -235,6 +236,18 @@ final class LibretroTouchControllerView: UIView {
             addFace(.a, "C", .systemRed)
             addFace(.select, "MODE", .darkGray, thin: true, font: 13)
             addFace(.start, "START", .darkGray, thin: true, font: 12)
+
+        case .dreamcast:
+            // Dreamcast pad: A / B / X / Y in a diamond (Y top, X left, B right,
+            // A bottom), two analog triggers, Start, and no Select at all.
+            // Flycast's RetroPad map: X → Y, Y → X, A → B, B → A, L2 → L, R2 → R.
+            addFace(.x, "Y", .systemOrange)
+            addFace(.y, "X", .systemGreen)
+            addFace(.a, "B", .systemBlue)
+            addFace(.b, "A", .systemRed)
+            addFace(.l2, "L", .darkGray, thin: true, font: 16)
+            addFace(.r2, "R", .darkGray, thin: true, font: 16)
+            addFace(.start, "START", .darkGray, thin: true, font: 12)
         }
     }
 
@@ -261,6 +274,17 @@ final class LibretroTouchControllerView: UIView {
 
     private func face(_ b: LibretroABI.JoypadButton) -> FaceButton? {
         faceButtons.first { $0.button == b }
+    }
+
+    /// Positions four face buttons in a diamond on a 3×3 grid: RetroPad X top,
+    /// Y left, A right, B bottom. Shared by the PSX and Dreamcast layouts, which
+    /// only differ in their labels.
+    private func layoutDiamondFaces(faceX: CGFloat, faceY: CGFloat, faceSize: CGFloat) {
+        let cell = faceSize / 3
+        face(.x)?.frame = CGRect(x: faceX + cell, y: faceY, width: cell, height: cell)
+        face(.y)?.frame = CGRect(x: faceX, y: faceY + cell, width: cell, height: cell)
+        face(.a)?.frame = CGRect(x: faceX + 2 * cell, y: faceY + cell, width: cell, height: cell)
+        face(.b)?.frame = CGRect(x: faceX + cell, y: faceY + 2 * cell, width: cell, height: cell)
     }
 
     /// Positions the two PC Engine face buttons (II left, I right) centred in the face area.
@@ -297,15 +321,12 @@ final class LibretroTouchControllerView: UIView {
         dpad.frame = CGRect(x: dpadX, y: dpadY, width: dpadSize, height: dpadSize)
 
         let faceSize = dpadSize
-        let faceCellW = faceSize / 3
         let faceX = w - faceSize - 24 - safe.right
         let faceY = dpadY
 
-        if layout == .standard {
-            face(.x)?.frame = CGRect(x: faceX + faceCellW, y: faceY, width: faceCellW, height: faceCellW)
-            face(.y)?.frame = CGRect(x: faceX, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-            face(.a)?.frame = CGRect(x: faceX + 2 * faceCellW, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-            face(.b)?.frame = CGRect(x: faceX + faceCellW, y: faceY + 2 * faceCellW, width: faceCellW, height: faceCellW)
+        switch layout {
+        case .standard:
+            layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
 
             let shoulderW: CGFloat = 72
             let shoulderH: CGFloat = 36
@@ -316,17 +337,29 @@ final class LibretroTouchControllerView: UIView {
             face(.l2)?.frame = CGRect(x: 24 + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
             face(.r)?.frame  = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
             face(.r2)?.frame = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        } else if layout == .pcEngine {
+        case .dreamcast:
+            layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
+
+            // Nur ein Trigger je Seite, deshalb keine zweite Reihe.
+            let shoulderW: CGFloat = 72
+            let shoulderH: CGFloat = 36
+            let shoulderY = 16 + safe.top
+            face(.l2)?.frame = CGRect(x: 24 + safe.left, y: shoulderY, width: shoulderW, height: shoulderH)
+            face(.r2)?.frame = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderY, width: shoulderW, height: shoulderH)
+        case .pcEngine:
             layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-        } else {
+        case .genesis:
             layoutGenesisFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
         }
 
         let centerW: CGFloat = 80
         let centerH: CGFloat = 32
         let centerY = h - centerH - 24 - safe.bottom
+        // Ohne Select steht Start allein und gehört mittig, nicht auf die alte
+        // rechte Hälfte des Select/Start-Paars.
+        let startX = layout == .dreamcast ? (w - centerW) / 2 : w / 2 + 8
         face(.select)?.frame = CGRect(x: w / 2 - centerW - 8, y: centerY, width: centerW, height: centerH)
-        face(.start)?.frame  = CGRect(x: w / 2 + 8, y: centerY, width: centerW, height: centerH)
+        face(.start)?.frame  = CGRect(x: startX, y: centerY, width: centerW, height: centerH)
 
         let menuSize: CGFloat = 44
         menuButton.frame = CGRect(x: (w - menuSize) / 2, y: 16 + safe.top, width: menuSize, height: menuSize)
@@ -346,15 +379,12 @@ final class LibretroTouchControllerView: UIView {
         dpad.frame = CGRect(x: dpadX, y: dpadY, width: dpadSize, height: dpadSize)
 
         let faceSize = dpadSize
-        let faceCellW = faceSize / 3
         let faceX = w - faceSize - edgePad - safe.right
         let faceY = dpadY
 
-        if layout == .standard {
-            face(.x)?.frame = CGRect(x: faceX + faceCellW, y: faceY, width: faceCellW, height: faceCellW)
-            face(.y)?.frame = CGRect(x: faceX, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-            face(.a)?.frame = CGRect(x: faceX + 2 * faceCellW, y: faceY + faceCellW, width: faceCellW, height: faceCellW)
-            face(.b)?.frame = CGRect(x: faceX + faceCellW, y: faceY + 2 * faceCellW, width: faceCellW, height: faceCellW)
+        switch layout {
+        case .standard:
+            layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
 
             // Schultertasten: L1 oben, L2 darunter — links. R1/R2 rechts.
             let shoulderW: CGFloat = 84
@@ -366,9 +396,18 @@ final class LibretroTouchControllerView: UIView {
             face(.l2)?.frame = CGRect(x: edgePad + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
             face(.r)?.frame  = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
             face(.r2)?.frame = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        } else if layout == .pcEngine {
+        case .dreamcast:
+            layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
+
+            // L/R sind die einzigen Schultertasten, je eine pro Seite ganz oben.
+            let shoulderW: CGFloat = 84
+            let shoulderH: CGFloat = 40
+            let shoulderY = edgePad + safe.top
+            face(.l2)?.frame = CGRect(x: edgePad + safe.left, y: shoulderY, width: shoulderW, height: shoulderH)
+            face(.r2)?.frame = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderY, width: shoulderW, height: shoulderH)
+        case .pcEngine:
             layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-        } else {
+        case .genesis:
             layoutGenesisFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
         }
 
@@ -376,8 +415,10 @@ final class LibretroTouchControllerView: UIView {
         let centerW: CGFloat = 90
         let centerH: CGFloat = 34
         let centerY = h - centerH - edgePad - safe.bottom
+        // Dreamcast hat kein Select: Start steht allein und mittig.
+        let startX = layout == .dreamcast ? (w - centerW) / 2 : w / 2 + 8
         face(.select)?.frame = CGRect(x: w / 2 - centerW - 8, y: centerY, width: centerW, height: centerH)
-        face(.start)?.frame  = CGRect(x: w / 2 + 8, y: centerY, width: centerW, height: centerH)
+        face(.start)?.frame  = CGRect(x: startX, y: centerY, width: centerW, height: centerH)
 
         // Menu zentriert oben.
         let menuSize: CGFloat = 44
