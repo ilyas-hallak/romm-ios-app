@@ -33,6 +33,33 @@ final class LibretroFrontend {
     private var frameAccumulator: Double = 0
     var frameCount: UInt64 = 0
 
+    // MARK: - HW render readback
+    /// Zielpuffer für `hwRenderReadbackCurrentFBO`. Bewusst manuell alloziert
+    /// und über Frames hinweg wiederverwendet: der HW-Pfad läuft pro Frame,
+    /// eine Allokation je Frame wäre reiner Ballast. Der Zeiger bleibt stabil,
+    /// solange der Video-Sink daraus liest.
+    private var hwReadbackStorage: UnsafeMutableRawPointer?
+    private var hwReadbackCapacity: Int = 0
+
+    /// Startgröße, falls `retro_get_system_av_info` keine brauchbare Geometrie
+    /// liefert. Nur dafür da, dass überhaupt ein FBO existiert und der Core sein
+    /// `context_reset` bekommt.
+    private static let hwRenderFallbackSize: (Int32, Int32) = (640, 480)
+
+    /// Liefert einen mindestens `byteCount` großen Puffer, ohne pro Frame neu
+    /// zu allozieren.
+    func hwReadbackBuffer(byteCount: Int) -> UnsafeMutableRawPointer? {
+        guard byteCount > 0 else { return nil }
+        if let buffer = hwReadbackStorage, hwReadbackCapacity >= byteCount {
+            return buffer
+        }
+        hwReadbackStorage?.deallocate()
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: 4)
+        hwReadbackStorage = buffer
+        hwReadbackCapacity = byteCount
+        return buffer
+    }
+
     // Symbols
     private var retro_init: LibretroABI.RetroInit?
     private var retro_deinit: LibretroABI.RetroDeinit?
@@ -250,6 +277,39 @@ final class LibretroFrontend {
         self.avInfo = av
         print("[Libretro] AV: \(av.geometry.base_width)x\(av.geometry.base_height) @\(av.timing.fps)Hz audio=\(av.timing.sample_rate)Hz")
 
+        // HW-Render-Pfad scharf schalten, bevor die Run-Loop startet. Reihenfolge
+        // ist Vertrag: erst GL-Kontext, dann FBO, erst danach context_reset —
+        // der Core legt darin seine GL-Ressourcen an und fragt sofort
+        // get_current_framebuffer ab. Alles auf dem Main-Thread, auf dem auch
+        // retro_run und der Readback laufen; ein EAGL-Kontext ist threadgebunden.
+        if hwRenderIsActive() {
+            let depth = hwRenderWantsDepth()
+            let stencil = hwRenderWantsStencil()
+            print("[Libretro] hw render: creating GLES3 context")
+            if hwRenderMakeContext() {
+                // Bewusst base_width/base_height: max_* ist Flycasts Obergrenze
+                // für Upscaling, nicht die tatsächliche Framegröße.
+                //
+                // Notnagel gegen 0: meldet ein Core hier keine Geometrie, gäbe es
+                // kein FBO und damit auch kein context_reset — der Core würde beim
+                // ersten GL-Zugriff segfaulten. Lieber mit einer Startgröße
+                // aufbauen; `hwRenderReadbackCurrentFBO` baut das FBO ohnehin neu,
+                // sobald der erste echte Frame eine andere Größe meldet.
+                var fbWidth = Int32(av.geometry.base_width)
+                var fbHeight = Int32(av.geometry.base_height)
+                if fbWidth <= 0 || fbHeight <= 0 {
+                    print("[Libretro] hw render: Core meldet Geometrie \(fbWidth)x\(fbHeight) — Fallback auf \(Self.hwRenderFallbackSize.0)x\(Self.hwRenderFallbackSize.1)")
+                    fbWidth = Self.hwRenderFallbackSize.0
+                    fbHeight = Self.hwRenderFallbackSize.1
+                }
+                print("[Libretro] hw render: FBO \(fbWidth)x\(fbHeight) depth=\(depth) stencil=\(stencil) bottomLeftOrigin=\(hwRenderBottomLeftOrigin())")
+                hwRenderSetupFramebufferEx(fbWidth, fbHeight, depth, stencil)
+                hwRenderInvokeContextReset()
+            } else {
+                print("[Libretro] hw render: GLES3 context creation failed, core will render into nothing")
+            }
+        }
+
         retro_set_controller_port_device?(0, portDevice)
 
         startAudio(sampleRate: av.timing.sample_rate > 0 ? av.timing.sample_rate : 44100)
@@ -347,6 +407,11 @@ final class LibretroFrontend {
         sramURL = nil
         retro_unload_game?()
         retro_deinit?()
+        // Muss VOR dem dlclose laufen: der Teardown verwirft den gemerkten
+        // context_reset/context_destroy des Cores, der sonst als Dangling
+        // Pointer in die gleich entladene Dylib zeigen würde. Gibt zusätzlich
+        // EAGL-Kontext und FBO frei, damit die nächste Session sauber startet.
+        hwRenderTeardown()
         if let h = handle {
             dlclose(h)
             handle = nil

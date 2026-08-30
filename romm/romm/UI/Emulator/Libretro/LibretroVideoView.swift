@@ -60,6 +60,21 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
             )
             bitsPerComponent = 5
             bitsPerPixel = 16
+        case .rgba8888:
+            // Bytes liegen in Speicherreihenfolge R,G,B,A vor (so liefert
+            // glReadPixels GL_RGBA/GL_UNSIGNED_BYTE). Damit CoreGraphics genau
+            // diese Reihenfolge liest: byteOrder32Big (Byte 0 = hoechstwertig,
+            // also erste Komponente) + Alpha last. Das ergibt R,G,B,A ab Byte 0
+            // und stellt den roten Testpuffer korrekt dar. Verifiziert am
+            // roten-Bildschirm-Test (Meilenstein 1): jede andere Kombination
+            // (order32Little / alpha first) kippt Rot nach Blau bzw. verschiebt
+            // die Kanaele.
+            bitmapInfo = CGBitmapInfo(rawValue:
+                CGImageByteOrderInfo.order32Big.rawValue |
+                CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            bitsPerComponent = 8
+            bitsPerPixel = 32
         }
 
         let bytesTotal = pitch * Int(height)

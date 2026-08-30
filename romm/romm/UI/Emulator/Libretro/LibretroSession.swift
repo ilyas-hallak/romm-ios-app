@@ -160,7 +160,59 @@ final class LibretroSession: NSObject {
         }
     }
 
+    // MARK: - HW-Render Meilenstein 1 (TEMPORAER)
+
+    /// Schaltet den roten-Bildschirm-Test statt der echten Core-Startlogik ein.
+    /// Beweist EAGL-Kontext + FBO + glReadPixels + Y-Flip + RGBA-CGImage-Mapping
+    /// isoliert, ohne libretro-Core. Wird in Meilenstein 3 durch echte
+    /// HW-Frames ersetzt. Zum Testen auf `true` setzen, danach wieder `false`.
+    /// Bewusst hier isoliert, damit die bestehende Software-Pipeline unberuehrt
+    /// bleibt.
+    private static let hwRenderMilestone1Test = false
+
+    /// Erzeugt einen roten FBO-Frame ueber den HW-Pfad und schickt ihn an den
+    /// bestehenden Video-Sink (Software-Blit). Reines Debugging fuer M1.
+    private func runHWRenderMilestone1Test() {
+        let width = 640
+        let height = 480
+
+        guard hwRenderMakeContext() else {
+            print("[HWRender] M1: Kontext-Erzeugung fehlgeschlagen")
+            viewController.showError("HW-Render M1: GL-Kontext fehlgeschlagen")
+            return
+        }
+        hwRenderSetupFramebuffer(Int32(width), Int32(height))
+
+        var buffer = [UInt8](repeating: 0, count: width * height * 4)
+        let ok = buffer.withUnsafeMutableBufferPointer { ptr -> Bool in
+            hwRenderClearAndReadback(ptr.baseAddress, Int32(width), Int32(height))
+        }
+        guard ok else {
+            print("[HWRender] M1: Readback fehlgeschlagen")
+            viewController.showError("HW-Render M1: Readback fehlgeschlagen")
+            return
+        }
+
+        print("[HWRender] M1: Testmuster-Frame an Video-Sink (\(width)x\(height))")
+        buffer.withUnsafeBufferPointer { ptr in
+            frontend.videoSink?.libretroDidProduceFrame(
+                data: ptr.baseAddress,
+                width: UInt32(width),
+                height: UInt32(height),
+                pitch: width * 4,
+                pixelFormat: .rgba8888
+            )
+        }
+    }
+
     private func startCore() {
+        // TEMPORAER (Meilenstein 1): den roten-Bildschirm-Test statt des echten
+        // Cores fahren. Laesst die Software-Core-Pipeline unangetastet.
+        if Self.hwRenderMilestone1Test {
+            runHWRenderMilestone1Test()
+            return
+        }
+
         do {
             let corePath = try locateCoreDylib()
             let systemDir = libretroSystemDirectory().path
