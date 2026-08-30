@@ -142,6 +142,39 @@ extension LibretroFrontend {
             // which collides with our own L1+R1 menu shortcut. We do not support
             // analog sticks anyway, so a manual toggle buys nothing.
             case "pcsx_rearmed_analog_combo": answer = "disabled"
+            // PPSSPP defaults ppsspp_cpu_core to "JIT" (libretro_core_options.h:138).
+            // iOS app processes have no JIT entitlement, and without an answer here
+            // the core keeps the plain interpreter it presets in retro_load_game --
+            // correct, but far slower than the IR interpreter. "IR JIT" is the option
+            // VALUE that libretro.cpp:549 maps to CPUCore::IR_INTERPRETER; its label
+            // reads "IR Interpreter".
+            case "ppsspp_cpu_core": answer = "IR JIT"
+            // Backend "auto" lets the core probe Vulkan (and finally software
+            // rendering) whenever the GLES context is not taken. Pinning OpenGL keeps
+            // it on the GLES2 path that our SET_HW_RENDER handler serves.
+            case "ppsspp_backend": answer = "opengl"
+            // Pflichtantwort, kein Tuning: retro_init setzt g_Config.iInternalResolution
+            // hart auf 0 (libretro.cpp:1211) und nur check_variables schreibt hier einen
+            // echten Wert. Ohne Antwort bleibt die 0 stehen, retro_get_system_av_info
+            // meldet 0x0 (base = iInternalResolution * NATIVEWIDTH) und wir bauen kein
+            // FBO -- der Core bekaeme nie context_reset und segfaultet beim GPU-Init.
+            // "480x272" ist der Default des Cores (1x nativ) und halt den Readback klein.
+            case "ppsspp_internal_resolution": answer = "480x272"
+            // Der Grund fuer "laeuft zu schnell". PPSSPP beendet ein retro_run
+            // nicht nach einem Vblank, sondern erst wenn __DisplayFlip
+            // Core_NextFrame aufruft (sceDisplay.cpp:665). Das passiert per
+            // Default nur, wenn der Framebuffer sich wirklich geaendert hat —
+            // ein 30-fps-Titel emuliert also zwei Vblanks pro Aufruf, und bei
+            // 60 Aufrufen/s laeuft er doppelt so schnell.
+            // bRenderDuplicateFrames erzwingt den Flip bei JEDEM Vblank
+            // (postEffectRequiresFlip, sceDisplay.cpp:615), womit ein retro_run
+            // wieder genau ein Vblank ist.
+            // Der Core bewirbt die Option mit Default "enabled"
+            // (libretro_core_options.h:417), sein interner g_Config-Default ist
+            // aber false (Config.cpp:758). Ohne Antwort gewinnt der interne
+            // Default — die vierte Instanz desselben Musters wie bei
+            // ppsspp_internal_resolution.
+            case "ppsspp_frame_duplication": answer = "enabled"
             default: answer = nil
             }
             if let answer = answer {

@@ -36,6 +36,8 @@
 		5DF894102FB7D79F0083B111 /* ZIPFoundation.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE11 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1B2C3D4E5F600000000CE31 /* ppsspp_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1B2C3D4E5F600000000CE41 /* PPSSPPAssets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */; };
 		5DCA1106000000000000C102 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
 		5DCB1107000000000000D103 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
 		5DBEEF00000000000000F002 /* OpenGLES.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DBEEF00000000000000F001 /* OpenGLES.framework */; };
@@ -155,6 +157,7 @@
 				5D93A8982FC241F000086CE8 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */,
 				A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */,
 				A1B2C3D4E5F600000000CE11 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */,
+				A1B2C3D4E5F600000000CE31 /* ppsspp_libretro_ios.framework in Embed Frameworks */,
 				5D93A1312FBF55D300086CE8 /* GPGXDeltaCore.framework in Embed Frameworks */,
 				5DAA110000000008ABCD0008 /* SNESDeltaCore.framework in Embed Frameworks */,
 			);
@@ -180,6 +183,8 @@
 		5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ZIPFoundation.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = mednafen_pce_fast_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = genesis_plus_gx_libretro_ios.framework; sourceTree = "<group>"; };
+		A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = ppsspp_libretro_ios.framework; sourceTree = "<group>"; };
+		A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = PPSSPPAssets; sourceTree = "<group>"; };
 		5DCA1106000000000000C101 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = CHANGELOG.md; path = ../CHANGELOG.md; sourceTree = SOURCE_ROOT; };
 		5DBEEF00000000000000F001 /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = System/Library/Frameworks/OpenGLES.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -315,6 +320,8 @@
 				5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */,
 				A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */,
 				A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */,
+				A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */,
+				A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */,
 			);
 			name = Libretro;
 			path = ../Vendor/Libretro;
@@ -595,6 +602,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5DCA1106000000000000C102 /* CHANGELOG.md in Resources */,
+				A1B2C3D4E5F600000000CE41 /* PPSSPPAssets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
