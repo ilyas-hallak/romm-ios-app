@@ -136,3 +136,13 @@ documentation/features/
 
 # Git worktrees
 .worktrees/
+
+# libretro core build workdir (Flycast/PPSSPP clones)
+Vendor/Libretro/.build/
+
+# Rohartefakte der Core-Builds: geladen wird ausschliesslich die .framework-Variante
+Vendor/Libretro/flycast_libretro_ios.dylib
+Vendor/Libretro/ppsspp_libretro_ios.dylib
+
+# Xcode-Projektsicherungen
+*.pbxproj.bak-*

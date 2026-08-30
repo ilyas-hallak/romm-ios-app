@@ -30,7 +30,7 @@ final class BIOSSyncUseCase: PBIOSSyncUseCase {
         let dir = systemDirectory()
 
         return required.map { req in
-            let localURL = dir.appendingPathComponent(req.fileName)
+            let localURL = req.localURL(in: dir)
             let local: BIOSFileStatus.LocalState
             if fileSystem.fileExists(at: localURL) {
                 let md5 = BIOSFileHashing.md5(of: localURL) ?? ""
@@ -67,22 +67,27 @@ final class BIOSSyncUseCase: PBIOSSyncUseCase {
             ])
         }
         let data = try await apiClient.downloadFirmwareContent(id: id, fileName: status.requirement.fileName)
-        let target = systemDir.appendingPathComponent(status.requirement.fileName)
+        let target = status.requirement.localURL(in: systemDir)
+        // Ohne das Unterverzeichnis (z. B. dc/) scheitert der Schreibvorgang.
+        try fileSystem.createDirectory(
+            at: target.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try fileSystem.write(data, to: target)
         logger.info("BIOS gespeichert: \(target.path) (\(data.count) bytes)")
     }
 
     func missingMandatory(for core: LibretroCore) async -> [LibretroBIOSFile] {
         let dir = systemDirectory()
+        let files = LibretroBIOSRequirement.files(for: core)
         if let anyOf = LibretroBIOSRequirement.atLeastOneOfFileNames(for: core) {
-            let hasAny = anyOf.contains { name in
-                fileSystem.fileExists(at: dir.appendingPathComponent(name))
+            let hasAny = files.contains { req in
+                anyOf.contains(req.fileName) && fileSystem.fileExists(at: req.localURL(in: dir))
             }
             if hasAny { return [] }
         }
-        let required = LibretroBIOSRequirement.files(for: core).filter { $0.required }
-        return required.filter { req in
-            !fileSystem.fileExists(at: dir.appendingPathComponent(req.fileName))
+        return files.filter { $0.required }.filter { req in
+            !fileSystem.fileExists(at: req.localURL(in: dir))
         }
     }
 
