@@ -176,13 +176,3 @@ private struct CollectionRomsPayload: Encodable {
         case romIds = "rom_ids"
     }
 }
-
-// MARK: - Multipart Helper
-
-private extension Data {
-    mutating func appendFormField(boundary: String, name: String, value: String) {
-        append("--\(boundary)\r\n".data(using: .utf8)!)
-        append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-        append("\(value)\r\n".data(using: .utf8)!)
-    }
-}

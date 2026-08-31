@@ -910,7 +910,7 @@ struct RomDetailView: View {
                     ProgressView(value: Double(awarded), total: Double(max(maximum, 1)))
                         .tint(.orange)
                 }
-            } else if appData.currentUser?.retroAchievementsUsername != nil {
+            } else if appData.currentUser?.linkedRetroAchievementsUsername != nil {
                 Text("No progress has been reported for this game yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -922,7 +922,7 @@ struct RomDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }) { achievement in
-                    let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(id: achievement.id)
+                    let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(for: achievement)
                     HStack(alignment: .top, spacing: 12) {
                         if let badgeURL = earnedAchievement == nil ? achievement.lockedBadgeURL : achievement.badgeURL {
                             CachedKFImage(urlString: badgeURL) { image in
@@ -955,11 +955,7 @@ struct RomDetailView: View {
                             }
 
                             if let earnedAchievement {
-                                Text(
-                                    earnedAchievement.earnedHardcoreAt == nil
-                                        ? "Unlocked \(earnedAchievement.earnedAt)"
-                                        : "Unlocked in hardcore mode \(earnedAchievement.earnedAt)"
-                                )
+                                Text(unlockLabel(for: earnedAchievement))
                                     .font(.caption)
                                     .foregroundStyle(.green)
                             }
@@ -969,6 +965,15 @@ struct RomDetailView: View {
                 }
             }
         }
+    }
+
+    private func unlockLabel(for earned: EarnedRetroAchievement) -> String {
+        // Falls back to the raw server value if it is in a format we do not know.
+        let when = earned.earnedAtDate.map { $0.formatted(date: .abbreviated, time: .shortened) }
+            ?? earned.earnedAt
+        return earned.earnedHardcoreAt == nil
+            ? "Unlocked \(when)"
+            : "Unlocked in hardcore mode \(when)"
     }
 
     private func retroAchievementsProgress(for details: RomDetails) -> RetroAchievementsProgression? {

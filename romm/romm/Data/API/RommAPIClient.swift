@@ -67,6 +67,7 @@ protocol PRommAPIClient {
     func addRomsToCollection(id: Int, romIds: [Int]) async throws -> CollectionSchema
     func removeRomsFromCollection(id: Int, romIds: [Int]) async throws -> CollectionSchema
     func getCurrentUser() async throws -> UserSchema
+    func updateRetroAchievementsUsername(userId: Int, username: String) async throws -> UserSchema
 
     // Platforms API Wrapper methods
     func getPlatforms() async throws -> [PlatformSchema]

@@ -123,6 +123,14 @@ class MockDependencyFactory: PDependencyFactory {
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase {
         GetCurrentUserUseCase(authRepository: authRepository)
     }
+
+    func makeRefreshRetroAchievementsUseCase() -> RefreshRetroAchievementsUseCase {
+        RefreshRetroAchievementsUseCase(authRepository: authRepository)
+    }
+
+    func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase {
+        SetRetroAchievementsUsernameUseCase(authRepository: authRepository)
+    }
     
     func makeGetRomsUseCase() -> GetRomsUseCase {
         GetRomsUseCase(romsRepository: romsRepository)

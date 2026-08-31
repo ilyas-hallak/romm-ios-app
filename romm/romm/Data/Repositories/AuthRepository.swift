@@ -7,6 +7,11 @@
 
 import Foundation
 
+/// Body of `POST api/users/{id}/ra/refresh`.
+private struct RefreshRetroAchievementsPayload: Codable {
+    let incremental: Bool
+}
+
 class AuthRepository: PAuthRepository {
     private let logger = Logger.data
     @Published private(set) var isAuthenticated: Bool = false
@@ -79,6 +84,35 @@ class AuthRepository: PAuthRepository {
         }
     }
     
+    func refreshRetroAchievements(userId: Int, incremental: Bool) async throws -> User? {
+        logger.info("Refreshing RetroAchievements progression (incremental: \(incremental))...")
+
+        do {
+            let body = try JSONEncoder().encode(RefreshRetroAchievementsPayload(incremental: incremental))
+            _ = try await apiClient.post("api/users/\(userId)/ra/refresh", body: body)
+        } catch {
+            logger.error("Refreshing RetroAchievements failed: \(error)")
+            throw error
+        }
+
+        // The endpoint answers with an empty body, so the new progression only
+        // arrives by reading the user back.
+        return try await getCurrentUser()
+    }
+
+    func setRetroAchievementsUsername(userId: Int, username: String) async throws -> User? {
+        logger.info("Linking RetroAchievements account...")
+
+        let apiUser = try await apiClient.updateRetroAchievementsUsername(userId: userId, username: username)
+        let domainUser = UserMapper.mapFromAPI(apiUser)
+
+        await MainActor.run {
+            self.currentUser = domainUser
+        }
+
+        return domainUser
+    }
+
     private func getCurrentUserInternal(completion: @escaping (User?, Error?) -> Void) {
         Task {
             do {
