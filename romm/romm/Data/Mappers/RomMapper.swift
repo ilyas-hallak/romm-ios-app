@@ -157,6 +157,7 @@ struct RomMapper {
                 guard let id = achievement.raId else { return nil }
                 return RetroAchievement(
                     id: String(id),
+                    badgeId: achievement.badgeId,
                     title: achievement.title ?? "Untitled Achievement",
                     description: achievement.description,
                     points: achievement.points,

@@ -910,7 +910,7 @@ struct RomDetailView: View {
                     ProgressView(value: Double(awarded), total: Double(max(maximum, 1)))
                         .tint(.orange)
                 }
-            } else if appData.currentUser?.retroAchievementsUsername != nil {
+            } else if appData.currentUser?.linkedRetroAchievementsUsername != nil {
                 Text("No progress has been reported for this game yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -922,7 +922,7 @@ struct RomDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }) { achievement in
-                    let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(id: achievement.id)
+                    let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(for: achievement)
                     HStack(alignment: .top, spacing: 12) {
                         if let badgeURL = earnedAchievement == nil ? achievement.lockedBadgeURL : achievement.badgeURL {
                             CachedKFImage(urlString: badgeURL) { image in

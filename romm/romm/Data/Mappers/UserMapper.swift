@@ -18,12 +18,16 @@ struct UserMapper {
             role: role,
             avatarPath: apiUser.avatarPath,
             enabled: apiUser.enabled,
+            lastLogin: apiUser.lastLogin,
+            lastActive: apiUser.lastActive,
+            createdAt: apiUser.createdAt,
             retroAchievementsUsername: apiUser.raUsername,
             retroAchievementsProgression: (apiUser.raProgression?.results ?? []).compactMap { progression in
                 guard let gameId = progression.romRaId else { return nil }
                 return RetroAchievementsProgression(
                     gameId: gameId,
                     awardedCount: progression.numAwarded,
+                    awardedHardcoreCount: progression.numAwardedHardcore,
                     maximumCount: progression.maxPossible,
                     earnedAchievements: progression.earnedAchievements.map {
                         EarnedRetroAchievement(

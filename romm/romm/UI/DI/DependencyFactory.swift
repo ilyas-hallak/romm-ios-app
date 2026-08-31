@@ -33,6 +33,8 @@ protocol PDependencyFactory {
     // Use Cases
     func makeLogoutUseCase() -> LogoutUseCase
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase
+    func makeRefreshRetroAchievementsUseCase() -> RefreshRetroAchievementsUseCase
+    func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase
     func makeGetRomsUseCase() -> GetRomsUseCase
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase
@@ -196,7 +198,15 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase {
         GetCurrentUserUseCase(authRepository: authRepository)
     }
-    
+
+    func makeRefreshRetroAchievementsUseCase() -> RefreshRetroAchievementsUseCase {
+        RefreshRetroAchievementsUseCase(authRepository: authRepository)
+    }
+
+    func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase {
+        SetRetroAchievementsUsernameUseCase(authRepository: authRepository)
+    }
+
     // MARK: - ROM Use Cases
     
     func makeGetRomsUseCase() -> GetRomsUseCase {

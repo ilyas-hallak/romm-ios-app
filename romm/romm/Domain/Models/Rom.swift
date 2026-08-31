@@ -110,6 +110,9 @@ struct Rom: Identifiable, Equatable {
 /// Metadata for an achievement supplied by RetroAchievements through RomM.
 struct RetroAchievement: Identifiable, Equatable {
     let id: String
+    /// The RetroAchievements badge name. The server reports unlocks keyed by this
+    /// value rather than by `id`, so it is what earned lookups have to match on.
+    let badgeId: String?
     let title: String
     let description: String?
     let points: Int?

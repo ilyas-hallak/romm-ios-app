@@ -31,75 +31,51 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var profileVM = profileViewModel
         return List {
-            // User Section
-            if let user = appData.currentUser {
-                Section("User") {
-                    HStack {
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.blue)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(user.username)
-                                .font(.headline)
-                            
-                            Text("Active User")
+            // The RomM account and the server it lives on, in one place. The
+            // username used to appear twice, once from /api/users/me and once
+            // from the stored setup config, which are always the same login.
+            Section {
+                HStack {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.blue)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(appData.currentUser?.username ?? appData.currentConfiguration?.username ?? "Signed in")
+                            .font(.headline)
+
+                        if let role = appData.currentUser?.role {
+                            Text(role.displayName)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
-                    .padding(.vertical, 8)
-                    
-                    Button(action: {
-                        showingLogoutAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                            Text("Logout")
-                        }
-                        .foregroundColor(.red)
-                    }
                 }
-            }
+                .padding(.vertical, 8)
 
-            if let retroAchievementsUsername = appData.currentUser?.retroAchievementsUsername {
-                Section("RetroAchievements") {
-                    HStack {
-                        Image(systemName: "trophy.fill")
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(retroAchievementsUsername)
-                            Text("Connected account")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            
-            // Server Section
-            if let config = appData.currentConfiguration {
-                Section("Server") {
+                if let config = appData.currentConfiguration {
                     HStack {
                         Image(systemName: "server.rack")
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Server URL")
+                            Text("Server")
                             Text(config.serverURL)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
-                    
+                }
+
+                Button(action: {
+                    showingLogoutAlert = true
+                }) {
                     HStack {
-                        Image(systemName: "person")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Username")
-                            Text(config.username)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                        Text("Logout")
                     }
-                    
+                    .foregroundColor(.red)
+                }
+
+                if appData.currentConfiguration != nil {
                     Button(action: {
                         showingResetAlert = true
                     }) {
@@ -110,8 +86,10 @@ struct SettingsView: View {
                         .foregroundColor(.orange)
                     }
                 }
+            } header: {
+                Text("RomM account")
             }
-            
+
             // Statistics Section
             Section("Statistics") {
                 NavigationLink(destination: StatsView()) {
@@ -163,10 +141,13 @@ struct SettingsView: View {
                     .foregroundStyle(.primary)
                 }
 
-                NavigationLink(destination: LoggingConfigurationView()) {
-                    HStack {
-                        Image(systemName: "doc.text.magnifyingglass")
-                        Text("Logging Configuration")
+                // Logging Configuration (TestFlight & Debug only)
+                if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
+                    NavigationLink(destination: LoggingConfigurationView()) {
+                        HStack {
+                            Image(systemName: "doc.text.magnifyingglass")
+                            Text("Logging Configuration")
+                        }
                     }
                 }
 
@@ -226,6 +207,19 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "tv")
                                 Text("Play on TV")
+                            }
+                        }
+
+                        NavigationLink(destination: RetroAchievementsSettingsView()) {
+                            HStack {
+                                Image(systemName: "trophy.fill")
+                                    .foregroundStyle(.orange)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("RetroAchievements")
+                                    Text(appData.currentUser?.linkedRetroAchievementsUsername ?? "No account linked")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
 

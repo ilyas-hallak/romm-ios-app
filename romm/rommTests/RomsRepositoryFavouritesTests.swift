@@ -26,6 +26,8 @@ private final class FakeAPIClient: PRommAPIClient {
         return makeUser(id: currentUserId)
     }
 
+    func updateRetroAchievementsUsername(userId: Int, username: String) async throws -> UserSchema { fatalError("not used in these tests") }
+
     func getCollections(limit: Int?, offset: Int?) async throws -> [CollectionSchema] {
         if let errorToThrow { throw errorToThrow }
         return collectionsToReturn
