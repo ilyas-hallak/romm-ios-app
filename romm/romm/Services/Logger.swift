@@ -104,9 +104,9 @@ class LogConfiguration: ObservableObject {
         }
         
         globalMinLevel = LogLevel(rawValue: UserDefaults.standard.integer(forKey: "LogGlobalLevel")) ?? .debug
-        showPerformanceLogs = UserDefaults.standard.bool(forKey: "LogShowPerformance")
-        showTimestamps = UserDefaults.standard.bool(forKey: "LogShowTimestamps")
-        includeSourceLocation = UserDefaults.standard.bool(forKey: "LogIncludeSourceLocation")
+        showPerformanceLogs = (UserDefaults.standard.object(forKey: "LogShowPerformance") as? Bool) ?? true
+        showTimestamps = (UserDefaults.standard.object(forKey: "LogShowTimestamps") as? Bool) ?? true
+        includeSourceLocation = (UserDefaults.standard.object(forKey: "LogIncludeSourceLocation") as? Bool) ?? true
     }
     
     private func saveConfiguration() {
