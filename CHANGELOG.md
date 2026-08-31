@@ -4,6 +4,37 @@ All builds of the RomM iOS app, newest first.
 
 ## Version 1.0
 
+### Build 50 (2026-08-31)
+
+**New**
+- PSP games now run on the device through the PPSSPP core.
+- PlayStation games now rumble through a connected controller or device haptics.
+The intensity can be adjusted in the in-game menu, and the setting is in Settings under Emulator.
+- A Help screen is now reachable from Settings and from connection error messages.
+It covers the most common questions and opens on the relevant answer automatically.
+- RetroAchievements now show on the ROM detail page, including which ones you have already unlocked.
+- A/B and X/Y can now be swapped for pads that use the Nintendo layout.
+The switch is in Settings under Emulator and works in both the native and libretro engines.
+- ROMs can be handed off to RetroArch or Delta instead of playing in the built-in emulator.
+Set your preferred app in Settings under Emulator.
+- A new RetroAchievements settings screen is available under Emulator in Settings.
+You can view and change the linked RA username there, and sync your per-game progress manually.
+Earned achievements now also show correctly in the ROM detail view.
+
+**Fixed**
+- The native engine's audio no longer stays silent after starting a game while another app was playing audio.
+Affected cases: starting over a running podcast, resuming after a phone call or unplugging headphones.
+- Connection error messages now say what actually went wrong, for example whether the address is unreachable, the server returned an unexpected response, or the URL points to something other than a RomM server.
+Previously the app could show a raw HTML error page or a generic message that looked the same regardless of the cause.
+- Buttons near the d-pad respond more reliably.
+The d-pad was claiming any touch inside a 32pt margin around itself, so nearby buttons like Start and Select were sometimes swallowed.
+
+**Known issues**
+- PS1, PC Engine and Master System can still crash when audio resumes after a call, unplugged headphones, or coming back from the background.
+- N64 can exit on its own in some games.
+- With a physical controller you cannot reach the save and load menu yet.
+- The heart in ROM lists stays empty with a physical controller.
+
 ### Build 49 (2026-08-22)
 
 **New**

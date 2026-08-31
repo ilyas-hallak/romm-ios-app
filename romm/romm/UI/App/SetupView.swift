@@ -88,8 +88,9 @@ struct SetupView: View {
                     .padding(.top, 20)
                     .padding(.horizontal, 24)
 
-                    // Connection Debug Panel
-                    if !connectionLogger.logs.isEmpty || connectionLogger.isConnecting {
+                    // Connection Debug Panel (TestFlight & Debug only)
+                    if (Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild),
+                       !connectionLogger.logs.isEmpty || connectionLogger.isConnecting {
                         ConnectionDebugPanel(
                             logs: connectionLogger.logs,
                             isExpanded: $viewModel.showConnectionDetails

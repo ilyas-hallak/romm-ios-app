@@ -20,7 +20,7 @@ Ziel ist es, **die Server-Version zentral zu prüfen** und die App defensiv zu v
 ## API Endpoint
 
 curl -X 'GET' \
-  'https://romm.mnk.any64.de/api/heartbeat' \
+  'https://your-romm-server.example.com/api/heartbeat' \
   -H 'accept: application/json'
 
 Response:

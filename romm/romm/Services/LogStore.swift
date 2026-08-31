@@ -62,12 +62,53 @@ actor LogStore {
     }
 
     func addEntry(_ entry: LogEntry) {
-        entries.append(entry)
+        // Redact sensitive data before it ever reaches the in-memory store or export.
+        let redactedEntry = LogEntry(
+            id: entry.id,
+            timestamp: entry.timestamp,
+            level: entry.level,
+            category: entry.category,
+            message: LogStore.redact(entry.message),
+            file: entry.file,
+            function: entry.function,
+            line: entry.line
+        )
+        entries.append(redactedEntry)
 
         // Keep only the most recent entries
         if entries.count > maxEntries {
             entries.removeFirst(entries.count - maxEntries)
         }
+    }
+
+    // MARK: - Redaction
+
+    /// Masks sensitive patterns (bearer tokens, long token-like strings, server hosts)
+    /// so credentials and private hostnames never end up in the log store or an export.
+    private static func redact(_ message: String) -> String {
+        var result = message
+
+        let patterns: [(pattern: String, template: String)] = [
+            // Bearer tokens: "Bearer <token>" -> "Bearer <redacted>"
+            ("(?i)(Bearer)\\s+[A-Za-z0-9._-]+", "$1 <redacted>"),
+            // URLs: keep scheme and path, mask the host
+            ("(?i)(https?://)[^/\\s]+", "$1<redacted-host>"),
+            // Long token-like strings (>= 20 chars) -> "<redacted>"
+            ("[A-Za-z0-9._-]{20,}", "<redacted>")
+        ]
+
+        for (pattern, template) in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(result.startIndex..<result.endIndex, in: result)
+            result = regex.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: range,
+                withTemplate: template
+            )
+        }
+
+        return result
     }
 
     func getEntries() -> [LogEntry] {
@@ -105,7 +146,7 @@ actor LogStore {
     }
 
     func exportAsText() -> String {
-        var text = "Readeck Debug Logs\n"
+        var text = "RomM Debug Logs\n"
         text += "Generated: \(DateFormatter.exportTimestamp.string(from: Date()))\n"
         text += "Total Entries: \(entries.count)\n"
         text += String(repeating: "=", count: 80) + "\n\n"
@@ -131,8 +172,8 @@ actor LogStore {
 
         // Create filename with timestamp
         let timestamp = DateFormatter.filenameTimestamp.string(from: Date())
-        let filename = "readeck-logs-\(timestamp).zip"
-        let logFilename = "readeck-logs-\(timestamp).txt"
+        let filename = "romm-logs-\(timestamp).zip"
+        let logFilename = "romm-logs-\(timestamp).txt"
 
         // Create ZIP archive
         let zipData = try createZipArchive(filename: logFilename, data: logData)

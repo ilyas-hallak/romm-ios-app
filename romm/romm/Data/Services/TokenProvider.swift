@@ -49,7 +49,6 @@ class TokenProvider: PTokenProvider {
             
             if let token = setupConfig.token, !token.isEmpty {
                 logger.info("Token found in setup repository (length: \(token.count))")
-                logger.debug("Token preview: \(String(token.prefix(20)))...")
                 return token
             } else {
                 logger.warning("Setup config exists but token is nil/empty")
@@ -64,7 +63,6 @@ class TokenProvider: PTokenProvider {
             
             if let token = config.token, !token.isEmpty {
                 logger.info("Token found in configuration service (length: \(token.count))")
-                logger.debug("Token preview: \(String(token.prefix(20)))...")
                 return token
             } else {
                 logger.warning("Fallback config exists but token is nil/empty")
