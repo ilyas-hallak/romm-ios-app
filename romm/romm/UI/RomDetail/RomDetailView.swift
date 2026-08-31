@@ -955,11 +955,7 @@ struct RomDetailView: View {
                             }
 
                             if let earnedAchievement {
-                                Text(
-                                    earnedAchievement.earnedHardcoreAt == nil
-                                        ? "Unlocked \(earnedAchievement.earnedAt)"
-                                        : "Unlocked in hardcore mode \(earnedAchievement.earnedAt)"
-                                )
+                                Text(unlockLabel(for: earnedAchievement))
                                     .font(.caption)
                                     .foregroundStyle(.green)
                             }
@@ -969,6 +965,15 @@ struct RomDetailView: View {
                 }
             }
         }
+    }
+
+    private func unlockLabel(for earned: EarnedRetroAchievement) -> String {
+        // Falls back to the raw server value if it is in a format we do not know.
+        let when = earned.earnedAtDate.map { $0.formatted(date: .abbreviated, time: .shortened) }
+            ?? earned.earnedAt
+        return earned.earnedHardcoreAt == nil
+            ? "Unlocked \(when)"
+            : "Unlocked in hardcore mode \(when)"
     }
 
     private func retroAchievementsProgress(for details: RomDetails) -> RetroAchievementsProgression? {

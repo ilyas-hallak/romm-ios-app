@@ -65,4 +65,22 @@ struct RetroAchievementsProgressionTests {
         #expect(progression.earnedAchievement(for: makeAchievement(id: "42", badgeId: "")) == nil)
         #expect(progression.earnedAchievement(for: makeAchievement(id: "42", badgeId: nil)) == nil)
     }
+
+    /// RetroAchievements sends "2013-05-20 17:20:19" in UTC, other payloads ISO 8601.
+    @Test(arguments: [
+        "2013-05-20 17:20:19",
+        "2013-05-20T17:20:19Z",
+    ])
+    func parsesBothServerTimestampFormats(_ raw: String) {
+        let parsed = EarnedRetroAchievement.parseTimestamp(raw)
+
+        #expect(parsed != nil)
+        // 2013-05-20 17:20:19 UTC as seconds since the reference date.
+        #expect(parsed?.timeIntervalSince1970 == 1_369_070_419)
+    }
+
+    @Test(arguments: ["", "   ", "not a date", "20.05.2013"])
+    func rejectsUnparseableTimestamps(_ raw: String) {
+        #expect(EarnedRetroAchievement.parseTimestamp(raw) == nil)
+    }
 }

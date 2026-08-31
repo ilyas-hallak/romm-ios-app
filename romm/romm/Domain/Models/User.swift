@@ -106,6 +106,32 @@ struct EarnedRetroAchievement: Equatable {
     let id: String
     let earnedAt: String
     let earnedHardcoreAt: String?
+
+    /// The unlock timestamp, or `nil` when the server sent something unparseable.
+    var earnedAtDate: Date? { Self.parseTimestamp(earnedAt) }
+
+    /// RetroAchievements reports timestamps as `"2013-05-20 17:20:19"` in UTC,
+    /// while some payloads come through as ISO 8601. Both are accepted so the UI
+    /// never has to fall back to showing a raw string.
+    static func parseTimestamp(_ value: String) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return isoFormatter.date(from: trimmed) ?? plainFormatter.date(from: trimmed)
+    }
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let plainFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
 }
 
 enum UserRole: String, CaseIterable {
