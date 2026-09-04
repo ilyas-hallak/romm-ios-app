@@ -111,11 +111,23 @@ class LocalROMDownloadService: PLocalROMDownloadService {
                     to: localFileURL,
                     expectedSize: fileInfo.fileSizeBytes
                 ) { downloadedBytes, fileTotalBytes in
-                    // Prefer the authoritative size reported by URLSession; fall
-                    // back to the metadata size when the server omits Content-Length.
-                    let perFileTotal = fileTotalBytes > 0 ? fileTotalBytes : fileInfo.fileSizeBytes
+                    // Only URLSession knows how big the file in flight really is.
+                    // The metadata size is the uncompressed one, while the server
+                    // streams a zip it builds on the fly, so using it as the
+                    // denominator parks the bar at a few percent for the whole
+                    // download. A total of zero means unknown, which the queue
+                    // turns into the indeterminate state the UI already has.
                     let currentTotalBytes = totalDownloadedBytes + downloadedBytes
-                    let grandTotal = totalDownloadedBytes + perFileTotal + remainingMetadata
+                    let grandTotal: Int64
+                    if fileTotalBytes > 0 {
+                        // Clamped so an under-reported size cannot exceed 100%.
+                        grandTotal = max(
+                            totalDownloadedBytes + fileTotalBytes + remainingMetadata,
+                            currentTotalBytes
+                        )
+                    } else {
+                        grandTotal = 0
+                    }
                     Task { @MainActor in
                         progressHandler(currentTotalBytes, grandTotal)
                     }
