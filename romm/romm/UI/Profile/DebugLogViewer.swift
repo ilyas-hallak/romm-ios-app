@@ -515,9 +515,14 @@ struct LogExportView: View {
         }
     }
 
+    // Every export below renders `entries`, the filtered list this screen was
+    // opened from, rather than asking the store for everything it holds. The
+    // latter is what made an export of a filtered view come back with all 1000
+    // entries while the footer promised far fewer.
+
     private func exportAsText() {
         Task {
-            let text = await LogStore.shared.exportAsText()
+            let text = LogStore.formatAsText(entries)
             guard let data = text.data(using: .utf8) else { return }
 
             let url = saveToTempFile(data: data, filename: "romm_logs_\(timestamp()).txt")
@@ -530,7 +535,7 @@ struct LogExportView: View {
     private func exportAsJSON() {
         Task {
             // JSON export: Create a simple JSON structure from logs
-            let text = await LogStore.shared.exportAsText()
+            let text = LogStore.formatAsText(entries)
 
             // Create a simple JSON wrapper
             let jsonDict: [String: Any] = [
@@ -549,8 +554,8 @@ struct LogExportView: View {
     }
 
     private func exportAsZIP() {
-        Task {
-            guard let (data, filename) = try? await LogStore.shared.exportAsZippedData() else { return }
+        Task { [entries] in
+            guard let (data, filename) = try? await LogStore.shared.exportAsZippedData(entries) else { return }
 
             let url = saveToTempFile(data: data, filename: filename)
             await MainActor.run {

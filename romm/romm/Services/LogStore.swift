@@ -156,6 +156,17 @@ actor LogStore {
     }
 
     func exportAsText() -> String {
+        Self.formatAsText(entries)
+    }
+
+    /// Renders the given entries, so an export can carry exactly what the viewer
+    /// is showing.
+    ///
+    /// Takes the entries as an argument rather than reading the store: the export
+    /// screen is reached from a filtered list, and rendering the whole store there
+    /// produced a file that disagreed with both the filter and the "n entries will
+    /// be exported" count next to the button.
+    nonisolated static func formatAsText(_ entries: [LogEntry]) -> String {
         var text = "RomM Debug Logs\n"
         text += "Generated: \(DateFormatter.exportTimestamp.string(from: Date()))\n"
         text += "Total Entries: \(entries.count)\n"
@@ -163,7 +174,7 @@ actor LogStore {
 
         for entry in entries {
             text += "[\(entry.formattedTimestamp)] "
-            text += "[\(entry.level.emoji) \(levelName(for: entry.level))] "
+            text += "[\(entry.level.emoji) \(Self.levelName(for: entry.level))] "
             text += "[\(entry.category.rawValue)] "
             text += "\(entry.fileName):\(entry.line) "
             text += "\(entry.function)\n"
@@ -174,8 +185,13 @@ actor LogStore {
     }
 
     func exportAsZippedData() throws -> (data: Data, filename: String) {
+        try exportAsZippedData(entries)
+    }
+
+    /// Zips exactly the given entries, so the ZIP matches the filtered list too.
+    func exportAsZippedData(_ entries: [LogEntry]) throws -> (data: Data, filename: String) {
         // Generate log text
-        let logText = exportAsText()
+        let logText = Self.formatAsText(entries)
         guard let logData = logText.data(using: .utf8) else {
             throw NSError(domain: "LogStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert logs to UTF-8"])
         }
@@ -322,7 +338,7 @@ actor LogStore {
         }
     }
 
-    private func levelName(for level: LogLevel) -> String {
+    nonisolated private static func levelName(for level: LogLevel) -> String {
         switch level.rawValue {
         case 0: return "DEBUG"
         case 1: return "INFO"
