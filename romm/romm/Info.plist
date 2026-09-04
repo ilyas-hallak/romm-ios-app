@@ -20,6 +20,7 @@
 		<string>itms-beta</string>
 		<string>retroarch</string>
 		<string>delta</string>
+		<string>manicemu</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

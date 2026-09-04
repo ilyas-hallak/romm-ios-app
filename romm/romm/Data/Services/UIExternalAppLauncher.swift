@@ -13,4 +13,10 @@ final class UIExternalAppLauncher: PExternalAppLauncher {
         guard let url = emulator.launchURL(gameIdentifier: gameIdentifier) else { return false }
         return await UIApplication.shared.open(url)
     }
+
+    @MainActor
+    func open(_ emulator: any PExternalEmulator) async -> Bool {
+        guard let url = emulator.probeURL else { return false }
+        return await UIApplication.shared.open(url)
+    }
 }

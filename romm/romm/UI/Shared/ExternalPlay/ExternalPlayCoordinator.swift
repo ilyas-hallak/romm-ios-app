@@ -1,4 +1,12 @@
 import Foundation
+import UIKit
+
+/// A ROM waiting on the pasteboard for the user to paste it in the target app.
+struct PasteboardHandoffInfo: Identifiable, Equatable {
+    let id = UUID()
+    let romName: String
+    let appName: String
+}
 
 /// Routes a Play tap to the external emulator app the user picked, from any
 /// screen that offers Play.
@@ -21,6 +29,9 @@ final class ExternalPlayCoordinator {
     var openInItem: OpenInItem?
     /// Set when a multi-file ROM has to go through the share sheet instead.
     var shareItem: ShareURLsItem?
+    /// Set when the ROM went onto the pasteboard and the user has to paste it in
+    /// the target app.
+    var pasteboardHandoff: PasteboardHandoffInfo?
     /// Surfaced by the host screen; nil while nothing went wrong.
     var errorMessage: String?
     /// True while a ROM is being unpacked, hashed or handed over.
@@ -155,6 +166,23 @@ final class ExternalPlayCoordinator {
         shareItem = nil
     }
 
+    /// Sends the user to the target app to finish a pasteboard handoff there.
+    func openPasteboardTarget() {
+        pasteboardHandoff = nil
+        guard let target = playTarget.externalEmulatorID?.emulator else { return }
+        Task { [externalAppLauncher] in
+            _ = await externalAppLauncher.open(target)
+        }
+    }
+
+    /// Dismisses the pasteboard hint.
+    ///
+    /// The pasteboard keeps the ROM: the user may still paste it, and clearing it
+    /// here would be the one thing that makes the handoff impossible.
+    func dismissPasteboardHandoff() {
+        pasteboardHandoff = nil
+    }
+
     // MARK: - Private
 
     /// The identifier the target app will use, worked out once and then reused.
@@ -205,10 +233,35 @@ final class ExternalPlayCoordinator {
         // cue/bin need every part, so those go through the share sheet, which the
         // user then has to point at the emulator themselves.
         if result.files.count == 1, let url = result.files.first {
+            // A target that cannot take a document from the "Open in" menu gets it
+            // over the pasteboard instead. Multi-file ROMs stay on the share sheet
+            // above: one pasteboard item cannot carry a set, and such a target has
+            // no way to import one anyway.
+            if playTarget.externalEmulatorID?.emulator.romDelivery == .pasteboard {
+                handOverViaPasteboard(url: url, romName: rom.name)
+                return
+            }
             openInItem = OpenInItem(url: url, tempDirectory: result.tempDirectory)
         } else {
             shareItem = ShareURLsItem(urls: result.files, tempDirectory: result.tempDirectory)
         }
+    }
+
+    /// Puts the ROM on the general pasteboard, for apps that only import through
+    /// an item provider.
+    private func handOverViaPasteboard(url: URL, romName: String) {
+        let appName = targetDisplayName ?? "the external emulator"
+        guard let provider = NSItemProvider(contentsOf: url) else {
+            errorMessage = "Could not put this ROM on the clipboard."
+            return
+        }
+        UIPasteboard.general.itemProviders = [provider]
+        logger.info("Put \(url.lastPathComponent) on the pasteboard for \(appName)")
+        // The paste happens inside the other app, where nothing reports back, so
+        // the ROM must not count as handed over: the next Play tap would deep link
+        // into a library that may never have received it.
+        handoffRomId = nil
+        pasteboardHandoff = PasteboardHandoffInfo(romName: romName, appName: appName)
     }
 
     /// Reports the ROM as played to the server, best effort.

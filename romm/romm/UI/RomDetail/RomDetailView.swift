@@ -241,6 +241,26 @@ struct RomDetailView: View {
                     } message: {
                         Text(viewModel.downloadError ?? "")
                     }
+                    // A Play handoff that went onto the pasteboard because the
+                    // target app ignores documents from the "Open in" menu.
+                    .alert(
+                        "ROM Copied",
+                        isPresented: Binding(
+                            get: { viewModel.externalPlay.pasteboardHandoff != nil },
+                            set: { if !$0 { viewModel.externalPlay.dismissPasteboardHandoff() } }
+                        ),
+                        presenting: viewModel.externalPlay.pasteboardHandoff
+                    ) { handoff in
+                        Button("Open \(handoff.appName)") {
+                            viewModel.externalPlay.openPasteboardTarget()
+                        }
+                        Button("Done", role: .cancel) {
+                            viewModel.externalPlay.dismissPasteboardHandoff()
+                        }
+                    } message: { handoff in
+                        Text("\(handoff.romName) is on the clipboard. "
+                            + "Open \(handoff.appName) and tap Paste to import it.")
+                    }
                 }
             }
             .overlay(alignment: .top) {

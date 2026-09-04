@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Attaches everything a Play tap needs to reach an external emulator app: the
-/// system "Open in" menu, the share sheet for ROMs that menu cannot carry, and
-/// the error alert.
+/// system "Open in" menu, the share sheet for ROMs that menu cannot carry, the
+/// hint for targets that take the ROM off the pasteboard, and the error alert.
 ///
 /// Exists so a screen offering Play needs one line rather than three correct
 /// pieces of wiring. The ROM detail screen wires its own, because there the
@@ -34,6 +34,20 @@ struct ExternalPlayHandoffModifier: ViewModifier {
                     }
                 }
             )
+            .alert(
+                "ROM Copied",
+                isPresented: Binding(
+                    get: { coordinator.pasteboardHandoff != nil },
+                    set: { if !$0 { coordinator.dismissPasteboardHandoff() } }
+                ),
+                presenting: coordinator.pasteboardHandoff
+            ) { handoff in
+                Button("Open \(handoff.appName)") { coordinator.openPasteboardTarget() }
+                Button("Done", role: .cancel) { coordinator.dismissPasteboardHandoff() }
+            } message: { handoff in
+                Text("\(handoff.romName) is on the clipboard. "
+                    + "Open \(handoff.appName) and tap Paste to import it.")
+            }
             .alert(
                 "Cannot Play",
                 isPresented: Binding(

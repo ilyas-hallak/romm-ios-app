@@ -43,6 +43,34 @@ struct FileHashingTests {
             .map { String(format: "%02x", $0) }.joined())
     }
 
+    /// Vectors taken by running Manic EMU's own `FileHashUtil.truncatedHash`
+    /// (`sha256` hex, then `djb2`) over these exact bytes. They are the contract:
+    /// if this drifts, `manicemu://game/<id>` points at a game Manic never
+    /// imported and the deep link silently does nothing.
+    @Test(arguments: [
+        (Data(), "8154718353481007356"),
+        (Data("abc".utf8), "8957039215404510875"),
+        (Data("Hello, Manic".utf8), "375825355618253155"),
+        (Data(count: 256), "8376888405314486199"),
+        (Data((0...255).map { UInt8($0) }), "1165431853104416957")
+    ])
+    func matchesManicsOwnGameIDs(data: Data, expected: String) throws {
+        let url = try makeFile(data)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        #expect(try FileHashing.manicGameID(ofFileAt: url) == expected)
+    }
+
+    /// The Manic id runs djb2 over the hex digest, so it inherits the chunked
+    /// read and has to survive a file that spans several chunks.
+    @Test func matchesManicsGameIDAcrossChunkBoundaries() throws {
+        let data = Data((0..<(2 * 1024 * 1024 + 7)).map { UInt8($0 % 256) })
+        let url = try makeFile(data)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        #expect(try FileHashing.manicGameID(ofFileAt: url) == "8648680017343480522")
+    }
+
     @Test func reportsAMissingFile() {
         let missing = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("does-not-exist-\(UUID().uuidString)")

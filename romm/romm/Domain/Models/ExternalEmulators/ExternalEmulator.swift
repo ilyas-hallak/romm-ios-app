@@ -21,6 +21,16 @@ protocol PExternalEmulator: Sendable {
     /// Whether the handoff has to carry the plain ROM rather than the archive it
     /// is stored in.
     var wantsUnpackedROM: Bool { get }
+    /// The route a ROM takes into this app on its first handoff.
+    var romDelivery: ExternalROMDelivery { get }
+    /// ROM extensions this app accepts on platforms the built-in engines have no
+    /// `DeltaGameType` for, or nil to support only the platforms they do.
+    ///
+    /// Only consulted as a fallback: a known platform resolves through its game
+    /// type, which is narrower and therefore picks the right file on ROMs that
+    /// ship several. Archive extensions must stay out, or the handoff would pass
+    /// the archive and hash that instead of what the target app unpacks from it.
+    var romExtensions: Set<String>? { get }
     /// Whether an app that just received a document is this emulator.
     ///
     /// `UIDocumentInteractionController` reports the receiving bundle identifier,
@@ -35,7 +45,14 @@ extension PExternalEmulator {
         URL(string: "\(urlScheme)://")
     }
 
-    /// Both supported apps resolve a game as `<scheme>://game/<identifier>`, they
+    /// Most targets only handle what the built-in engines handle.
+    var romExtensions: Set<String>? { nil }
+
+    /// The "Open in" menu is the only route that reports which app took the file,
+    /// so it stays the default and anything else has to opt out deliberately.
+    var romDelivery: ExternalROMDelivery { .openInMenu }
+
+    /// Every supported app resolves a game as `<scheme>://game/<identifier>`, they
     /// only disagree on what the identifier is.
     func launchURL(gameIdentifier: String) -> URL? {
         guard !gameIdentifier.isEmpty else { return nil }
@@ -55,6 +72,7 @@ extension PExternalEmulator {
 enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
     case retroarch
     case delta
+    case manicEmu = "manicemu"
 
     /// The behaviour behind this identity.
     ///
@@ -65,8 +83,19 @@ enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
         switch self {
         case .retroarch: return RetroArchExternalEmulator()
         case .delta: return DeltaExternalEmulator()
+        case .manicEmu: return ManicEmuExternalEmulator()
         }
     }
+}
+
+/// How a ROM gets from here into a target app that has not seen it before.
+enum ExternalROMDelivery: Sendable {
+    /// The system "Open in" menu, which copies the file into the target's inbox
+    /// and tells us which app took it.
+    case openInMenu
+    /// The general pasteboard, carrying the file as an `NSItemProvider`. The user
+    /// has to paste it in the target app, so the handoff cannot be confirmed.
+    case pasteboard
 }
 
 /// How a target app addresses a ROM it has already imported.
@@ -78,4 +107,7 @@ enum ExternalGameIdentifierKind: String, CaseIterable, Sendable {
     case fileName
     /// Lowercase hex SHA-1 over the whole ROM file.
     case sha1OfROMData
+    /// djb2 over the ROM's hex SHA-256, as a decimal string. Manic EMU's shortened
+    /// content hash, see `FileHashing.manicGameID`.
+    case manicGameID
 }

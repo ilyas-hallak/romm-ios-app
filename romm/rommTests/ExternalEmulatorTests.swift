@@ -33,6 +33,12 @@ struct RetroArchExternalEmulatorTests {
         #expect(retroarch.identifierKind == .fileName)
     }
 
+    /// RetroArch imports what the "Open in" menu hands it, which is also the only
+    /// route that reports the handoff back, so it must stay on the default.
+    @Test func takesTheROMFromTheOpenInMenu() {
+        #expect(retroarch.romDelivery == .openInMenu)
+    }
+
     /// RetroArch ships under several bundle identifiers, so the match is on the
     /// substring rather than one fixed id.
     @Test(arguments: [
@@ -56,6 +62,10 @@ struct ExternalEmulatorIDTests {
     /// every user's Play target and lose their handoff state.
     @Test func rawValuesAreTheStoredPreferenceValues() {
         #expect(ExternalEmulatorID.retroarch.rawValue == "retroarch")
+        #expect(ExternalEmulatorID.delta.rawValue == "delta")
+        // Spelled out because the case name and the key differ here, and the
+        // default synthesised value would be "manicEmu".
+        #expect(ExternalEmulatorID.manicEmu.rawValue == "manicemu")
     }
 
     /// Catches a `switch` branch wired to the wrong implementation.
