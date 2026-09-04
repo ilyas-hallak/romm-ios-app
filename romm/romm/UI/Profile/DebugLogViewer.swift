@@ -289,6 +289,7 @@ struct LogEntryRow: View {
         case .manual: return "📚"
         case .viewModel: return "🔄"
         case .sync: return "🔄"
+        case .emulator: return "🎮"
         }
     }
 
@@ -439,6 +440,7 @@ struct LogFilterView: View {
         case .manual: return "📚"
         case .viewModel: return "🔄"
         case .sync: return "🔄"
+        case .emulator: return "🎮"
         }
     }
 
@@ -453,6 +455,7 @@ struct LogFilterView: View {
         case .manual: return "PDF manual system"
         case .viewModel: return "View model layer, state"
         case .sync: return "Synchronization operations"
+        case .emulator: return "Launching games, ROM resolution, external apps"
         }
     }
 }
