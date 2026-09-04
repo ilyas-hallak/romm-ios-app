@@ -10,7 +10,7 @@ import Foundation
 class LoadManualUseCase {
     private let manualRepository: PManualRepository
     
-    init(manualRepository: PManualRepository = ManualRepository()) {
+    init(manualRepository: PManualRepository) {
         self.manualRepository = manualRepository
     }
     

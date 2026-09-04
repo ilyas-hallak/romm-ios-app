@@ -756,6 +756,6 @@ struct DeviceSelectionRow: View {
             hasRetroAchievements: true,
             isPlayable: true
         ),
-        factory: MockDependencyFactory()
+        factory: DefaultDependencyFactory.shared
     )
 }

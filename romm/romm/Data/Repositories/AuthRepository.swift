@@ -19,7 +19,7 @@ class AuthRepository: PAuthRepository {
     
     private let apiClient: PRommAPIClient
     
-    init(apiClient: PRommAPIClient = RommAPIClient.shared) {
+    init(apiClient: PRommAPIClient) {
         self.apiClient = apiClient
     }
     

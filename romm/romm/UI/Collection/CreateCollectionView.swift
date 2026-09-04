@@ -19,8 +19,8 @@ class CreateCollectionViewModel {
     
     private let createCollectionUseCase: CreateCollectionUseCase
     
-    init(createCollectionUseCase: CreateCollectionUseCase = CreateCollectionUseCase(collectionsRepository: CollectionsRepository())) {
-        self.createCollectionUseCase = createCollectionUseCase
+    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.createCollectionUseCase = factory.makeCreateCollectionUseCase()
     }
     
     var canCreate: Bool {

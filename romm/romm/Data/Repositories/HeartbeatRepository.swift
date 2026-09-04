@@ -7,7 +7,7 @@ import Foundation
 
 class HeartbeatRepository: PHeartbeatRepository {
     private let logger = Logger.data
-    private let apiClient: RommAPIClient
+    private let apiClient: PRommAPIClient
     private let userDefaults: UserDefaults
 
     // MARK: - Constants
@@ -26,7 +26,7 @@ class HeartbeatRepository: PHeartbeatRepository {
     // MARK: - Init
 
     init(
-        apiClient: RommAPIClient = RommAPIClient.shared,
+        apiClient: PRommAPIClient,
         userDefaults: UserDefaults = .standard
     ) {
         self.apiClient = apiClient

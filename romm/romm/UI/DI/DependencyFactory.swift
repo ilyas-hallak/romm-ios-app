@@ -159,16 +159,17 @@ class DefaultDependencyFactory: PDependencyFactory {
     
     // MARK: - Repositories (Singletons)
     
-    lazy var authRepository: PAuthRepository = AuthRepository()
-    lazy var romsRepository: PRomsRepository = RomsRepository()
-    lazy var platformsRepository: PPlatformsRepository = PlatformsRepository()
-    lazy var collectionsRepository: PCollectionsRepository = CollectionsRepository()
+    lazy var authRepository: PAuthRepository = AuthRepository(apiClient: apiClient)
+    lazy var romsRepository: PRomsRepository = RomsRepository(apiClient: apiClient)
+    lazy var platformsRepository: PPlatformsRepository = PlatformsRepository(apiClient: apiClient)
+    lazy var collectionsRepository: PCollectionsRepository = CollectionsRepository(apiClient: apiClient)
     lazy var setupRepository: PSetupRepository = SetupRepository()
     lazy var fileSystemRepository: PFileSystemRepository = FileSystemRepository()
     lazy var transferHistoryRepository: PTransferHistoryRepository = TransferHistoryRepository()
     lazy var localROMRepository: PLocalROMRepository = LocalROMRepository()
-    lazy var statsRepository: PStatsRepository = StatsRepository()
-    lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository()
+    lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
+    lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
+    lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
     
     // MARK: - Services (Singletons)
     
@@ -238,7 +239,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
     
     func makeLoadManualUseCase() -> LoadManualUseCase {
-        LoadManualUseCase()
+        LoadManualUseCase(manualRepository: manualRepository)
     }
     
     // MARK: - Platform Use Cases
@@ -468,8 +469,8 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
     lazy var cloudSaveSyncStore: PCloudSaveSyncStore = CloudSaveSyncSettings.shared
-    lazy var savesRepository: PSavesRepository = SavesRepository()
-    lazy var statesRepository: PStatesRepository = StatesRepository()
+    lazy var savesRepository: PSavesRepository = SavesRepository(apiClient: apiClient)
+    lazy var statesRepository: PStatesRepository = StatesRepository(apiClient: apiClient)
     lazy var fileSystemService: PFileSystemService = DefaultFileSystemService()
     lazy var viewModePreferenceRepository: PViewModePreferenceRepository = UserDefaultsViewModePreferenceStore()
     lazy var syncDeviceRepository: PSyncDeviceRepository = SyncDeviceRepository(

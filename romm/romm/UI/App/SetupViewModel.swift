@@ -17,6 +17,7 @@ final class SetupViewModel {
     private let getHeartbeatUseCase: GetHeartbeatUseCase
     private let checkServerVersionUseCase: CheckServerVersionUseCase
     private let saveServerVersionUseCase: SaveServerVersionUseCase
+    private let heartbeatRepository: PHeartbeatRepository
 
     /// Called after a successful login so the app can re-evaluate auth state.
     /// The View wires this to `AppViewModel.checkInitialState()`.
@@ -77,6 +78,7 @@ final class SetupViewModel {
         self.getHeartbeatUseCase = factory.makeGetHeartbeatUseCase()
         self.checkServerVersionUseCase = factory.makeCheckServerVersionUseCase()
         self.saveServerVersionUseCase = factory.makeSaveServerVersionUseCase()
+        self.heartbeatRepository = factory.heartbeatRepository
     }
 
     // MARK: - Computed helpers
@@ -218,9 +220,8 @@ final class SetupViewModel {
     // MARK: - Auth Detection
 
     func detectAuthenticationMethod() async {
-        let heartbeatRepo = HeartbeatRepository()
         Logger.auth.info("Detecting authentication methods...")
-        let capabilities = await heartbeatRepo.detectAuthCapabilities(serverURL: serverURL)
+        let capabilities = await heartbeatRepository.detectAuthCapabilities(serverURL: serverURL)
         detectedAuthCapability = capabilities
         Logger.auth.info("Detected capabilities: \(capabilities.description)")
         connectionError = nil

@@ -11,7 +11,7 @@ class PlatformsRepository: PPlatformsRepository {
     private let logger = Logger.data
     private let apiClient: PRommAPIClient
     
-    init(apiClient: PRommAPIClient = RommAPIClient.shared) {
+    init(apiClient: PRommAPIClient) {
         self.apiClient = apiClient
     }
     
