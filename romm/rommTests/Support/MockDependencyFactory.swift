@@ -1,34 +1,85 @@
 //
 //  MockDependencyFactory.swift
-//  romm
+//  rommTests
 //
 //  Created by Ilyas Hallak on 27.08.25.
 //
 
+import Foundation
+@testable import romm
 
 // MARK: - Mock Factory for Testing
 
+/// Test double for `PDependencyFactory`. Every dependency must be injected
+/// explicitly; anything left unset traps with `fatalError` on first access
+/// instead of falling back to a real implementation. This guarantees a test
+/// that forgets a dependency fails loudly rather than silently hitting the
+/// network, the keychain or the disk.
+///
+/// Dependencies that only talk to the server go through the injected
+/// `apiClient` (defaulting to `FakeAPIClient()`), so they can be built for
+/// real without any risk of a real request escaping.
 class MockDependencyFactory: PDependencyFactory {
-    var transferHistoryRepository: PTransferHistoryRepository
-    var localROMRepository: PLocalROMRepository
-
-    // Mock repositories can be injected for testing
+    // Repositories that only reach the server via `apiClient` are built for
+    // real against the (fake) client, so no request ever leaves the process.
     var authRepository: PAuthRepository
     var romsRepository: PRomsRepository
     var platformsRepository: PPlatformsRepository
     var collectionsRepository: PCollectionsRepository
-    var setupRepository: PSetupRepository
-    var sftpRepository: PSFTPRepository
-    var fileSystemRepository: PFileSystemRepository
     var statsRepository: PStatsRepository
     var heartbeatRepository: PHeartbeatRepository
-
-    // Mock services
-    var sftpKeychainService: PSFTPKeychainService
-    var sftpService: PSFTPService
-    var sftpConnectionManager: SFTPConnectionManager
     var apiClient: PRommAPIClient
-    var fileValidationService: PFileValidationService
+
+    // Side-effecting dependencies (disk, keychain, Core Data). These trap on
+    // access unless a test injects a double, via the `_injected…` backing
+    // stores below.
+    private let _injectedTransferHistoryRepository: PTransferHistoryRepository?
+    var transferHistoryRepository: PTransferHistoryRepository {
+        _injectedTransferHistoryRepository ?? { fatalError("PTransferHistoryRepository was not stubbed") }()
+    }
+
+    private let _injectedLocalROMRepository: PLocalROMRepository?
+    var localROMRepository: PLocalROMRepository {
+        _injectedLocalROMRepository ?? { fatalError("PLocalROMRepository was not stubbed") }()
+    }
+
+    private let _injectedSetupRepository: PSetupRepository?
+    var setupRepository: PSetupRepository {
+        _injectedSetupRepository ?? { fatalError("PSetupRepository was not stubbed") }()
+    }
+
+    private let _injectedSFTPRepository: PSFTPRepository?
+    var sftpRepository: PSFTPRepository {
+        _injectedSFTPRepository ?? { fatalError("PSFTPRepository was not stubbed") }()
+    }
+
+    private let _injectedFileSystemRepository: PFileSystemRepository?
+    var fileSystemRepository: PFileSystemRepository {
+        _injectedFileSystemRepository ?? { fatalError("PFileSystemRepository was not stubbed") }()
+    }
+
+    private let _injectedSFTPKeychainService: PSFTPKeychainService?
+    var sftpKeychainService: PSFTPKeychainService {
+        _injectedSFTPKeychainService ?? { fatalError("PSFTPKeychainService was not stubbed") }()
+    }
+
+    private let _injectedSFTPService: PSFTPService?
+    var sftpService: PSFTPService {
+        _injectedSFTPService ?? { fatalError("PSFTPService was not stubbed") }()
+    }
+
+    // `SFTPConnectionManager` has a private init, so no fresh instance can be
+    // created. Without injection the access traps rather than mutating the
+    // production `.shared` singleton (which would leak across parallel tests).
+    private let _injectedSFTPConnectionManager: SFTPConnectionManager?
+    var sftpConnectionManager: SFTPConnectionManager {
+        _injectedSFTPConnectionManager ?? { fatalError("SFTPConnectionManager was not stubbed") }()
+    }
+
+    private let _injectedFileValidationService: PFileValidationService?
+    var fileValidationService: PFileValidationService {
+        _injectedFileValidationService ?? { fatalError("PFileValidationService was not stubbed") }()
+    }
 
     // Emulator engine
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
@@ -81,39 +132,42 @@ class MockDependencyFactory: PDependencyFactory {
         sftpRepository: PSFTPRepository? = nil,
         fileSystemRepository: PFileSystemRepository? = nil,
         statsRepository: PStatsRepository? = nil,
+        heartbeatRepository: PHeartbeatRepository? = nil,
         sftpKeychainService: PSFTPKeychainService? = nil,
         sftpService: PSFTPService? = nil,
         sftpConnectionManager: SFTPConnectionManager? = nil,
         apiClient: PRommAPIClient? = nil,
-        fileValidationService: PFileValidationService? = nil
+        fileValidationService: PFileValidationService? = nil,
+        transferHistoryRepository: PTransferHistoryRepository? = nil,
+        localROMRepository: PLocalROMRepository? = nil
     ) {
-        // Use provided mocks or default to real implementations
-        self.authRepository = authRepository ?? AuthRepository()
-        self.romsRepository = romsRepository ?? RomsRepository()
-        self.platformsRepository = platformsRepository ?? PlatformsRepository()
-        self.collectionsRepository = collectionsRepository ?? CollectionsRepository()
-        self.setupRepository = setupRepository ?? SetupRepository()
-        self.fileSystemRepository = fileSystemRepository ?? FileSystemRepository()
-        self.statsRepository = statsRepository ?? StatsRepository()
-        self.heartbeatRepository = HeartbeatRepository()
+        // Resolve the API client first so every server-only repository shares it.
+        // Defaults to a harmless fake, never the production client.
+        let resolvedAPIClient = apiClient ?? FakeAPIClient()
+        self.apiClient = resolvedAPIClient
 
-        let keychainService = sftpKeychainService ?? SFTPKeychainService()
-        self.sftpKeychainService = keychainService
-        self.sftpRepository = sftpRepository ?? SFTPRepository(keychainService: keychainService)
-        self.fileValidationService = fileValidationService ?? FileValidationService()
-        self.sftpService = sftpService ?? SFTPService(repository: self.sftpRepository)
-        
-        if let providedManager = sftpConnectionManager {
-            self.sftpConnectionManager = providedManager
-        } else {
-            let manager = SFTPConnectionManager.shared
-            manager.configure(with: self.sftpService)
-            self.sftpConnectionManager = manager
-        }
-        
-        self.apiClient = apiClient ?? RommAPIClient.shared
-        transferHistoryRepository = TransferHistoryRepository()
-        localROMRepository = LocalROMRepository()
+        // Server-only repositories: real implementations are safe because they
+        // can only reach the (fake) client, so use the injected double or build
+        // one against the fake client.
+        self.authRepository = authRepository ?? AuthRepository(apiClient: resolvedAPIClient)
+        self.romsRepository = romsRepository ?? RomsRepository(apiClient: resolvedAPIClient)
+        self.platformsRepository = platformsRepository ?? PlatformsRepository(apiClient: resolvedAPIClient)
+        self.collectionsRepository = collectionsRepository ?? CollectionsRepository(apiClient: resolvedAPIClient)
+        self.statsRepository = statsRepository ?? StatsRepository(apiClient: resolvedAPIClient)
+        self.heartbeatRepository = heartbeatRepository ?? HeartbeatRepository(apiClient: resolvedAPIClient)
+
+        // Side-effecting dependencies: kept as injected doubles only. When a
+        // test omits one, the corresponding property traps on access instead of
+        // touching the keychain, the disk or the shared connection manager.
+        _injectedSetupRepository = setupRepository
+        _injectedFileSystemRepository = fileSystemRepository
+        _injectedSFTPKeychainService = sftpKeychainService
+        _injectedSFTPRepository = sftpRepository
+        _injectedFileValidationService = fileValidationService
+        _injectedSFTPService = sftpService
+        _injectedSFTPConnectionManager = sftpConnectionManager
+        _injectedTransferHistoryRepository = transferHistoryRepository
+        _injectedLocalROMRepository = localROMRepository
     }
     
     func makeLogoutUseCase() -> LogoutUseCase {
@@ -160,8 +214,10 @@ class MockDependencyFactory: PDependencyFactory {
         SearchRomsUseCase(romsRepository: romsRepository)
     }
     
+    lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
+
     func makeLoadManualUseCase() -> LoadManualUseCase {
-        LoadManualUseCase()
+        LoadManualUseCase(manualRepository: manualRepository)
     }
     
     func makeGetPlatformsUseCase() -> GetPlatformsUseCase {

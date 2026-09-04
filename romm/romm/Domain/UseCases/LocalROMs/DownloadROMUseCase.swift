@@ -19,7 +19,7 @@ final class DownloadROMUseCase: PDownloadROMUseCase {
     private let downloadService: PLocalROMDownloadService
 
     init(
-        apiClient: PRommAPIClient = RommAPIClient.shared,
+        apiClient: PRommAPIClient,
         downloadService: PLocalROMDownloadService? = nil
     ) {
         self.apiClient = apiClient

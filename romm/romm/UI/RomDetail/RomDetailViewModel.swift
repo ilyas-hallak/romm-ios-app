@@ -95,9 +95,8 @@ class RomDetailViewModel {
     private let externalAppLauncher: PExternalAppLauncher
     private let resolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifierUseCase
 
-    init(factory: PDependencyFactory = DefaultDependencyFactory.shared,
-         apiClient: PRommAPIClient = RommAPIClient.shared) {
-        self.apiClient = apiClient
+    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+        self.apiClient = factory.apiClient
         self.getRomDetailsUseCase = factory.makeGetRomDetailsUseCase()
         self.toggleRomFavoriteUseCase = factory.makeToggleRomFavoriteUseCase()
         self.checkRomFavoriteStatusUseCase = factory.makeCheckRomFavoriteStatusUseCase()

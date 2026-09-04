@@ -396,6 +396,6 @@ struct FileItemRow: View {
             host: "example.com",
             username: "user"
         ),
-        dependencyFactory: MockDependencyFactory()
+        dependencyFactory: DefaultDependencyFactory.shared
     ) { _ in }
 }

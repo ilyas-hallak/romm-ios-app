@@ -51,8 +51,8 @@ final class CloudSaveSyncService {
         downloadStateUseCase: PDownloadStateUseCase,
         settings: CloudSaveSyncSettings = .shared,
         recordSyncUseCase: PRecordSyncUseCase? = nil,
-        apiClient: PRommAPIClient = RommAPIClient.shared,
-        syncDevice: PSyncDeviceRepository = SyncDeviceRepository.shared
+        apiClient: PRommAPIClient,
+        syncDevice: PSyncDeviceRepository
     ) {
         self.config = config
         self.saveStore = saveStore

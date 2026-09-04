@@ -11,8 +11,6 @@ import Foundation
 import UIKit
 
 final class SyncDeviceRepository: PSyncDeviceRepository {
-    static let shared = SyncDeviceRepository()
-
     private let logger = Logger.sync
     private let apiClient: PRommAPIClient
     private let userDefaults: UserDefaults
@@ -26,9 +24,9 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
     private var inFlight: Task<String?, Never>?
 
     init(
-        apiClient: PRommAPIClient = RommAPIClient.shared,
+        apiClient: PRommAPIClient,
         userDefaults: UserDefaults = .standard,
-        heartbeat: PHeartbeatRepository = HeartbeatRepository()
+        heartbeat: PHeartbeatRepository
     ) {
         self.apiClient = apiClient
         self.userDefaults = userDefaults

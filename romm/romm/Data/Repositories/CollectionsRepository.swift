@@ -11,7 +11,7 @@ class CollectionsRepository: PCollectionsRepository {
     private let apiClient: PRommAPIClient
     private let logger = Logger.data
     
-    init(apiClient: PRommAPIClient = RommAPIClient.shared) {
+    init(apiClient: PRommAPIClient) {
         self.apiClient = apiClient
     }
     

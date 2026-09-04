@@ -16,8 +16,13 @@ final class DownloadQueueManager {
     private var isProcessing = false
     private let logger = Logger.viewModel
 
-    init(downloadUseCase: PDownloadROMUseCase = DownloadROMUseCase()) {
+    /// The shared queue is built from view context with no factory at hand, so an
+    /// omitted use case falls back to the app's default client. Resolved in the
+    /// body rather than as a default argument, because default arguments are
+    /// evaluated outside this type's actor isolation.
+    init(downloadUseCase: PDownloadROMUseCase? = nil) {
         self.downloadUseCase = downloadUseCase
+            ?? DownloadROMUseCase(apiClient: DefaultDependencyFactory.shared.apiClient)
     }
 
     // MARK: - Derived state
