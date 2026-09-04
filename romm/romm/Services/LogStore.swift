@@ -85,12 +85,22 @@ actor LogStore {
 
     /// Masks sensitive patterns (bearer tokens, long token-like strings, server hosts)
     /// so credentials and private hostnames never end up in the log store or an export.
-    private static func redact(_ message: String) -> String {
+    /// Internal rather than private so the redaction rules can be tested directly;
+    /// a leak here is silent and only shows up in an exported log.
+    static func redact(_ message: String) -> String {
         var result = message
 
         let patterns: [(pattern: String, template: String)] = [
             // Bearer tokens: "Bearer <token>" -> "Bearer <redacted>"
             ("(?i)(Bearer)\\s+[A-Za-z0-9._-]+", "$1 <redacted>"),
+            // Credentials in query strings: "?sspassword=hunter2&..." -> "?sspassword=<redacted>&..."
+            //
+            // Has to run before the host is masked, and cannot be left to the
+            // length rule below: passwords and API keys are routinely shorter
+            // than 20 characters, so metadata scraper URLs were reaching the
+            // export with the user's password in plain text.
+            ("(?i)([?&][^=&\\s]*(?:pass(?:word)?|secret|token|api_?key|auth|credential|sig)[^=&\\s]*=)[^&\\s]+",
+             "$1<redacted>"),
             // URLs: keep scheme and path, mask the host
             ("(?i)(https?://)[^/\\s]+", "$1<redacted-host>"),
             // Long token-like strings (>= 20 chars) -> "<redacted>"
