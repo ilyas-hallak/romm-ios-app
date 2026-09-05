@@ -33,6 +33,11 @@ struct EmulatorEngineSettingsView: View {
     @State private var swapFaceButtons: Bool
     @State private var rumbleEnabled: Bool
     @State private var installedEmulators: [ExternalEmulatorID] = []
+    /// Apps the user has been through the assistant for. Only these are offered
+    /// as a Play target, so picking one can rely on it being set up.
+    @State private var configuredEmulators: [ExternalEmulatorID] = []
+    @State private var isAddingEmulator = false
+    private let setupStore: PExternalEmulatorSetupStore
     private let preference: PEmulatorEnginePreference
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
     private let faceButtonPreference: PGamepadFaceButtonPreference
@@ -59,6 +64,7 @@ struct EmulatorEngineSettingsView: View {
         self.rumblePreference = factory.rumblePreference
         self.playTargetPreference = factory.playTargetPreference
         self.externalAppLauncher = factory.externalAppLauncher
+        self.setupStore = factory.externalEmulatorSetupStore
         _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
         _swapFaceButtons = State(wrappedValue: factory.gamepadFaceButtonPreference.isSwapped)
         _rumbleEnabled = State(wrappedValue: factory.rumblePreference.isEnabled)
@@ -125,6 +131,14 @@ struct EmulatorEngineSettingsView: View {
         .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
         .onChange(of: rumbleEnabled) { _, new in rumblePreference.isEnabled = new }
         .onChange(of: playChoice) { _, new in apply(new) }
+        .sheet(isPresented: $isAddingEmulator) {
+            ExternalEmulatorSetupView {
+                // The assistant makes the app it added the Play target, so this
+                // screen has to re-read both or it would show the old choice.
+                refreshInstalledEmulators()
+                playChoice = PlayChoice(engine: preference.current, target: playTargetPreference.current)
+            }
+        }
     }
 
     /// One list for where a game runs, built-in engines first, then the apps a
@@ -145,6 +159,17 @@ struct EmulatorEngineSettingsView: View {
                     Text("Play with")
                     Spacer()
                     Text(label(for: playChoice)).foregroundStyle(.secondary)
+                }
+            }
+
+            // Adding is its own row rather than more entries in the picker:
+            // an app has to be set up before it can be played to, and a picker
+            // entry would let it be chosen before any of that happened.
+            if !ExternalEmulatorID.allCases.allSatisfy(configuredEmulators.contains) {
+                Button {
+                    isAddingEmulator = true
+                } label: {
+                    Label("Add an emulator app", systemImage: "plus")
                 }
             }
         }
@@ -185,13 +210,17 @@ struct EmulatorEngineSettingsView: View {
         }
     }
 
-    /// Installed apps, plus whatever is currently selected so an uninstalled
-    /// choice does not silently disappear from the picker.
+    /// Apps that have been set up, plus whatever is currently selected so a
+    /// choice does not silently disappear from the picker after an uninstall.
+    ///
+    /// Being installed is no longer enough to appear here: an app reaches this
+    /// list by going through the assistant, which is what makes it safe to
+    /// assume the user knows how a game gets there.
     private var pickableEmulators: [ExternalEmulatorID] {
-        guard case .external(let selected) = playChoice, !installedEmulators.contains(selected) else {
-            return installedEmulators
+        guard case .external(let selected) = playChoice, !configuredEmulators.contains(selected) else {
+            return configuredEmulators
         }
-        return installedEmulators + [selected]
+        return configuredEmulators + [selected]
     }
 
     /// Every app Play can hand a ROM to, for the "nothing installed yet" hint.
@@ -203,6 +232,7 @@ struct EmulatorEngineSettingsView: View {
 
     private func refreshInstalledEmulators() {
         installedEmulators = ExternalEmulatorID.allCases.filter { externalAppLauncher.isInstalled($0.emulator) }
+        configuredEmulators = setupStore.configuredEmulators()
     }
 
     #if DEBUG

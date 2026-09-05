@@ -120,6 +120,7 @@ protocol PDependencyFactory {
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase
     var externalSaveFolderStore: PExternalSaveFolderStore { get }
+    var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
     @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
@@ -507,6 +508,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     lazy var externalSaveFolderStore: PExternalSaveFolderStore = UserDefaultsExternalSaveFolderStore()
+    lazy var externalEmulatorSetupStore: PExternalEmulatorSetupStore = UserDefaultsExternalEmulatorSetupStore()
 
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase {
         ScanExternalSavesUseCase(

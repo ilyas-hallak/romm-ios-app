@@ -454,6 +454,7 @@ class MockDependencyFactory: PDependencyFactory {
     }
 
     lazy var externalSaveFolderStore: PExternalSaveFolderStore = UserDefaultsExternalSaveFolderStore()
+    lazy var externalEmulatorSetupStore: PExternalEmulatorSetupStore = UserDefaultsExternalEmulatorSetupStore()
 
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase {
         ScanExternalSavesUseCase(
