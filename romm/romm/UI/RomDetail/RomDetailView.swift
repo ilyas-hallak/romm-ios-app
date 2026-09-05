@@ -455,21 +455,24 @@ struct RomDetailView: View {
                         case .queued:
                             ProgressView().progressViewStyle(.circular).tint(.white)
                             Text("Queued").font(.headline)
-                        case .downloading(let progress):
+                        case .downloading(let progress, let bytesPerSecond):
                             if let progress {
                                 ProgressView(value: progress)
                                     .progressViewStyle(.linear)
                                     .tint(.white)
-                                    .frame(maxWidth: 140)
-                                    .animation(.easeOut(duration: 0.4), value: progress)
-                                Text("\(Int((progress * 100).rounded()))%")
-                                    .font(.headline)
-                                    .contentTransition(.numericText())
+                                    .frame(maxWidth: 110)
                                     .animation(.easeOut(duration: 0.4), value: progress)
                             } else {
                                 ProgressView().progressViewStyle(.circular).tint(.white)
-                                Text("Downloading…").font(.headline)
                             }
+                            // Percentage and rate share the button, so the label
+                            // shrinks rather than truncating on a narrow phone.
+                            Text(DownloadTask.progressLabel(progress: progress, bytesPerSecond: bytesPerSecond))
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .contentTransition(.numericText())
+                                .animation(.easeOut(duration: 0.4), value: progress)
                         case .downloaded:
                             Label("Downloaded", systemImage: "checkmark.circle.fill")
                                 .font(.headline)

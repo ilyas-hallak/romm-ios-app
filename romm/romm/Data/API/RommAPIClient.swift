@@ -19,7 +19,7 @@ enum HTTPMethod: String {
 protocol PRommAPIClient {
     func makeRequest<T: Codable>(path: String, method: HTTPMethod, body: Data?, responseType: T.Type) async throws -> T
     func makeRequest(path: String, method: HTTPMethod, body: Data?) async throws -> Data
-    func downloadFile(path: String, progressHandler: ((Int64, Int64) -> Void)?) async throws -> URL
+    func downloadFile(path: String, expectedSize: Int64, progressHandler: ((Int64, Int64, Double?) -> Void)?) async throws -> URL
     func multipartRequest(path: String, method: HTTPMethod, boundary: String, formData: Data, additionalHeaders: [String: String]?) async throws -> Data
     func get<T: Codable>(_ path: String, responseType: T.Type) async throws -> T
     func get(_ path: String) async throws -> Data
@@ -279,11 +279,19 @@ class RommAPIClient: PRommAPIClient {
 
     // MARK: - downloadFile
 
-    /// - Parameter progressHandler: Called with `(bytesWritten, totalBytesExpected)`.
-    ///   The total is whatever the server announced and is passed on untouched, so it
-    ///   is `NSURLSessionTransferSizeUnknown` (-1) when no size was announced. Callers
-    ///   must treat any non-positive total as unknown rather than as a real size.
-    func downloadFile(path: String, progressHandler: ((Int64, Int64) -> Void)? = nil) async throws -> URL {
+    /// - Parameters:
+    ///   - expectedSize: Size the caller already knows, e.g. from the ROM metadata.
+    ///     Used as the total whenever the response announces none, which RomM does
+    ///     for archives it builds on the fly. Pass 0 if unknown.
+    ///   - progressHandler: Called with `(bytesWritten, totalBytesExpected, bytesPerSecond)`.
+    ///     The bytes are counted as they are written here, not taken from the system's
+    ///     progress reporting. A non-positive total means the size is unknown; the rate
+    ///     is nil until enough time has passed to measure one.
+    func downloadFile(
+        path: String,
+        expectedSize: Int64 = 0,
+        progressHandler: ((Int64, Int64, Double?) -> Void)? = nil
+    ) async throws -> URL {
         let measurement = PerformanceMeasurement(operation: "DOWNLOAD \(path)")
         logger.logNetworkRequest(method: HTTPMethod.get.rawValue, url: path)
 
@@ -301,11 +309,17 @@ class RommAPIClient: PRommAPIClient {
         logger.debug("Download Auth header (debug-only): \(authHeader)")
         #endif
 
-        // Delegate-driven rather than the completion-handler form this used
-        // before: only `didWriteData` reports the size the server actually
-        // announced. A completion-handler task never calls the download
-        // delegate methods, so the download needs its own session.
-        let progressDelegate = DownloadProgressDelegate(progressHandler: progressHandler)
+        // Streamed through a data task so the bytes can be counted here as they
+        // are written. The system's own progress reporting is unusable when the
+        // server announces no size, which RomM does whenever it builds the
+        // archive on the fly.
+        let stagingURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("romm-download-\(UUID().uuidString)")
+        let progressDelegate = DownloadProgressDelegate(
+            destinationURL: stagingURL,
+            fallbackExpectedSize: expectedSize,
+            progressHandler: progressHandler
+        )
         let downloadSession = URLSession(
             configuration: urlSession.configuration,
             delegate: progressDelegate,
@@ -318,9 +332,10 @@ class RommAPIClient: PRommAPIClient {
         do {
             (tempURL, response) = try await withCheckedThrowingContinuation { continuation in
                 progressDelegate.completion = { continuation.resume(with: $0) }
-                downloadSession.downloadTask(with: request).resume()
+                downloadSession.dataTask(with: request).resume()
             }
         } catch {
+            try? FileManager.default.removeItem(at: stagingURL)
             logger.logNetworkError(method: HTTPMethod.get.rawValue, url: path, error: error)
             if let urlError = error as? URLError {
                 throw APIClientError.networkError(urlError)
@@ -379,10 +394,9 @@ class RommAPIClient: PRommAPIClient {
             throw APIClientError.authenticationRequired
 
         case 400...599:
-            // Only error bodies are read back, and those are small.
+            // Error bodies are never streamed to disk, the delegate keeps them.
             let message: String
-            if let data = try? Data(contentsOf: tempURL),
-               let serverMessage = String(data: data.prefix(500), encoding: .utf8),
+            if let serverMessage = String(data: progressDelegate.errorBody.prefix(500), encoding: .utf8),
                !serverMessage.isEmpty {
                 message = serverMessage
             } else {

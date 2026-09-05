@@ -92,7 +92,7 @@ final class FakeAPIClient: PRommAPIClient {
 
     func makeRequest<T: Codable>(path: String, method: HTTPMethod, body: Data?, responseType: T.Type) async throws -> T { fatalError("not used in these tests") }
     func makeRequest(path: String, method: HTTPMethod, body: Data?) async throws -> Data { fatalError("not used in these tests") }
-    func downloadFile(path: String, progressHandler: ((Int64, Int64) -> Void)?) async throws -> URL { fatalError("not used in these tests") }
+    func downloadFile(path: String, expectedSize: Int64, progressHandler: ((Int64, Int64, Double?) -> Void)?) async throws -> URL { fatalError("not used in these tests") }
     func multipartRequest(path: String, method: HTTPMethod, boundary: String, formData: Data, additionalHeaders: [String: String]?) async throws -> Data { fatalError("not used in these tests") }
     func get<T: Codable>(_ path: String, responseType: T.Type) async throws -> T { fatalError("not used in these tests") }
     func get(_ path: String) async throws -> Data { fatalError("not used in these tests") }

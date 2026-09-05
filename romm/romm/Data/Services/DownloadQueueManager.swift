@@ -98,7 +98,7 @@ final class DownloadQueueManager {
         defer { isProcessing = false }
         while let index = tasks.firstIndex(where: { if case .queued = $0.status { return true } else { return false } }) {
             let task = tasks[index]
-            tasks[index].status = .downloading(progress: nil)
+            tasks[index].status = .downloading(progress: nil, bytesPerSecond: nil)
             do {
                 try await download(task)
                 updateStatus(id: task.id, to: .finished)
@@ -125,13 +125,16 @@ final class DownloadQueueManager {
     }
 
     private func download(_ task: DownloadTask) async throws {
-        _ = try await downloadUseCase.execute(rom: task.rom) { [weak self] downloaded, total in
+        _ = try await downloadUseCase.execute(rom: task.rom) { [weak self] downloaded, total, bytesPerSecond in
             guard let self else { return }
             let progress: Double? = total > 0
                 ? min(max(Double(downloaded) / Double(total), 0), 1)
                 : nil
             Task { @MainActor in
-                self.updateStatus(id: task.id, to: .downloading(progress: progress))
+                self.updateStatus(
+                    id: task.id,
+                    to: .downloading(progress: progress, bytesPerSecond: bytesPerSecond)
+                )
             }
         }
     }

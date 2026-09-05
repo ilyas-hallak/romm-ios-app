@@ -439,7 +439,7 @@ class SFTPUploadViewModel {
             let _ = try await downloadService.downloadROM(
                 rom: rom,
                 files: filesToDownload,
-                progressHandler: { [weak self] downloadedBytes, totalBytes in
+                progressHandler: { [weak self] downloadedBytes, totalBytes, _ in
                     DispatchQueue.main.async {
                         guard let strongSelf = self, !strongSelf.isCompleted else {
                             return
@@ -513,7 +513,10 @@ class SFTPUploadViewModel {
         let path = "api/roms/\(rom.id)/content/\(encodedFileName)"
 
         do {
-            let tempURL = try await apiClient.downloadFile(path: path) { [weak self] downloadedBytes, totalBytes in
+            let tempURL = try await apiClient.downloadFile(
+                path: path,
+                expectedSize: fileInfo.fileSizeBytes
+            ) { [weak self] downloadedBytes, totalBytes, _ in
                 Task { @MainActor in
                     guard let self = self, self.isPreparing else { return }
 

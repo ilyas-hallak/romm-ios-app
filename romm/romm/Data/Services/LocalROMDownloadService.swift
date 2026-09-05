@@ -27,12 +27,13 @@ protocol PLocalROMDownloadService {
     /// - Parameters:
     ///   - rom: The ROM to download
     ///   - files: The specific files to download
-    ///   - progressHandler: Called with (downloaded bytes, total bytes) during download
+    ///   - progressHandler: Called with (downloaded bytes, total bytes, bytes per second)
+    ///     during download. A non-positive total means the size is unknown.
     /// - Returns: The downloaded ROM metadata
     func downloadROM(
         rom: Rom,
         files: [RomFileInfo],
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws -> DownloadedROM
 }
 
@@ -53,7 +54,7 @@ class LocalROMDownloadService: PLocalROMDownloadService {
     func downloadROM(
         rom: Rom,
         files: [RomFileInfo],
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws -> DownloadedROM {
 
         // 1. Calculate total size
@@ -110,17 +111,13 @@ class LocalROMDownloadService: PLocalROMDownloadService {
                     romId: rom.id,
                     to: localFileURL,
                     expectedSize: fileInfo.fileSizeBytes
-                ) { downloadedBytes, fileTotalBytes in
-                    // Only URLSession knows how big the file in flight really is.
-                    // The metadata size is the uncompressed one, while the server
-                    // streams a zip it builds on the fly, so using it as the
-                    // denominator parks the bar at a few percent for the whole
-                    // download. A total of zero means unknown, which the queue
-                    // turns into the indeterminate state the UI already has.
+                ) { downloadedBytes, fileTotalBytes, bytesPerSecond in
+                    // `fileTotalBytes` is the announced size, or the metadata size
+                    // passed in above when the server announced none. Clamped so an
+                    // under-reported size cannot push the bar past 100%.
                     let currentTotalBytes = totalDownloadedBytes + downloadedBytes
                     let grandTotal: Int64
                     if fileTotalBytes > 0 {
-                        // Clamped so an under-reported size cannot exceed 100%.
                         grandTotal = max(
                             totalDownloadedBytes + fileTotalBytes + remainingMetadata,
                             currentTotalBytes
@@ -129,7 +126,7 @@ class LocalROMDownloadService: PLocalROMDownloadService {
                         grandTotal = 0
                     }
                     Task { @MainActor in
-                        progressHandler(currentTotalBytes, grandTotal)
+                        progressHandler(currentTotalBytes, grandTotal, bytesPerSecond)
                     }
                 }
 
@@ -201,7 +198,7 @@ class LocalROMDownloadService: PLocalROMDownloadService {
         romId: Int,
         to destinationURL: URL,
         expectedSize: Int64,
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws {
         let encodedFileName = encodePathComponent(fileName)
         // RomM 5.1 requires the filename in the path; RomM 5.0 used the bare
@@ -212,15 +209,21 @@ class LocalROMDownloadService: PLocalROMDownloadService {
 
         let tempFileURL: URL
         do {
-            tempFileURL = try await apiClient.downloadFile(path: newPath) { downloadedBytes, totalBytes in
-                progressHandler(downloadedBytes, totalBytes)
+            tempFileURL = try await apiClient.downloadFile(
+                path: newPath,
+                expectedSize: expectedSize
+            ) { downloadedBytes, totalBytes, bytesPerSecond in
+                progressHandler(downloadedBytes, totalBytes, bytesPerSecond)
             }
         } catch let error {
             if case APIClientError.invalidResponse(404, _) = error {
                 print("📥 /content/{filename} returned 404 — falling back to legacy /content (RomM 5.0)")
                 do {
-                    tempFileURL = try await apiClient.downloadFile(path: legacyPath) { downloadedBytes, totalBytes in
-                        progressHandler(downloadedBytes, totalBytes)
+                    tempFileURL = try await apiClient.downloadFile(
+                        path: legacyPath,
+                        expectedSize: expectedSize
+                    ) { downloadedBytes, totalBytes, bytesPerSecond in
+                        progressHandler(downloadedBytes, totalBytes, bytesPerSecond)
                     }
                 } catch {
                     throw LocalROMDownloadError.downloadFailed(error.localizedDescription)
@@ -243,7 +246,8 @@ class LocalROMDownloadService: PLocalROMDownloadService {
         if expectedSize > 0, actualSize <= 0 {
             throw LocalROMDownloadError.fileValidationFailed("Downloaded file is empty")
         }
-        progressHandler(actualSize, actualSize)
+        // No rate here: this file is done, the number would be stale.
+        progressHandler(actualSize, actualSize, nil)
     }
 
     private func encodePathComponent(_ value: String) -> String {

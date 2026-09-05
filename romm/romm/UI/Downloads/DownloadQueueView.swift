@@ -107,24 +107,21 @@ struct DownloadQueueView: View {
             Text("Queued")
                 .font(.caption)
                 .foregroundColor(.secondary)
-        case .downloading(let progress):
+        case .downloading(let progress, let bytesPerSecond):
             VStack(alignment: .leading, spacing: 3) {
                 if let progress {
                     ProgressView(value: progress)
                         .tint(.accentColor)
                         .animation(.easeOut(duration: 0.4), value: progress)
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .contentTransition(.numericText())
-                        .animation(.easeOut(duration: 0.4), value: progress)
                 } else {
                     ProgressView()
                         .tint(.accentColor)
-                    Text("Downloading…")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
                 }
+                Text(DownloadTask.progressLabel(progress: progress, bytesPerSecond: bytesPerSecond))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.4), value: progress)
             }
         case .finished:
             Text("Downloaded")
