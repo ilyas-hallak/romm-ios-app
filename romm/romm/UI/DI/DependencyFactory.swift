@@ -117,6 +117,7 @@ protocol PDependencyFactory {
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase
+    func makeSyncPreviewUseCase() -> PSyncPreviewUseCase
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
     @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
@@ -492,6 +493,15 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase {
         EmulatorSaveStatesUseCase(saveStore: saveStore)
+    }
+
+    func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
+        SyncPreviewUseCase(
+            saveStore: saveStore,
+            syncDevice: syncDeviceRepository,
+            apiClient: apiClient,
+            tokenProvider: tokenProvider
+        )
     }
 
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase {

@@ -444,6 +444,15 @@ class MockDependencyFactory: PDependencyFactory {
         EmulatorSaveStatesUseCase(saveStore: saveStore)
     }
 
+    func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
+        SyncPreviewUseCase(
+            saveStore: saveStore,
+            syncDevice: syncDeviceRepository,
+            apiClient: apiClient,
+            tokenProvider: tokenProvider
+        )
+    }
+
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
