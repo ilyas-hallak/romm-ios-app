@@ -22,20 +22,55 @@ struct SyncOverviewView: View {
         _viewModel = State(initialValue: viewModel)
     }
 
+    /// Which app the folder picker was opened for. The picker reports only the
+    /// URL, so the app has to be remembered across it.
+    @State private var pickingFolderFor: ExternalEmulatorID?
+
     var body: some View {
         Form {
+            // The sources come first and stay put whatever the server says: a
+            // granted folder is on this device and is readable regardless, so
+            // hiding it behind a failed request would have it the wrong way
+            // round.
+            sourcesSection
+            externalAppsSection
+
             switch viewModel.state {
             case .idle, .loading:
                 loadingSection
             case .failed(let error):
                 failureSection(error)
             case .loaded(let preview):
-                sourcesSection(preview)
                 plannedSection(preview)
                 if !preview.isUpToDate {
                     operationsSection(preview)
                 }
             }
+        }
+        .fileImporter(
+            isPresented: Binding(
+                get: { pickingFolderFor != nil },
+                set: { if !$0 { pickingFolderFor = nil } }
+            ),
+            allowedContentTypes: [.folder]
+        ) { result in
+            guard let emulator = pickingFolderFor else { return }
+            pickingFolderFor = nil
+            if case .success(let url) = result {
+                viewModel.grantFolder(url, for: emulator)
+            }
+        }
+        .alert(
+            "Folder",
+            isPresented: Binding(
+                get: { viewModel.folderError != nil },
+                set: { if !$0 { viewModel.folderError = nil } }
+            ),
+            presenting: viewModel.folderError
+        ) { _ in
+            Button("OK", role: .cancel) { viewModel.folderError = nil }
+        } message: { message in
+            Text(message)
         }
         .navigationTitle("Save Sync")
         .navigationBarTitleDisplayMode(.inline)
@@ -80,25 +115,111 @@ struct SyncOverviewView: View {
         }
     }
 
-    private func sourcesSection(_ preview: SyncPreview) -> some View {
+    private var sourcesSection: some View {
         Section {
             sourceRow(
                 icon: "iphone",
                 title: String(localized: "This Device"),
-                detail: preview.reportedSaveCount == 1
-                    ? String(localized: "1 battery save")
-                    : String(localized: "\(preview.reportedSaveCount) battery saves")
+                detail: loadedPreview.map { preview in
+                    preview.reportedSaveCount == 1
+                        ? String(localized: "1 battery save")
+                        : String(localized: "\(preview.reportedSaveCount) battery saves")
+                } ?? "…"
             )
             sourceRow(
                 icon: "server.rack",
                 title: String(localized: "RomM Server"),
-                detail: String(localized: "Connected")
+                detail: serverStatus
             )
         } header: {
             Text("Sources")
         } footer: {
-            Text("Registered as device \(preview.deviceId).")
-                .font(.caption2)
+            if let deviceId = loadedPreview?.deviceId {
+                Text("Registered as device \(deviceId).")
+                    .font(.caption2)
+            }
+        }
+    }
+
+    /// One row per emulator app, whether or not a folder was granted, so the
+    /// ones that could be connected are discoverable rather than hidden behind
+    /// having already connected them.
+    private var externalAppsSection: some View {
+        Section {
+            ForEach(viewModel.externalSources, id: \.self) { emulator in
+                externalAppRow(emulator)
+            }
+        } header: {
+            Text("Emulator Apps")
+        } footer: {
+            Text("Saves made in these apps are read from a folder you pick in Files. "
+                + "Nothing is written to them.")
+        }
+    }
+
+    private func externalAppRow(_ emulator: ExternalEmulatorID) -> some View {
+        let scan = viewModel.externalScans[emulator]
+        return HStack(spacing: 12) {
+            Image(systemName: "gamecontroller")
+                .foregroundStyle(scan == nil ? Color.secondary : Color.accentColor)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(emulator.emulator.displayName)
+                if let scan {
+                    Text(scanSummary(scan))
+                        .font(.caption)
+                        .foregroundStyle(scan.matched.isEmpty ? Color.orange : Color.secondary)
+                }
+            }
+            Spacer()
+            if scan == nil {
+                Button("Choose Folder…") { pickingFolderFor = emulator }
+                    .font(.callout)
+            } else {
+                Menu {
+                    Button("Choose a Different Folder…") { pickingFolderFor = emulator }
+                    Button("Disconnect", role: .destructive) {
+                        viewModel.revokeFolder(for: emulator)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+    }
+
+    /// Says what was found, and says it differently when nothing matched.
+    ///
+    /// "Found 12 files but matched none" and "found nothing at all" call for
+    /// different fixes, the first pointing at the matching and the second at the
+    /// folder, so they must not read the same.
+    private func scanSummary(_ scan: ExternalSaveScan) -> String {
+        if scan.isStale {
+            return String(localized: "Folder moved, pick it again")
+        }
+        if scan.isEmpty {
+            return String(localized: "No saves found in this folder")
+        }
+        if scan.matched.isEmpty {
+            return String(localized: "\(scan.unmatchedFileNames.count) saves found, none for games you have")
+        }
+        let found = scan.matched.count == 1
+            ? String(localized: "1 save")
+            : String(localized: "\(scan.matched.count) saves")
+        guard !scan.unmatchedFileNames.isEmpty else { return found }
+        return String(localized: "\(found), \(scan.unmatchedFileNames.count) unrecognised")
+    }
+
+    private var loadedPreview: SyncPreview? {
+        if case .loaded(let preview) = viewModel.state { return preview }
+        return nil
+    }
+
+    private var serverStatus: String {
+        switch viewModel.state {
+        case .loaded: return String(localized: "Connected")
+        case .failed: return String(localized: "Unavailable")
+        case .idle, .loading: return "…"
         }
     }
 
@@ -124,8 +245,14 @@ struct SyncOverviewView: View {
                     Text("Everything is up to date.")
                 }
             } else {
-                countRow(.upload, count: preview.uploads.count)
-                countRow(.download, count: preview.downloads.count)
+                // Only directions that would actually happen. A standing
+                // "Download 0 saves" reads as a thing the sync does.
+                if !preview.uploads.isEmpty {
+                    countRow(.upload, count: preview.uploads.count)
+                }
+                if !preview.downloads.isEmpty {
+                    countRow(.download, count: preview.downloads.count)
+                }
                 if !preview.conflicts.isEmpty {
                     countRow(.conflict, count: preview.conflicts.count)
                 }

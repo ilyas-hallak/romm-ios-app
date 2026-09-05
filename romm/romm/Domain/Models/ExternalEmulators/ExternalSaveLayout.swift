@@ -68,10 +68,20 @@ struct ExternalSaveLayout: Sendable, Equatable {
 
     /// Whether a file with this name and extension is a battery save.
     func isBatterySave(fileName: String, matching key: String) -> Bool {
+        guard let found = batteryKey(forFileName: fileName) else { return false }
+        return found.caseInsensitiveCompare(key) == .orderedSame
+    }
+
+    /// What this file claims to be a save for, or nil when it is not a save.
+    ///
+    /// The counterpart to `isBatterySave` for the direction a scan actually
+    /// runs in: a folder is listed once and each name is asked what it belongs
+    /// to, rather than every known ROM asking the folder about itself. Going the
+    /// other way would mean deriving a key per ROM, and for the apps that name
+    /// saves after a content hash that is a hash of every ROM on the device.
+    func batteryKey(forFileName fileName: String) -> String? {
         let name = fileName as NSString
-        guard name.deletingPathExtension.caseInsensitiveCompare(key) == .orderedSame else {
-            return false
-        }
-        return batteryExtensions.contains(name.pathExtension.lowercased())
+        guard batteryExtensions.contains(name.pathExtension.lowercased()) else { return nil }
+        return name.deletingPathExtension
     }
 }

@@ -19,12 +19,26 @@ final class SyncOverviewViewModel {
     /// the tap and the answer.
     private(set) var romNames: [Int: String] = [:]
 
+    /// What was found in each external app's folder, keyed by app.
+    ///
+    /// Kept apart from `state`, which is about the server: a granted folder is
+    /// readable whether or not the server answers, and hiding what is on the
+    /// device behind a failed request would be the wrong way round.
+    private(set) var externalScans: [ExternalEmulatorID: ExternalSaveScan] = [:]
+
+    /// Set when picking a folder failed, e.g. the grant could not be stored.
+    var folderError: String?
+
     private let previewUseCase: PSyncPreviewUseCase
     private let getDownloadedROM: PGetDownloadedROMUseCase
+    private let scanExternalSaves: PScanExternalSavesUseCase
+    private let folderStore: PExternalSaveFolderStore
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
+        self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
+        self.folderStore = factory.externalSaveFolderStore
     }
 
     /// Starts in a given state, for previews.
@@ -35,12 +49,24 @@ final class SyncOverviewViewModel {
     init(
         showing state: State,
         romNames: [Int: String] = [:],
+        externalScans: [ExternalEmulatorID: ExternalSaveScan] = [:],
         factory: PDependencyFactory = DefaultDependencyFactory.shared
     ) {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
+        self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
+        self.folderStore = factory.externalSaveFolderStore
         self.state = state
         self.romNames = romNames
+        self.externalScans = externalScans
+    }
+
+    /// The apps that could be read from, whether or not a folder was granted yet.
+    ///
+    /// An app with no described layout is left out entirely rather than shown as
+    /// unconfigured: there would be nothing the user could do about it.
+    var externalSources: [ExternalEmulatorID] {
+        ExternalEmulatorID.allCases.filter { $0.emulator.saveLayout != nil }
     }
 
     var isLoading: Bool {
@@ -49,6 +75,10 @@ final class SyncOverviewViewModel {
     }
 
     func load() async {
+        // The folders are read first and on their own: they are local, they are
+        // quick, and they stay meaningful when the request below fails.
+        rescanExternalFolders()
+
         state = .loading
         do {
             let preview = try await previewUseCase.execute()
@@ -59,6 +89,31 @@ final class SyncOverviewViewModel {
         } catch {
             state = .failed(.negotiationFailed(error.localizedDescription))
         }
+    }
+
+    /// Stores the grant for a folder the user just picked and reads it at once,
+    /// so picking the wrong one is visible immediately rather than at the next
+    /// sync.
+    func grantFolder(_ url: URL, for emulator: ExternalEmulatorID) {
+        do {
+            try folderStore.remember(folderURL: url, for: emulator)
+            rescanExternalFolders()
+        } catch {
+            folderError = String(
+                localized: "Could not keep access to that folder: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    func revokeFolder(for emulator: ExternalEmulatorID) {
+        folderStore.forget(emulator)
+        externalScans[emulator] = nil
+    }
+
+    func rescanExternalFolders() {
+        externalScans = Dictionary(
+            uniqueKeysWithValues: scanExternalSaves.executeForAllGranted().map { ($0.emulator, $0) }
+        )
     }
 
     /// The name to show for a ROM, falling back to its id when this device has

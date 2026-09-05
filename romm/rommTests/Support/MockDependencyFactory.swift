@@ -453,6 +453,16 @@ class MockDependencyFactory: PDependencyFactory {
         )
     }
 
+    lazy var externalSaveFolderStore: PExternalSaveFolderStore = UserDefaultsExternalSaveFolderStore()
+
+    func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase {
+        ScanExternalSavesUseCase(
+            folderStore: externalSaveFolderStore,
+            localROMs: localROMRepository,
+            handoffStore: externalEmulatorHandoffStore
+        )
+    }
+
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
