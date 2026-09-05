@@ -7,7 +7,20 @@ import SwiftUI
 /// of games cannot show. Only two sources exist so far, this device and the
 /// server; external emulator apps are meant to join them as further rows.
 struct SyncOverviewView: View {
-    @State private var viewModel = SyncOverviewViewModel()
+    @State private var viewModel: SyncOverviewViewModel
+
+    init() {
+        _viewModel = State(initialValue: SyncOverviewViewModel())
+    }
+
+    /// Takes a view model that is already in the state to show, for previews.
+    ///
+    /// Separate from `init()` rather than a defaulted parameter: a default
+    /// argument is evaluated in a nonisolated context, which the main-actor
+    /// view model cannot be built from.
+    init(viewModel: SyncOverviewViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
 
     var body: some View {
         Form {
@@ -133,11 +146,10 @@ struct SyncOverviewView: View {
             Image(systemName: direction.icon)
                 .foregroundStyle(direction.tint)
                 .frame(width: 24)
+            // The count is in the label already; repeating it on the right made
+            // the row read "Upload 1 save … 1".
             Text(direction.summary(count: count))
             Spacer()
-            Text("\(count)")
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
         }
     }
 
@@ -173,6 +185,92 @@ struct SyncOverviewView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+// MARK: - Previews
+
+// Each of these needs a server in a particular state to reach for real, which
+// is why the screen is otherwise only ever seen empty or broken.
+
+private func previewOperation(
+    _ direction: SyncPreviewOperation.Direction,
+    romId: Int,
+    reason: String
+) -> SyncPreviewOperation {
+    SyncPreviewOperation(
+        romId: romId,
+        direction: direction,
+        serverFileName: "Game [2026-09-04_22-01-15].sav",
+        slot: SaveSlot.battery,
+        emulator: "mgba",
+        reason: reason,
+        serverUpdatedAt: Date(timeIntervalSince1970: 1_788_000_000)
+    )
+}
+
+private let previewNames = [
+    1: "The Legend of Zelda: The Minish Cap",
+    2: "Pokémon Emerald",
+    3: "Metroid Fusion",
+    4: "Golden Sun"
+]
+
+#Preview("Changes pending") {
+    NavigationStack {
+        SyncOverviewView(viewModel: SyncOverviewViewModel(
+            showing: .loaded(SyncPreview(
+                deviceId: "75018cac-3f2e-4a91-b7d2-19c4e8f0a1bb",
+                reportedSaveCount: 4,
+                operations: [
+                    previewOperation(.upload, romId: 1, reason: "Save exists on client but not on server"),
+                    previewOperation(.download, romId: 2, reason: "Server save is newer (no sync history)"),
+                    previewOperation(.conflict, romId: 3, reason: "Both changed since the last sync")
+                ]
+            )),
+            romNames: previewNames
+        ))
+    }
+}
+
+#Preview("Up to date") {
+    NavigationStack {
+        SyncOverviewView(viewModel: SyncOverviewViewModel(
+            showing: .loaded(SyncPreview(
+                deviceId: "75018cac-3f2e-4a91-b7d2-19c4e8f0a1bb",
+                reportedSaveCount: 4,
+                operations: []
+            )),
+            romNames: previewNames
+        ))
+    }
+}
+
+/// The row a user is least likely to recognise: a save pushed by another
+/// device, for a ROM this one has never downloaded.
+#Preview("Unknown ROM") {
+    NavigationStack {
+        SyncOverviewView(viewModel: SyncOverviewViewModel(
+            showing: .loaded(SyncPreview(
+                deviceId: "75018cac-3f2e-4a91-b7d2-19c4e8f0a1bb",
+                reportedSaveCount: 0,
+                operations: [
+                    previewOperation(.download, romId: 4711, reason: "Save exists on server but not on client")
+                ]
+            ))
+        ))
+    }
+}
+
+#Preview("Server too old") {
+    NavigationStack {
+        SyncOverviewView(viewModel: SyncOverviewViewModel(showing: .failed(.serverTooOld)))
+    }
+}
+
+#Preview("Loading") {
+    NavigationStack {
+        SyncOverviewView(viewModel: SyncOverviewViewModel(showing: .loading))
     }
 }
 

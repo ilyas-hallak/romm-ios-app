@@ -27,6 +27,22 @@ final class SyncOverviewViewModel {
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
     }
 
+    /// Starts in a given state, for previews.
+    ///
+    /// Every state this screen can show needs a server that is in that state,
+    /// which is the one thing a preview cannot arrange. Loading is skipped
+    /// because it only runs from `.idle`.
+    init(
+        showing state: State,
+        romNames: [Int: String] = [:],
+        factory: PDependencyFactory = DefaultDependencyFactory.shared
+    ) {
+        self.previewUseCase = factory.makeSyncPreviewUseCase()
+        self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
+        self.state = state
+        self.romNames = romNames
+    }
+
     var isLoading: Bool {
         if case .loading = state { return true }
         return false
@@ -50,7 +66,9 @@ final class SyncOverviewViewModel {
     /// is exactly the row a user is least likely to recognise, so the id is
     /// spelled out rather than left blank.
     func displayName(forRom romId: Int) -> String {
-        romNames[romId] ?? String(localized: "ROM \(romId)")
+        // The id goes in as text: interpolating the Int formats it for the
+        // locale, which turned ROM 4711 into "ROM 4.711" in German.
+        romNames[romId] ?? String(localized: "ROM \(String(romId))")
     }
 
     private func resolveNames(for preview: SyncPreview) -> [Int: String] {
