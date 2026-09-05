@@ -23,6 +23,9 @@ protocol PExternalEmulator: Sendable {
     var wantsUnpackedROM: Bool { get }
     /// The route a ROM takes into this app on its first handoff.
     var romDelivery: ExternalROMDelivery { get }
+    /// How this app names and files the battery saves it writes, or nil when
+    /// that is not known well enough to go looking for them.
+    var saveLayout: ExternalSaveLayout? { get }
     /// ROM extensions this app accepts on platforms the built-in engines have no
     /// `DeltaGameType` for, or nil to support only the platforms they do.
     ///
@@ -51,6 +54,9 @@ extension PExternalEmulator {
     /// The "Open in" menu is the only route that reports which app took the file,
     /// so it stays the default and anything else has to opt out deliberately.
     var romDelivery: ExternalROMDelivery { .openInMenu }
+
+    /// Saves are only read out of an app that has described where it writes them.
+    var saveLayout: ExternalSaveLayout? { nil }
 
     /// Every supported app resolves a game as `<scheme>://game/<identifier>`, they
     /// only disagree on what the identifier is.
