@@ -3,10 +3,10 @@ import Foundation
 protocol PDownloadROMUseCase {
     /// Resolves the concrete files for a ROM from the server details and
     /// downloads them to local storage, reporting progress as
-    /// (downloaded, total) bytes.
+    /// (downloaded, total) bytes and the current rate.
     func execute(
         rom: Rom,
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws -> DownloadedROM
 }
 
@@ -28,7 +28,7 @@ final class DownloadROMUseCase: PDownloadROMUseCase {
 
     func execute(
         rom: Rom,
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws -> DownloadedROM {
         let files = try await resolveFiles(for: rom)
         return try await downloadService.downloadROM(

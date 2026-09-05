@@ -61,7 +61,8 @@ class RomDetailViewModel {
     enum DownloadButtonState: Equatable {
         case idle
         case queued
-        case downloading(Double?) // 0...1, or nil when size is unknown
+        /// Progress 0...1 (nil when the size is unknown) and the current rate.
+        case downloading(Double?, Double?)
         case downloaded
         case failed
     }
@@ -70,7 +71,7 @@ class RomDetailViewModel {
         if isDownloaded { return .downloaded }
         switch downloadQueue.status(forRomId: id) {
         case .queued: return .queued
-        case .downloading(let progress): return .downloading(progress)
+        case .downloading(let progress, let bytesPerSecond): return .downloading(progress, bytesPerSecond)
         case .finished: return .downloaded
         case .failed: return .failed
         case nil: return .idle
