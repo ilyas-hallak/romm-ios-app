@@ -23,6 +23,32 @@ struct LocalSaveStoreRepositoryTests {
         #expect(try store.readBattery(romId: 99) == nil)
     }
 
+    /// Sync negotiation reports the whole library in one request, so the store
+    /// has to be able to name every ROM it holds something for.
+    @Test func listsEveryRomItHoldsSomethingFor() throws {
+        let (store, _) = makeStore()
+        try store.writeBattery(romId: 42, data: Data([0xCA]))
+        try store.writeState(romId: 7, slot: 0, data: Data([0x01]))
+        #expect(try store.listRomIds() == [7, 42])
+    }
+
+    @Test func listsNothingForAnEmptyStore() throws {
+        let (store, _) = makeStore()
+        #expect(try store.listRomIds().isEmpty)
+    }
+
+    /// The root is shared with whatever else may end up there, and a stray
+    /// directory must not become a ROM id.
+    @Test func skipsDirectoriesThatAreNotRomIds() throws {
+        let (store, root) = makeStore()
+        try store.writeBattery(romId: 3, data: Data([0xCA]))
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("not-a-rom", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        #expect(try store.listRomIds() == [3])
+    }
+
     @Test func stateRoundtripAndList() throws {
         let (store, _) = makeStore()
         try store.writeState(romId: 1, slot: 1, data: Data([0x01]))

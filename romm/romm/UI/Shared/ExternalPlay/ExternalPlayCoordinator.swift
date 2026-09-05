@@ -77,6 +77,15 @@ final class ExternalPlayCoordinator {
         playTarget = playTargetPreference.current
     }
 
+    /// Points this coordinator at a target without changing the user's setting.
+    ///
+    /// For the setup assistant's test run: it hands a ROM to the app being set
+    /// up, which is deliberately not the saved target yet, since the user has
+    /// not finished deciding.
+    func overrideTarget(_ target: PlayTarget) {
+        playTarget = target
+    }
+
     /// Routes a Play tap to the configured external emulator.
     ///
     /// - Returns: false when the built-in emulator should take over instead, so a
