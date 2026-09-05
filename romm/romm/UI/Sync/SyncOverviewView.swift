@@ -180,9 +180,17 @@ struct SyncOverviewView: View {
             }
             Spacer()
             if let updatedAt = operation.serverUpdatedAt {
-                Text(updatedAt, style: .date)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                // Over two lines, and with the time: which of two saves is
+                // newer is the whole question here, and saves synced on the
+                // same day are indistinguishable by date alone. One line
+                // carrying both would crowd out the game's name.
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(updatedAt, format: .dateTime.day().month(.abbreviated).year())
+                    Text(updatedAt, format: .dateTime.hour().minute())
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize()
             }
         }
     }
