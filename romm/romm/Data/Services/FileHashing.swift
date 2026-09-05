@@ -25,7 +25,27 @@ enum FileHashing {
         try hash(ofFileAt: url, using: SHA256())
     }
 
+    /// The identifier Manic EMU addresses an imported ROM by.
+    ///
+    /// Manic wants something shorter than a digest, so it hex-encodes the SHA-256
+    /// and then runs djb2 over that *text* rather than over the ROM
+    /// (`FileHashUtil.truncatedHash`). Reproducing it exactly is what makes
+    /// `manicemu://game/<id>` land on the game Manic imported, so the wrapping
+    /// arithmetic below mirrors Manic's `<<` and `&+` and must not be "fixed".
+    static func manicGameID(ofFileAt url: URL) throws -> String {
+        String(djb2(try sha256(ofFileAt: url)))
+    }
+
     // MARK: - Private
+
+    /// djb2 over UTF-8, in Int so the overflow matches Manic's.
+    ///
+    /// `magnitude` rather than `abs`, which traps on `Int.min`. That costs
+    /// nothing: the two agree everywhere else, and on the one value where they
+    /// differ Manic itself crashes, so there is no identifier to agree with.
+    private static func djb2(_ string: String) -> UInt {
+        string.utf8.reduce(5381) { ($0 << 5) &+ $0 &+ Int($1) }.magnitude
+    }
 
     private static func hash<H: HashFunction>(ofFileAt url: URL, using function: H) throws -> String {
         var function = function

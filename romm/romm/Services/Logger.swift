@@ -40,6 +40,11 @@ enum LogCategory: String, CaseIterable, Codable {
     case manual = "Manual"
     case viewModel = "ViewModel"
     case sync = "Sync"
+    /// Launching a game: engine choice, ROM file resolution, and handing a ROM
+    /// to an external emulator app. Kept apart from `viewModel` because this is
+    /// the chain you follow when Play does not do what it should, and it spans
+    /// several layers.
+    case emulator = "Emulator"
 }
 
 class LogConfiguration: ObservableObject {
@@ -268,6 +273,7 @@ extension Logger {
     static let manual = Logger(category: .manual)
     static let viewModel = Logger(category: .viewModel)
     static let sync = Logger(category: .sync)
+    static let emulator = Logger(category: .emulator)
 }
 
 // MARK: - Performance Measurement Helper
