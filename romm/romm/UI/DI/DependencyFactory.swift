@@ -147,7 +147,7 @@ protocol PDependencyFactory {
 
     // Local ROM ViewModels
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel
-    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel
+    @MainActor func makeShareROMViewModel() -> ShareROMViewModel
 }
 
 class DefaultDependencyFactory: PDependencyFactory {
@@ -582,8 +582,8 @@ class DefaultDependencyFactory: PDependencyFactory {
         )
     }
 
-    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel {
-        ShareROMViewModel(rom: rom, getShareFilesUseCase: makeGetROMShareFilesUseCase())
+    @MainActor func makeShareROMViewModel() -> ShareROMViewModel {
+        ShareROMViewModel(getShareFilesUseCase: makeGetROMShareFilesUseCase())
     }
 
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel {

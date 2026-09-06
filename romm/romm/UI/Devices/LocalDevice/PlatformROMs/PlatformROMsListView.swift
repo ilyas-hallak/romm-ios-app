@@ -31,6 +31,9 @@ struct PlatformROMsListView: View {
     @State private var romPendingLaunch: PendingLaunch?
     /// Slot chosen in the pre-launch sheet; read by the emulator cover builder.
     @State private var pendingResumeSlot: Int?
+    /// Files a Share swipe has staged, held here rather than in the swipe action
+    /// so the presentation survives the row snapping shut.
+    @State private var share: ShareROMViewModel
     private let factory: PDependencyFactory
     private let launchUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
@@ -44,6 +47,7 @@ struct PlatformROMsListView: View {
         self.launchUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
         self.saveStore = factory.saveStore
+        _share = State(initialValue: factory.makeShareROMViewModel())
     }
 
     var body: some View {
@@ -73,7 +77,7 @@ struct PlatformROMsListView: View {
                     }
                 }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    ShareSwipeButton(rom: rom)
+                    ShareSwipeButton { share.prepareShare(rom: rom) }
                 }
             }
         }
@@ -124,6 +128,14 @@ struct PlatformROMsListView: View {
             SyncSaveSheet(viewModel: factory.makeSyncSaveViewModel(rom: rom)) { romPendingSync = nil }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $share.shareSheetItem, onDismiss: share.cleanupTemporaryFiles) { item in
+            ShareSheet(activityItems: item.urls)
+        }
+        .alert("Files Not Found", isPresented: $share.showFileNotFoundAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The ROM files could not be found on this device. They may have been deleted or moved.")
         }
     }
 
