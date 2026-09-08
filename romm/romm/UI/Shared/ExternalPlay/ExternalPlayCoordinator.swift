@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 
 /// A ROM waiting on the pasteboard for the user to paste it in the target app.
 struct PasteboardHandoffInfo: Identifiable, Equatable {
@@ -251,12 +252,33 @@ final class ExternalPlayCoordinator {
     /// an item provider.
     private func handOverViaPasteboard(url: URL, romName: String) {
         let appName = targetDisplayName ?? "the external emulator"
-        guard let provider = NSItemProvider(contentsOf: url) else {
+        // The bytes have to go on the pasteboard themselves. An NSItemProvider
+        // built from a file URL registers public.file-url plus a promise to hand
+        // the file over later, and neither survives the trip: the URL points into
+        // this app's container, which the target cannot read, and the promise can
+        // only be met while this process is alive, which it is not once the user
+        // has switched away to paste.
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
             errorMessage = "Could not put this ROM on the clipboard."
             return
         }
+        // Exactly one type goes on, the one the extension resolves to. A paste
+        // importer looks for a type some app has declared for the extension it
+        // handles, so a broad type such as public.data does not help and can hurt:
+        // an importer that matches types by substring may settle on it and then
+        // find it carries no extension to name the file after.
+        let romType = UTType(filenameExtension: url.pathExtension) ?? .data
+        // Eager, because a registered representation would only be produced on
+        // request, and by then the user has switched to the other app and this
+        // process can be suspended with nobody left to answer.
+        let provider = NSItemProvider(item: data as NSData, typeIdentifier: romType.identifier)
+        // An importer that writes the pasted bytes to a file needs a name for it,
+        // and it appends the extension its type declares, so this must go on
+        // without one to avoid landing as "Game.gba.gba".
+        provider.suggestedName = url.deletingPathExtension().lastPathComponent
         UIPasteboard.general.itemProviders = [provider]
-        logger.info("Put \(url.lastPathComponent) on the pasteboard for \(appName)")
+        logger.info("Put \(url.lastPathComponent) (\(data.count) bytes) on the pasteboard "
+            + "for \(appName) (type=\(romType.identifier), name=\(provider.suggestedName ?? "-"))")
         // The paste happens inside the other app, where nothing reports back, so
         // the ROM must not count as handed over: the next Play tap would deep link
         // into a library that may never have received it.
