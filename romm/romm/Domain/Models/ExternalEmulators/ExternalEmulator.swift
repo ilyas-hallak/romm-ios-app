@@ -23,6 +23,9 @@ protocol PExternalEmulator: Sendable {
     var wantsUnpackedROM: Bool { get }
     /// The route a ROM takes into this app on its first handoff.
     var romDelivery: ExternalROMDelivery { get }
+    /// How this app names and files the battery saves it writes, or nil when
+    /// that is not known well enough to go looking for them.
+    var saveLayout: ExternalSaveLayout? { get }
     /// ROM extensions this app accepts on platforms the built-in engines have no
     /// `DeltaGameType` for, or nil to support only the platforms they do.
     ///
@@ -51,6 +54,23 @@ extension PExternalEmulator {
     /// The "Open in" menu is the only route that reports which app took the file,
     /// so it stays the default and anything else has to opt out deliberately.
     var romDelivery: ExternalROMDelivery { .openInMenu }
+
+    /// Saves are only read out of an app that has described where it writes them.
+    var saveLayout: ExternalSaveLayout? { nil }
+
+    /// What the user has to do the first time a ROM goes to this app.
+    ///
+    /// Worth saying out loud during setup, because the first handoff is the one
+    /// step this app cannot complete on the user's behalf, and an app that
+    /// silently waits for a paste looks like a Play button that does nothing.
+    var handoffExplanation: String {
+        switch romDelivery {
+        case .openInMenu:
+            return String(localized: "The first time you play a game, pick \(displayName) from the share sheet that appears. After that it opens there straight away.")
+        case .pasteboard:
+            return String(localized: "\(displayName) cannot take games from the share sheet, so the first time you play one it goes to the clipboard instead. Open \(displayName) and paste it to add it to your library. After that it opens there straight away.")
+        }
+    }
 
     /// Every supported app resolves a game as `<scheme>://game/<identifier>`, they
     /// only disagree on what the identifier is.

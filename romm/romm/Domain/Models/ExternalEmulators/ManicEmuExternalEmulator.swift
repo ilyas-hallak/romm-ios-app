@@ -26,6 +26,20 @@ struct ManicEmuExternalEmulator: PExternalEmulator {
     /// over the pasteboard.
     var romDelivery: ExternalROMDelivery { .pasteboard }
 
+    /// Saves land under `3DS/sdmc/saves/`, in a directory named after the system
+    /// for gb/gba/gbc/nds and after the core for n64, per issue #144. Hence the
+    /// hint stopping at `saves`: the level below it is not one value.
+    ///
+    /// `srm` alongside `sav` for the same reason, since the n64 core writes the
+    /// libretro extension while the rest write `sav`.
+    var saveLayout: ExternalSaveLayout? {
+        ExternalSaveLayout(
+            naming: .romBaseName,
+            batteryExtensions: ["sav", "srm"],
+            searchHints: ["3DS/sdmc/saves"]
+        )
+    }
+
     /// Systems Manic plays that the built-in engines have no game type for.
     ///
     /// Extensions only, no archives: Manic unpacks those itself and hashes the
