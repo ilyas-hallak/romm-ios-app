@@ -516,9 +516,7 @@ struct LogExportView: View {
     }
 
     // Every export below renders `entries`, the filtered list this screen was
-    // opened from, rather than asking the store for everything it holds. The
-    // latter is what made an export of a filtered view come back with all 1000
-    // entries while the footer promised far fewer.
+    // opened from, rather than everything the store holds.
 
     private func exportAsText() {
         Task {

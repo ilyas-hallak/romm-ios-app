@@ -7,10 +7,9 @@ import SwiftUI
 
 /// One row per place saves live, each saying what a sync would do with it.
 ///
-/// Read-only in both senses. It changes nothing on the server, and it no longer
-/// changes the setup either: granting and disconnecting a folder moved to
-/// Settings › Emulator, beside the app it concerns. Mixing the two made the
-/// screen read as a control panel for something it only reports on.
+/// Read-only in both senses: it changes nothing on the server, and nothing
+/// about the setup either. Granting a folder belongs to Settings › Emulator,
+/// beside the app it concerns.
 struct SyncOverviewView: View {
     @State private var viewModel: SyncOverviewViewModel
 
@@ -72,15 +71,13 @@ struct SyncOverviewView: View {
                     isWarning: !preview.conflicts.isEmpty
                 )
             }
-            // Nothing to show behind a plan that is empty, and a chevron leading
-            // to an empty list reads as a screen that failed to load.
+            // A chevron into an empty list reads as a screen that failed.
             .disabled(preview.isUpToDate)
         } header: {
             Text("RomM")
         } footer: {
-            // Said plainly because the screen otherwise reads like it is syncing,
-            // and because uploads still send no slot, so this is a preview of a
-            // change that has not been made yet.
+            // Said plainly: uploads still send no slot, so this is a preview of
+            // a change that has not been made yet.
             Text("Nothing has been changed. This is what a sync would do once saves "
                 + "are uploaded under a slot. Registered as device \(preview.deviceId).")
         }
@@ -191,8 +188,6 @@ struct SyncOverviewView: View {
 
 // MARK: - Previews
 
-// Each of these needs a server in a particular state to reach for real, which
-// is why the screen is otherwise only ever seen empty or broken.
 
 private func previewOperation(
     _ direction: SyncPreviewOperation.Direction,

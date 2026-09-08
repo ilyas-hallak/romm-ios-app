@@ -23,20 +23,16 @@ struct ExternalSaveScan: Equatable {
     let emulator: ExternalEmulatorID
     let matched: [ExternalSaveFile]
     /// Files that look like saves but belong to no ROM this device knows.
-    ///
-    /// Counted rather than dropped, because saves found but unmatched and
-    /// nothing found at all need opposite fixes: the matching versus the folder.
+    /// Counted rather than dropped: unmatched saves and an empty folder need
+    /// opposite fixes.
     let unmatchedFileNames: [String]
     /// True when the granted folder resolved but has moved since.
     let isStale: Bool
 
     var isEmpty: Bool { matched.isEmpty && unmatchedFileNames.isEmpty }
 
-    /// One line saying what was found, worded so the four outcomes are told
-    /// apart: they need different fixes, and reading the same would hide that.
-    ///
-    /// Shared by the settings screen and the sync screen, which must not
-    /// describe the same folder differently.
+    /// One line saying what was found, worded so the four outcomes stay apart.
+    /// Shared, so settings and sync cannot describe a folder differently.
     var statusSummary: String {
         if isStale {
             return String(localized: "Folder moved, pick it again")

@@ -10,9 +10,8 @@ protocol PScanExternalSavesUseCase {
 /// Matches the battery saves another emulator app has written to the ROMs this
 /// device has downloaded.
 ///
-/// Only the matching lives here. Finding the files is
-/// `PExternalSaveFileRepository`'s job, which keeps bookmarks, security scopes
-/// and directory walks out of the domain.
+/// Only the matching lives here; `PExternalSaveFileRepository` finds the files,
+/// which keeps bookmarks and directory walks out of the domain.
 final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
 
     private let logger = Logger.emulator
@@ -63,13 +62,12 @@ final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
     // MARK: - Private
 
     /// Maps what a save could be named after back to a ROM id, lowercased so
-    /// matching can ignore case without lowercasing on every comparison.
+    /// matching ignores case without lowercasing per comparison.
     ///
-    /// For an app that names saves after a content hash this only covers ROMs
-    /// whose identifier is already known, which in practice means the ones handed
-    /// to that app at least once. Hashing the whole library to close that gap
-    /// would read every ROM on the device, and a save for a game never opened
-    /// over there cannot exist anyway.
+    /// For an app naming saves after a content hash this covers only ROMs whose
+    /// identifier is already known, meaning the ones handed over at least once.
+    /// Closing that gap would mean hashing the whole library, and a save for a
+    /// game never opened over there cannot exist anyway.
     private func romIndex(
         for emulator: ExternalEmulatorID,
         layout: ExternalSaveLayout
@@ -80,8 +78,8 @@ final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
         for rom in roms {
             switch layout.naming {
             case .romBaseName:
-                // A multi-file ROM has no single name, so every part is offered:
-                // the target app named the save after whichever one it opened.
+                // A multi-file ROM has no single name, so every part counts:
+                // the app named the save after whichever one it opened.
                 for file in rom.files {
                     let base = (file.fileName as NSString).deletingPathExtension
                     index[base.lowercased()] = rom.id

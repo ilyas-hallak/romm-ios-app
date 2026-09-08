@@ -3,8 +3,7 @@ import Foundation
 /// RetroArch resolves `retroarch://game/<name.ext>` against its own library, so
 /// the plain file name is the identifier and nothing has to be hashed.
 ///
-/// It also opens archives itself, so the handoff can pass a ROM along exactly as
-/// it is stored.
+/// It opens archives itself, so a ROM can be passed exactly as it is stored.
 struct RetroArchExternalEmulator: PExternalEmulator {
     var id: ExternalEmulatorID { .retroarch }
     var displayName: String { "RetroArch" }
@@ -13,12 +12,9 @@ struct RetroArchExternalEmulator: PExternalEmulator {
     var identifierKind: ExternalGameIdentifierKind { .fileName }
     var wantsUnpackedROM: Bool { false }
 
-    /// Saves sit under `RetroArch/saves/<core>/`, per issue #144. The hint stops
-    /// above the core directory, since that level is one entry per core.
-    ///
-    /// Getting the hint right matters more here than elsewhere: a RetroArch
-    /// folder usually holds the user's whole ROM collection too, so falling back
-    /// to walking it would mean reading through all of that.
+    /// Saves sit under `RetroArch/saves/<core>/`, so the hint stops above the
+    /// per-core level. It matters more here than elsewhere, because a RetroArch
+    /// folder usually holds the whole ROM collection the fallback would walk.
     var saveLayout: ExternalSaveLayout? {
         ExternalSaveLayout(
             naming: .romBaseName,

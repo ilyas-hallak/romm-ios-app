@@ -2,13 +2,11 @@ import SwiftUI
 
 /// Every change the server planned for this device, one row per save.
 ///
-/// Its own screen because the overview answers "would anything change", and
-/// this one answers "what exactly". Putting both on one screen made the counts
-/// impossible to find under the list they summarise.
+/// Its own screen because the overview answers "would anything change" and
+/// this one answers "what exactly".
 struct SyncPlanDetailView: View {
     let preview: SyncPreview
-    /// Resolves a ROM id to a name. Passed in rather than looked up here: the
-    /// overview has already resolved every id in this plan.
+    /// Resolves a ROM id to a name, already done by the overview.
     let romName: (Int) -> String
 
     var body: some View {
@@ -38,8 +36,7 @@ struct SyncPlanDetailView: View {
 
     private var operationsSection: some View {
         Section {
-            // Conflicts first: they are the only rows that cannot be resolved by
-            // letting the sync run, so they must not be buried under the rest.
+            // Conflicts first: the only rows letting the sync run cannot fix.
             ForEach(preview.conflicts + preview.uploads + preview.downloads) { operation in
                 operationRow(operation)
             }
@@ -53,8 +50,7 @@ struct SyncPlanDetailView: View {
             Image(systemName: direction.icon)
                 .foregroundStyle(direction.tint)
                 .frame(width: 24)
-            // The count is in the label already; repeating it on the right made
-            // the row read "Upload 1 save … 1".
+            // The count is in the label, so no trailing value.
             Text(direction.summary(count: count))
             Spacer()
         }
@@ -75,9 +71,8 @@ struct SyncPlanDetailView: View {
             }
             Spacer()
             if let updatedAt = operation.serverUpdatedAt {
-                // Over two lines, and with the time: which of two saves is newer
-                // is the whole question here, and saves synced on the same day
-                // are indistinguishable by date alone.
+                // With the time, since saves synced on the same day are
+                // indistinguishable by date alone.
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(updatedAt, format: .dateTime.day().month(.abbreviated).year())
                     Text(updatedAt, format: .dateTime.hour().minute())

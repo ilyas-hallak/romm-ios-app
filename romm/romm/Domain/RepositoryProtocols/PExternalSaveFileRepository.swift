@@ -1,7 +1,6 @@
 import Foundation
 
-/// One file found in another app's granted folder, before anything is known
-/// about which ROM it belongs to.
+/// A file found in another app's granted folder, not yet matched to a ROM.
 struct ExternalSaveCandidate: Equatable {
     let url: URL
     let fileName: String
@@ -9,7 +8,7 @@ struct ExternalSaveCandidate: Equatable {
     let modifiedAt: Date
 }
 
-/// What one app's granted folder holds right now.
+/// What one app's granted folder holds.
 struct ExternalSaveFolderContents: Equatable {
     let candidates: [ExternalSaveCandidate]
     /// True when the grant resolved but the folder has moved since.
@@ -18,17 +17,12 @@ struct ExternalSaveFolderContents: Equatable {
 
 /// Reads the folders other emulator apps write their saves into.
 ///
-/// Read-only, and deliberately so: the entitlement is
-/// `user-selected.read-only`, which is enough to offer these saves to the server
-/// but not to write anything back.
-///
-/// Owning the bookmark, the security scope and the folder walk here is what
-/// keeps them out of `ScanExternalSavesUseCase`, which then only has to match
-/// file names to ROMs.
+/// Read-only: the entitlement is `user-selected.read-only`, enough to offer
+/// these saves to the server but not to write back. The bookmark, the security
+/// scope and the folder walk live here so the use case only matches names.
 protocol PExternalSaveFileRepository {
     /// Every app that currently has a usable grant.
     func emulatorsWithFolder() -> [ExternalEmulatorID]
-    /// Reads one app's granted folder. Returns nil when no folder was granted,
-    /// or when the app has no described save layout to look for.
+    /// Nil when no folder was granted, or the app has no described layout.
     func contents(for emulator: ExternalEmulatorID) -> ExternalSaveFolderContents?
 }

@@ -2,9 +2,8 @@ import SwiftUI
 
 /// What was found in one emulator app's save folder.
 ///
-/// Lists the files themselves, not a plan: these saves are read but not yet
-/// negotiated with the server, so there is no direction to show for them. The
-/// screen therefore says what is there and how old it is, which is what makes
+/// Files rather than a plan: these saves are read but not yet negotiated, so
+/// there is no direction to show. What is there and how old it is is what makes
 /// a wrong folder recognisable.
 struct ExternalScanDetailView: View {
     let scan: ExternalSaveScan
@@ -46,9 +45,8 @@ struct ExternalScanDetailView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-            // The file name last and truncated: it is what identifies the save
-            // in the app's own folder, but it is the least readable part of the
-            // row, so it must not push the game's name around.
+            // Last and truncated: it identifies the save in the app's folder
+            // but must not push the game's name around.
             Text(save.fileName)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -68,9 +66,8 @@ struct ExternalScanDetailView: View {
         } header: {
             Text("Not Recognised")
         } footer: {
-            // Named rather than hidden: an unmatched file usually means the game
-            // is not on this device, which is a different problem from a folder
-            // that holds nothing.
+            // Named rather than hidden: a missing game is a different problem
+            // from an empty folder.
             Text("Saves whose game is not on this device. Download the game in "
                 + "RomM and they will be matched.")
         }

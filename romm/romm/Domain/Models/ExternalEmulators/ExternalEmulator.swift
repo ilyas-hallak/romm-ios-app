@@ -6,19 +6,18 @@ import Foundation
 /// share sheet target: the first launch goes through the system "Open in" menu,
 /// every later one through the target's URL scheme.
 ///
-/// Implementations only describe an app and never touch files, which keeps them
-/// synchronously testable. Resolving an identifier can mean hashing a whole ROM
-/// and belongs to `ResolveExternalGameIdentifierUseCase`.
+/// Implementations only describe an app and never touch files. Resolving an
+/// identifier can mean hashing a whole ROM and belongs to
+/// `ResolveExternalGameIdentifierUseCase`.
 protocol PExternalEmulator: Sendable {
     var id: ExternalEmulatorID { get }
     var displayName: String { get }
     /// Scheme used both for the installation check and for the deep link. It has
     /// to be listed in `LSApplicationQueriesSchemes` or `canOpenURL` always says no.
     var urlScheme: String { get }
-    /// The app's App Store page, or nil for an app not distributed there.
-    ///
-    /// Without a default on purpose: a missing page leaves the setup assistant's
-    /// install step with nothing to open, so it has to be a per-app decision.
+    /// The app's App Store page, or nil for an app not distributed there. No
+    /// default, because a missing page leaves the install step with nothing to
+    /// open, so it has to be decided per app.
     var appStoreURL: URL? { get }
     /// How this app addresses a ROM it has already imported.
     var identifierKind: ExternalGameIdentifierKind { get }
@@ -61,9 +60,8 @@ extension PExternalEmulator {
     /// Saves are only read out of an app that has described where it writes them.
     var saveLayout: ExternalSaveLayout? { nil }
 
-    /// What the user has to do the first time a ROM goes to this app. Said out
-    /// loud during setup, because it is the one step that cannot be done for
-    /// them, and an app silently waiting for a paste looks like a dead button.
+    /// What the user has to do the first time a ROM goes to this app. The one
+    /// step that cannot be done for them, so setup says it out loud.
     var handoffExplanation: String {
         switch romDelivery {
         case .openInMenu:
@@ -87,9 +85,8 @@ extension PExternalEmulator {
 
 /// Stable identity of a supported emulator app.
 ///
-/// The raw values are persistence keys: they end up in the Play target
-/// preference and in the handoff store's UserDefaults keys, so renaming a case
-/// silently resets the user's choice.
+/// The raw values are persistence keys, in the Play target preference and the
+/// handoff store, so renaming a case silently resets the user's choice.
 enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
     case retroarch
     case delta
@@ -125,7 +122,6 @@ enum ExternalGameIdentifierKind: String, CaseIterable, Sendable {
     case fileName
     /// Lowercase hex SHA-1 over the whole ROM file.
     case sha1OfROMData
-    /// djb2 over the ROM's hex SHA-256, as a decimal string. Manic EMU's shortened
-    /// content hash, see `FileHashing.manicGameID`.
+    /// Manic EMU's shortened content hash, see `FileHashing.manicGameID`.
     case manicGameID
 }

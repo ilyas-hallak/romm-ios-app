@@ -2,8 +2,7 @@ import Foundation
 
 /// What a sync would do, worked out without doing any of it.
 ///
-/// Overwriting a save is close to unrepairable, so syncing shows this first and
-/// only acts once the user has agreed to it.
+/// Overwriting a save is close to unrepairable, so syncing shows this first.
 struct SyncPreview {
     /// This app's registered device on the server.
     let deviceId: String
@@ -41,8 +40,8 @@ struct SyncPreviewOperation: Identifiable, Equatable {
     let serverFileName: String?
     let slot: String?
     let emulator: String?
-    /// The server's own wording for why it planned this, shown as-is rather
-    /// than reworded, so a surprising plan can be traced back to the server.
+    /// The server's own wording, shown as-is so a surprising plan can be traced
+    /// back to it.
     let reason: String?
     let serverUpdatedAt: Date?
 
@@ -58,9 +57,8 @@ enum SyncPreviewError: Error, LocalizedError, Equatable {
     case notConnected
     /// The server predates the sync API (RomM 4.9).
     case serverTooOld(version: String)
-    /// The server's version could not be established, so whether it can sync is
-    /// unknown. Kept apart from `serverTooOld`, which is a verdict: this one
-    /// asks the user to reconnect rather than telling them to upgrade.
+    /// The version could not be established. Apart from `serverTooOld`, which
+    /// is a verdict: this one asks the user to reconnect.
     case serverVersionUnknown
     /// Registration was refused, so there is no device to negotiate for.
     case deviceRegistrationFailed

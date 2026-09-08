@@ -94,11 +94,9 @@ actor LogStore {
             // Bearer tokens: "Bearer <token>" -> "Bearer <redacted>"
             ("(?i)(Bearer)\\s+[A-Za-z0-9._-]+", "$1 <redacted>"),
             // Credentials in query strings: "?sspassword=hunter2&..." -> "?sspassword=<redacted>&..."
-            //
             // Has to run before the host is masked, and cannot be left to the
             // length rule below: passwords and API keys are routinely shorter
-            // than 20 characters, so metadata scraper URLs were reaching the
-            // export with the user's password in plain text.
+            // than its 20-character threshold.
             ("(?i)([?&][^=&\\s]*(?:pass(?:word)?|secret|token|api_?key|auth|credential|sig)[^=&\\s]*=)[^&\\s]+",
              "$1<redacted>"),
             // URLs: keep scheme and path, mask the host
@@ -162,10 +160,8 @@ actor LogStore {
     /// Renders the given entries, so an export can carry exactly what the viewer
     /// is showing.
     ///
-    /// Takes the entries as an argument rather than reading the store: the export
-    /// screen is reached from a filtered list, and rendering the whole store there
-    /// produced a file that disagreed with both the filter and the "n entries will
-    /// be exported" count next to the button.
+    /// Takes the entries as an argument rather than reading the store, so the
+    /// file matches the filtered list and the count shown next to the button.
     nonisolated static func formatAsText(_ entries: [LogEntry]) -> String {
         var text = "RomM Debug Logs\n"
         text += "Generated: \(DateFormatter.exportTimestamp.string(from: Date()))\n"

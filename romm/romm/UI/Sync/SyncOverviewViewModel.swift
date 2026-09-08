@@ -14,16 +14,11 @@ final class SyncOverviewViewModel {
     private(set) var state: State = .idle
 
     /// Names for the ROMs an operation refers to, resolved from what this device
-    /// has downloaded. A plan that reads "ROM 4711" tells the user nothing, and
-    /// asking the server for each name would put a round trip per row between
-    /// the tap and the answer.
+    /// has downloaded. Asking the server per row would cost a round trip each.
     private(set) var romNames: [Int: String] = [:]
 
-    /// What was found in each external app's folder, keyed by app.
-    ///
-    /// Kept apart from `state`, which is about the server: a granted folder is
-    /// readable whether or not the server answers, and hiding what is on the
-    /// device behind a failed request would be the wrong way round.
+    /// What was found in each external app's folder, keyed by app. Apart from
+    /// `state`, since a granted folder is readable whether the server answers.
     private(set) var externalScans: [ExternalEmulatorID: ExternalSaveScan] = [:]
 
     private let previewUseCase: PSyncPreviewUseCase
@@ -38,11 +33,8 @@ final class SyncOverviewViewModel {
         self.setupStore = factory.externalEmulatorSetupStore
     }
 
-    /// Starts in a given state, for previews.
-    ///
-    /// Every state this screen can show needs a server that is in that state,
-    /// which is the one thing a preview cannot arrange. Loading is skipped
-    /// because it only runs from `.idle`.
+    /// Starts in a given state, for previews: every state this screen shows
+    /// needs a server that is in it. Loading only runs from `.idle`.
     init(
         showing state: State,
         romNames: [Int: String] = [:],
@@ -58,12 +50,8 @@ final class SyncOverviewViewModel {
         self.externalScans = externalScans
     }
 
-    /// The apps this screen reports on: the ones set up, whose saves can be
-    /// located at all.
-    ///
-    /// Only configured apps, because setting one up now happens in settings.
-    /// Listing an app that was never added would offer a source the user cannot
-    /// act on from here.
+    /// The apps this screen reports on: set up, and with a locatable save
+    /// layout. Anything else would be a source the user cannot act on here.
     var externalSources: [ExternalEmulatorID] {
         setupStore.configuredEmulators().filter { $0.emulator.saveLayout != nil }
     }
@@ -79,8 +67,7 @@ final class SyncOverviewViewModel {
     }
 
     func load() async {
-        // The folders are read first and on their own: they are local, they are
-        // quick, and they stay meaningful when the request below fails.
+        // Local and quick, and still meaningful when the request below fails.
         rescanExternalFolders()
 
         state = .loading
@@ -101,13 +88,11 @@ final class SyncOverviewViewModel {
         )
     }
 
-    /// The name to show for a ROM, falling back to its id when this device has
-    /// never downloaded it. That happens for a save another device pushed, which
-    /// is exactly the row a user is least likely to recognise, so the id is
-    /// spelled out rather than left blank.
+    /// The name to show for a ROM, falling back to its id for a save another
+    /// device pushed for a game this one never downloaded.
     func displayName(forRom romId: Int) -> String {
-        // The id goes in as text: interpolating the Int formats it for the
-        // locale, which turned ROM 4711 into "ROM 4.711" in German.
+        // As text, since interpolating the Int formats it for the locale and
+        // turns 4711 into "4.711" in German.
         romNames[romId] ?? String(localized: "ROM \(String(romId))")
     }
 

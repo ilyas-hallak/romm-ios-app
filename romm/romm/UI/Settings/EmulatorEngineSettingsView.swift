@@ -33,8 +33,8 @@ struct EmulatorEngineSettingsView: View {
     @State private var swapFaceButtons: Bool
     @State private var rumbleEnabled: Bool
     @State private var installedEmulators: [ExternalEmulatorID] = []
-    /// Apps the user has been through the assistant for. Only these are offered
-    /// as a Play target, so picking one can rely on it being set up.
+    /// Apps the user has been through the assistant for, the only ones offered
+    /// as a Play target.
     @State private var configuredEmulators: [ExternalEmulatorID] = []
     @State private var isAddingEmulator = false
     private let setupStore: PExternalEmulatorSetupStore
@@ -117,8 +117,7 @@ struct EmulatorEngineSettingsView: View {
         .navigationTitle("Emulator")
         .onAppear {
             refreshInstalledEmulators()
-            // The in-game menu writes these two as well, so re-read them here
-            // instead of trusting the values captured when the screen was built.
+            // The in-game menu writes these two as well, so re-read them.
             menuShortcut = menuShortcutPreference.current
             swapFaceButtons = faceButtonPreference.isSwapped
             #if DEBUG
@@ -134,8 +133,7 @@ struct EmulatorEngineSettingsView: View {
         .onChange(of: playChoice) { _, new in apply(new) }
         .sheet(isPresented: $isAddingEmulator) {
             ExternalEmulatorSetupView {
-                // The assistant makes the app it added the Play target, so this
-                // screen has to re-read both or it would show the old choice.
+                // The assistant makes the app it added the Play target.
                 refreshInstalledEmulators()
                 playChoice = PlayChoice(engine: preference.current, target: playTargetPreference.current)
             }
@@ -165,16 +163,12 @@ struct EmulatorEngineSettingsView: View {
         }
     }
 
-    /// The apps that have been set up, each leading to its own settings, plus the
-    /// way to add another.
+    /// The apps that have been set up, each leading to its own settings, plus
+    /// the way to add another.
     ///
-    /// Reachable removal is what makes adding safe. Without it a configured app
-    /// could never be un-configured, and once every supported app had been added
-    /// the assistant had no entry point left at all.
-    ///
-    /// Adding is a row rather than another picker entry: an app has to be set up
-    /// before it can be played to, and a picker entry would let it be chosen
-    /// before any of that happened.
+    /// Adding is a row rather than a picker entry, because an app has to be set
+    /// up before it can be played to. Removal lives behind each row, which is
+    /// also what keeps the assistant reachable once every app has been added.
     @ViewBuilder
     private var emulatorAppsSection: some View {
         Section(
@@ -249,11 +243,8 @@ struct EmulatorEngineSettingsView: View {
     }
 
     /// Apps that have been set up, plus whatever is currently selected so a
-    /// choice does not silently disappear from the picker after an uninstall.
-    ///
-    /// Being installed is no longer enough to appear here: an app reaches this
-    /// list by going through the assistant, which is what makes it safe to
-    /// assume the user knows how a game gets there.
+    /// choice does not disappear from the picker after an uninstall. Being
+    /// installed is not enough: only the assistant adds an app here.
     private var pickableEmulators: [ExternalEmulatorID] {
         guard case .external(let selected) = playChoice, !configuredEmulators.contains(selected) else {
             return configuredEmulators

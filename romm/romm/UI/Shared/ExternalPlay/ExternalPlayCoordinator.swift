@@ -12,16 +12,12 @@ struct PasteboardHandoffInfo: Identifiable, Equatable {
 /// Routes a Play tap to the external emulator app the user picked, from any
 /// screen that offers Play.
 ///
-/// This used to live inside `RomDetailViewModel`, which meant the ROM detail
-/// screen was the only place the Play target was honoured: the downloads list
-/// went straight to `LaunchEmulatorUseCase` and silently booted the built-in
-/// engine instead. Since "where does Play send a game" is one user-level
-/// setting, it has to be answered the same way everywhere, so it lives in one
-/// object that every Play entry point drives.
+/// Where Play sends a game is one app-wide setting, so it is answered in one
+/// object that every Play entry point drives rather than per screen.
 ///
-/// Holds the presentation state for the handoff as well, because the two steps
-/// are inseparable: iOS does not let us preselect a target, so the first launch
-/// has to go through the system "Open in" menu and only later ones can deep link.
+/// Holds the handoff's presentation state as well, because the two are
+/// inseparable: iOS does not let us preselect a target, so the first launch goes
+/// through the system "Open in" menu and only later ones can deep link.
 @Observable
 @MainActor
 final class ExternalPlayCoordinator {
@@ -40,9 +36,8 @@ final class ExternalPlayCoordinator {
 
     /// The ROM currently being handed over.
     ///
-    /// Held here rather than passed in by the caller because the confirmation
-    /// arrives asynchronously from the system menu, long after the host screen
-    /// has cleared its own "launching" state.
+    /// Held here because the menu's confirmation arrives long after the host
+    /// screen has cleared its own "launching" state.
     private(set) var handoffRomId: Int?
 
     private(set) var playTarget: PlayTarget
@@ -80,9 +75,8 @@ final class ExternalPlayCoordinator {
 
     /// Points this coordinator at a target without changing the user's setting.
     ///
-    /// For the setup assistant's test run: it hands a ROM to the app being set
-    /// up, which is deliberately not the saved target yet, since the user has
-    /// not finished deciding.
+    /// For the setup assistant's test run, which hands a ROM to the app being
+    /// set up before it becomes the saved target.
     func overrideTarget(_ target: PlayTarget) {
         playTarget = target
     }
@@ -106,9 +100,8 @@ final class ExternalPlayCoordinator {
             return true
         }
 
-        // Working out an identifier can mean unpacking an archive and hashing a
-        // whole ROM, and copying a disc image out of the ROM folder is not
-        // instant either, so the Play spinner covers everything below.
+        // Unpacking, hashing and copying a disc image all take time, so the
+        // Play spinner covers everything below.
         isLaunching = true
         defer { isLaunching = false }
         await Task.yield()
@@ -168,10 +161,9 @@ final class ExternalPlayCoordinator {
 
     /// Dismisses the share sheet.
     ///
-    /// The temp copy is deliberately left behind: apps that open documents in
-    /// place (RetroArch) still read from it while importing, and deleting it here
-    /// would truncate the import. `GetROMShareFilesUseCase` collects old copies on
-    /// the next share instead.
+    /// The temp copy is left behind: apps that open documents in place still
+    /// read from it while importing, so deleting it here truncates the import.
+    /// `GetROMShareFilesUseCase` collects old copies on the next share.
     func cleanupShareTemp() {
         shareItem = nil
     }
@@ -187,18 +179,15 @@ final class ExternalPlayCoordinator {
 
     /// Dismisses the pasteboard hint.
     ///
-    /// The pasteboard keeps the ROM: the user may still paste it, and clearing it
-    /// here would be the one thing that makes the handoff impossible.
+    /// The pasteboard keeps the ROM, since the user may still paste it.
     func dismissPasteboardHandoff() {
         pasteboardHandoff = nil
     }
 
     // MARK: - Private
 
-    /// The identifier the target app will use, worked out once and then reused.
-    ///
-    /// Hashing a ROM on every Play tap would put seconds between the tap and the
-    /// game, so the answer is cached the first time it is needed.
+    /// The identifier the target app will use, cached because hashing a ROM on
+    /// every Play tap would put seconds between the tap and the game.
     private func gameIdentifier(
         for resolved: ResolvedDownloadedROM,
         emulator: any PExternalEmulator
@@ -233,9 +222,8 @@ final class ExternalPlayCoordinator {
             errorMessage = "No files available to open."
             return
         }
-        // Which file goes over decides whether the target app accepts the import
-        // and whether our identifier matches the one it derives, so it is worth
-        // having in the log after the app switch has torn down any console.
+        // Logged, because which file goes over decides whether the import is
+        // accepted, and the app switch tears down any attached console.
         logger.info("Handing \(result.files.map { $0.lastPathComponent }.joined(separator: ", ")) "
             + "to \(targetDisplayName ?? "external app") "
             + "(unpacked=\(handoff.unpackedROMURL != nil), id=\(handoff.gameIdentifier))")
@@ -243,10 +231,9 @@ final class ExternalPlayCoordinator {
         // cue/bin need every part, so those go through the share sheet, which the
         // user then has to point at the emulator themselves.
         if result.files.count == 1, let url = result.files.first {
-            // A target that cannot take a document from the "Open in" menu gets it
-            // over the pasteboard instead. Multi-file ROMs stay on the share sheet
-            // above: one pasteboard item cannot carry a set, and such a target has
-            // no way to import one anyway.
+            // A target that cannot take a document from the menu gets it over
+            // the pasteboard. Multi-file ROMs stay on the share sheet, since one
+            // pasteboard item cannot carry a set.
             if playTarget.externalEmulatorID?.emulator.romDelivery == .pasteboard {
                 handOverViaPasteboard(url: url, romName: rom.name)
                 return
@@ -261,36 +248,28 @@ final class ExternalPlayCoordinator {
     /// an item provider.
     private func handOverViaPasteboard(url: URL, romName: String) {
         let appName = targetDisplayName ?? "the external emulator"
-        // The bytes have to go on the pasteboard themselves. An NSItemProvider
-        // built from a file URL registers public.file-url plus a promise to hand
-        // the file over later, and neither survives the trip: the URL points into
-        // this app's container, which the target cannot read, and the promise can
-        // only be met while this process is alive, which it is not once the user
-        // has switched away to paste.
+        // The bytes go on themselves. A provider built from a file URL registers
+        // public.file-url plus a promise, and neither survives: the URL points
+        // into this app's container, and the promise needs this process alive.
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
             errorMessage = "Could not put this ROM on the clipboard."
             return
         }
-        // Exactly one type goes on, the one the extension resolves to. A paste
-        // importer looks for a type some app has declared for the extension it
-        // handles, so a broad type such as public.data does not help and can hurt:
-        // an importer that matches types by substring may settle on it and then
-        // find it carries no extension to name the file after.
+        // Exactly one type, the one the extension resolves to. A broad type such
+        // as public.data can hurt: an importer matching by substring may settle
+        // on it and then find no extension to name the file after.
         let romType = UTType(filenameExtension: url.pathExtension) ?? .data
-        // Eager, because a registered representation would only be produced on
-        // request, and by then the user has switched to the other app and this
-        // process can be suspended with nobody left to answer.
+        // Eager, because a registered representation is produced on request, and
+        // by then this process may be suspended with nobody left to answer.
         let provider = NSItemProvider(item: data as NSData, typeIdentifier: romType.identifier)
-        // An importer that writes the pasted bytes to a file needs a name for it,
-        // and it appends the extension its type declares, so this must go on
-        // without one to avoid landing as "Game.gba.gba".
+        // The importer needs a name and appends the extension its type declares,
+        // so this goes on without one to avoid landing as "Game.gba.gba".
         provider.suggestedName = url.deletingPathExtension().lastPathComponent
         UIPasteboard.general.itemProviders = [provider]
         logger.info("Put \(url.lastPathComponent) (\(data.count) bytes) on the pasteboard "
             + "for \(appName) (type=\(romType.identifier), name=\(provider.suggestedName ?? "-"))")
-        // The paste happens inside the other app, where nothing reports back, so
-        // the ROM must not count as handed over: the next Play tap would deep link
-        // into a library that may never have received it.
+        // Nothing reports back from the other app, so this must not count as
+        // handed over, or the next Play tap deep links into an empty library.
         handoffRomId = nil
         pasteboardHandoff = PasteboardHandoffInfo(romName: romName, appName: appName)
     }

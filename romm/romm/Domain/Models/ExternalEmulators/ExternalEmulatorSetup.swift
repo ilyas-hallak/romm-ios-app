@@ -2,10 +2,9 @@ import Foundation
 
 /// Remembers which emulator apps the user has finished setting up.
 ///
-/// Being installed is not the same as being set up: the app also has to be
-/// understood (how a ROM gets there) and, for syncing, pointed at a folder.
-/// Without this the settings list could only offer every installed app at once,
-/// which is what it used to do and why nothing explained the Manic handoff.
+/// Being installed is not the same as being set up: the user also has to know
+/// how a ROM gets there and, for syncing, point at a save folder. Only apps
+/// that have been through setup are offered as a Play target.
 protocol PExternalEmulatorSetupStore: AnyObject {
     func isConfigured(_ emulator: ExternalEmulatorID) -> Bool
     func markConfigured(_ emulator: ExternalEmulatorID)
@@ -42,23 +41,20 @@ final class UserDefaultsExternalEmulatorSetupStore: PExternalEmulatorSetupStore 
     }
 
     func configuredEmulators() -> [ExternalEmulatorID] {
-        // Unknown values are skipped rather than dropped from storage: a build
-        // that no longer knows an app should not erase the user's setup for a
-        // build that does.
+        // Skipped rather than dropped from storage: a build that no longer
+        // knows an app must not erase the setup for a build that does.
         stored.compactMap(ExternalEmulatorID.init(rawValue:))
     }
 }
 
 /// One step of setting up an emulator app.
 ///
-/// Which steps apply depends on the app and on what is already true, so the
-/// sequence is worked out rather than fixed: an installed app skips the install
-/// step, and an app whose saves cannot be located has no folder step.
+/// The sequence is worked out per app rather than fixed: an installed app skips
+/// the install step, one with no known save layout has no folder step.
 enum ExternalEmulatorSetupStep: Equatable, Hashable {
     /// The app is not on the device yet.
     case install
-    /// How a ROM gets into this app the first time, which differs per app and is
-    /// the step that stops Manic from looking broken.
+    /// How a ROM gets into this app the first time, which differs per app.
     case handoff
     /// Point at the folder its saves live in, so they can be synced.
     case saveFolder
@@ -76,13 +72,10 @@ enum ExternalEmulatorSetupStep: Equatable, Hashable {
 
     /// Whether this step offers a way past it besides doing it.
     ///
-    /// Only the steps that ask for something: pointing at a folder, handing a
-    /// ROM over. A user who does not want save syncing should not be blocked
-    /// from playing, and a test run needs a downloaded ROM that may not exist.
-    ///
-    /// Reading is not one of them. The handoff step asks for nothing, so a skip
-    /// next to Continue would be a second button doing the same thing, and
-    /// install cannot be skipped at all.
+    /// Only the two that ask for something: a user who does not want save
+    /// syncing must not be blocked from playing, and a test run needs a
+    /// downloaded ROM that may not exist. The steps that only explain something
+    /// have nothing to skip.
     var isSkippable: Bool {
         self == .saveFolder || self == .testRun
     }
@@ -98,9 +91,7 @@ struct ExternalEmulatorSetupPlan: Equatable {
         var steps: [ExternalEmulatorSetupStep] = []
         if !isInstalled { steps.append(.install) }
         steps.append(.handoff)
-        // An app whose save layout is unknown has nothing to point at, so
-        // offering a folder picker would ask the user for something that cannot
-        // be used.
+        // Nothing to point at without a known layout, so no folder step.
         if emulator.emulator.saveLayout != nil, !hasSaveFolder { steps.append(.saveFolder) }
         steps.append(.testRun)
         self.steps = steps

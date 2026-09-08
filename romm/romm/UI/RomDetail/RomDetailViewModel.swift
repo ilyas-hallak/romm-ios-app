@@ -441,9 +441,8 @@ class RomDetailViewModel {
 
     /// True when Play hands the ROM to another app instead of emulating it here.
     ///
-    /// Delegates rather than reading the preference itself: the downloads list
-    /// asks the same question, and answering it in two places is how Play ended
-    /// up honouring the external target only on this screen.
+    /// Delegates rather than reading the preference itself, since the downloads
+    /// list asks the same question and both have to answer it the same way.
     var playsExternally: Bool { externalPlay.playsExternally }
 
     /// Re-reads the Play destination, e.g. after coming back from settings.

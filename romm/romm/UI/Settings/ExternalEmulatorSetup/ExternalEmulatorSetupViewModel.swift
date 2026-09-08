@@ -107,15 +107,15 @@ final class ExternalEmulatorSetupViewModel {
 
     // MARK: - Steps
 
-    /// Whether the install step has a page to send the user to. False leaves the
-    /// step explaining what to do rather than offering a button that goes nowhere.
+    /// Whether the install step has a page to send the user to. False leaves it
+    /// explaining what to do rather than offering a dead button.
     var canOpenAppStore: Bool {
         emulator?.emulator.appStoreURL != nil
     }
 
     func openAppStore() {
-        // Nothing here can install an app; this only gets the user to where they
-        // can, and `refreshInstallState` picks it up when they come back.
+        // Only gets the user to where they can install it;
+        // `refreshInstallState` picks it up when they come back.
         guard let emulator else { return }
         Task {
             guard await launcher.openAppStorePage(emulator.emulator) else {
@@ -145,8 +145,8 @@ final class ExternalEmulatorSetupViewModel {
         testableROMs = Array(((try? localROMs.getAllDownloadedROMs()) ?? []).prefix(30))
     }
 
-    /// Records how the test run went. The handoff itself is driven by the shared
-    /// coordinator, which owns the presentation it needs.
+    /// Records how the test run went. The handoff itself runs in the shared
+    /// coordinator.
     func recordTestResult(_ result: TestResult) {
         testResult = result
     }

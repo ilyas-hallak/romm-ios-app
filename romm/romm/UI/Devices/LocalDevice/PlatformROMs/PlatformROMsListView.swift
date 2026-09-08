@@ -152,8 +152,6 @@ struct PlatformROMsListView: View {
     private func startPlay(rom: DownloadedROM) async {
         // Where Play sends a game is one app-wide setting, so an external target
         // gets first refusal here just as it does on the ROM detail screen.
-        // Without this, Play in the downloads list quietly booted the built-in
-        // engine no matter what the user had chosen.
         if await externalPlay.play(romId: rom.id) {
             launchingRomId = nil
             return

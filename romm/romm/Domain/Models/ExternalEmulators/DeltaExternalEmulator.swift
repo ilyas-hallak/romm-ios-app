@@ -4,30 +4,22 @@ import Foundation
 /// `delta://game/<sha1>` against that, so the identifier has to be computed from
 /// the file's contents rather than its name.
 ///
-/// Delta unpacks archives itself and then hashes what came out, never the
-/// archive. Rather than guessing which entry it would pick, the handoff unpacks
-/// first and passes the plain ROM, which makes the hash we compute and the one
-/// Delta computes the same by construction.
+/// Delta unpacks archives itself and hashes what came out, never the archive,
+/// so the handoff unpacks first and passes the plain ROM rather than guessing
+/// which entry Delta would pick.
 struct DeltaExternalEmulator: PExternalEmulator {
     var id: ExternalEmulatorID { .delta }
     var displayName: String { "Delta" }
     var urlScheme: String { "delta" }
-    /// Not on every storefront: in the EU, Delta is distributed through AltStore
-    /// rather than the App Store, so this page can answer "not available in your
-    /// country". Still the right link, because it is the only one Apple lets us
-    /// open, and it names the app the user is looking for.
+    /// In the EU Delta ships through AltStore, so this page can answer "not
+    /// available in your country". Still the only link iOS lets us open.
     var appStoreURL: URL? { URL(string: "https://apps.apple.com/app/id1048524688") }
     var identifierKind: ExternalGameIdentifierKind { .sha1OfROMData }
     var wantsUnpackedROM: Bool { true }
 
-    /// Delta names a save after the same SHA-1 it addresses the game by, which is
-    /// the one certain thing about its storage: that identifier is already
-    /// resolved for the deep link, so nothing new has to be worked out.
-    ///
-    /// Where the file sits is not certain. Issue #144 reports `Delta/Database/`
-    /// and notes the naming looks internal; the save has elsewhere been described
-    /// as sitting beside the ROM. Both are offered as hints and neither is
-    /// required, so a wrong guess costs a folder walk rather than the feature.
+    /// Delta names a save after the same SHA-1 it addresses the game by, which
+    /// the deep link has already resolved. Where the file sits is less certain,
+    /// so both known locations are hints only and a wrong guess costs a walk.
     var saveLayout: ExternalSaveLayout? {
         ExternalSaveLayout(
             naming: .gameIdentifier,
@@ -36,8 +28,7 @@ struct DeltaExternalEmulator: PExternalEmulator {
         )
     }
 
-    /// Sideloaded builds get a team id appended to the bundle identifier, so this
-    /// matches on the prefix rather than the exact App Store one.
+    /// Sideloaded builds append a team id to the bundle id, so match the prefix.
     func matches(bundleIdentifier: String) -> Bool {
         bundleIdentifier.lowercased().hasPrefix("com.rileytestut.delta")
     }

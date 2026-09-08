@@ -3,9 +3,8 @@ import Foundation
 /// One configured emulator app's settings: where its saves are, and whether it
 /// stays configured at all.
 ///
-/// This is where the sync screen's folder controls moved to. Granting a folder
-/// is a setup decision the user makes once, so it belongs beside the app it
-/// concerns rather than beside a plan that only reads it.
+/// Granting a folder is a setup decision made once, so it belongs beside the
+/// app it concerns rather than beside a plan that only reads it.
 @Observable
 @MainActor
 final class ExternalEmulatorAppSettingsViewModel {
@@ -62,11 +61,9 @@ final class ExternalEmulatorAppSettingsViewModel {
         refresh()
     }
 
-    /// Drops the app's setup entirely, folder included.
-    ///
-    /// Also clears the Play target when it pointed here: leaving it would send
-    /// the next Play tap to an app the settings no longer list, which is the
-    /// state that made removal impossible to reach in the first place.
+    /// Drops the app's setup entirely, folder included. Also clears the Play
+    /// target when it pointed here, which would otherwise send the next Play
+    /// tap to an app the settings no longer list.
     func removeApp() {
         folderStore.forget(emulator)
         setupStore.forget(emulator)

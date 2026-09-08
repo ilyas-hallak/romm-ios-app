@@ -2,9 +2,8 @@ import SwiftUI
 
 /// How a planned direction is drawn and named.
 ///
-/// Shared rather than file-private, because the overview and the plan detail
-/// have to agree: the same operation must not be blue in one place and green in
-/// the other.
+/// Shared, so the overview and the plan detail cannot draw the same operation
+/// in different colours.
 extension SyncPreviewOperation.Direction {
     var icon: String {
         switch self {
@@ -55,10 +54,8 @@ extension SyncPreviewOperation.Direction {
 }
 
 extension SyncPreview {
-    /// "2 up, 1 down", the shape a source is listed in on the overview.
-    ///
-    /// Nil when a sync would change nothing: a row of zeroes reads as work the
-    /// sync is about to do.
+    /// "2 up, 1 down", the shape a source is listed in on the overview. Nil
+    /// when nothing would change, since a row of zeroes reads as pending work.
     var changeSummary: String? {
         guard !isUpToDate else { return nil }
         let counts: [(Int, SyncPreviewOperation.Direction)] = [

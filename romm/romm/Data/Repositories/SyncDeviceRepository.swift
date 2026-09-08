@@ -2,9 +2,7 @@
 //  SyncDeviceRepository.swift
 //  romm
 //
-//  Owns this app instance's RomM sync device identity. Registers the device
-//  once (RomM 4.9+) and persists its id so the negotiate flow can reference it.
-//  See issue #48.
+//  Registers this app instance as a RomM sync device once and persists its id.
 //
 
 import Foundation
@@ -37,13 +35,11 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
         if let cached = heartbeat.getLastKnownServerVersion() {
             return availability(for: cached)
         }
-        // The cache is only written by a *successful* version check, so it is
-        // empty both before the first check and for a server this build
-        // considers out of range. Neither means old, so the version is asked
-        // for rather than assumed.
+        // The cache is only written by a successful version check, so it is
+        // also empty before the first one. Empty does not mean old.
         guard let fetched = try? await heartbeat.getHeartbeat().version else { return .unknown }
-        // Not written back: that write also arms HeartbeatRepository's "server
-        // version changed" warning, which is the version check's to raise.
+        // Not cached here: that write arms HeartbeatRepository's "version
+        // changed" warning, which is the version check's to raise.
         return availability(for: fetched)
     }
 
@@ -58,9 +54,8 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
         return (v?.isEmpty == false) ? v : nil
     }
 
-    /// Returns a registered device id, registering once if needed. Returns
-    /// `nil` when the server is too old or registration fails, so callers can
-    /// fall back to the legacy full-sync path.
+    /// A registered device id, registering once if needed. Nil when the server
+    /// is too old or registration fails, so callers can fall back.
     func deviceId() async -> String? {
         if let id = storedDeviceId { return id }
         guard case .available = await syncAPIAvailability() else { return nil }
@@ -91,8 +86,8 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
 
     // MARK: - Version compare
 
-    /// Minimal semantic-version compare; mirrors HeartbeatRepository's logic so
-    /// this repository stays self-contained.
+    /// Minimal semantic-version compare, kept here so this repository stays
+    /// self-contained.
     private static func compareVersions(_ a: String, _ b: String) -> Int {
         if a == "development" { return 1 }
         if b == "development" { return -1 }

@@ -9,14 +9,12 @@ protocol PSyncPreviewUseCase {
 /// Reports this device's battery saves to the server and returns the plan it
 /// answers with.
 ///
-/// Read-only as far as saves go: negotiation only compares content hashes and
-/// timestamps, and nothing here acts on the result. It does open a sync session
-/// server-side, which is the server's own bookkeeping and touches no save.
+/// Read-only as far as saves go: negotiation compares hashes and timestamps,
+/// and nothing here acts on the result. It does open a sync session, which is
+/// the server's own bookkeeping and touches no save.
 ///
-/// Deliberately battery only. Save states are held per slot index and their id
-/// namespace overlaps with saves' over negotiation, which the existing
-/// per-emulator sync works around with a separate path; pulling that in here
-/// would mean reproducing the workaround before the screen shows anything.
+/// Battery only. Save states are held per slot index and their id namespace
+/// overlaps with saves' over negotiation, which needs its own path.
 final class SyncPreviewUseCase: PSyncPreviewUseCase {
 
     private let logger = Logger.sync
@@ -74,12 +72,9 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
 
     // MARK: - Private
 
-    /// Every battery save on this device, reported under the battery slot.
-    ///
-    /// The slot is what makes these saves pairable at all: the server never
-    /// pairs a save that arrives without one. Uploads still send no slot today,
-    /// so this preview shows what a sync *would* do once they do, which is the
-    /// point of looking before changing it.
+    /// Every battery save on this device, reported under the battery slot,
+    /// without which the server pairs nothing. Uploads still send no slot, so
+    /// this shows what a sync *would* do once they do.
     private func collectBatterySaves() -> [ClientSaveState] {
         let romIds = (try? saveStore.listRomIds()) ?? []
         return romIds.compactMap { romId in
@@ -88,8 +83,8 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
                 romId: romId,
                 fileName: "battery.sav",
                 slot: SaveSlot.battery,
-                // Attribution only; the server does not pair on it, and which
-                // engine last wrote a save is not recorded per ROM.
+                // Attribution only, and which engine wrote a save is not
+                // recorded per ROM, so an invented value is worse than none.
                 emulator: nil,
                 contentHash: Self.contentHash(data),
                 updatedAt: saveStore.batteryModifiedAt(romId: romId) ?? Date(timeIntervalSince1970: 0),
@@ -98,9 +93,8 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
         }
     }
 
-    /// Drops state operations: this preview reports battery saves only, so an
-    /// operation about a state came from another device and acting on it here
-    /// would misrepresent what syncing from this screen does.
+    /// Drops state operations: only battery saves are reported, so a state
+    /// operation came from another device and is not this screen's to show.
     private static func previewOperation(_ op: SyncOperationSchema) -> SyncPreviewOperation? {
         guard let romId = op.romId else { return nil }
         if op.fileName?.hasSuffix(".state") == true { return nil }
@@ -111,9 +105,8 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
         case .download: direction = .download
         case .conflict: direction = .conflict
         case .noOp: direction = .noOp
-        // A newer server planned something this build has no name for. Showing
-        // it as one of the four would misstate what syncing does, and this is a
-        // preview the user is asked to approve, so it is left out.
+        // A newer server planned something this build has no name for. Left
+        // out rather than shown as one of the four, which would misstate it.
         case .unknown: return nil
         }
 

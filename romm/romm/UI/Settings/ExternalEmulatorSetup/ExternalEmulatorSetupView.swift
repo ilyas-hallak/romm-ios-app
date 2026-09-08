@@ -3,9 +3,9 @@ import SwiftUI
 /// Walks the user through adding an emulator app: install it, understand how a
 /// game gets there, point at its saves, then hand one over for real.
 ///
-/// It exists because picking an app used to be a one-tap setting that left three
-/// things unsaid. The worst of them was Manic, which cannot take a game from the
-/// share sheet at all, so Play looked broken until you knew to paste.
+/// Each of those is something the user has to know before Play works: Manic in
+/// particular cannot take a game from the share sheet at all, so it looks broken
+/// until you know to paste.
 struct ExternalEmulatorSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -53,8 +53,7 @@ struct ExternalEmulatorSetupView: View {
                 Text(message)
             }
         }
-        // Coming back from the App Store is the only way the install step ends,
-        // and nothing tells us it happened, so it is re-checked on return.
+        // Nothing reports an install, so it is re-checked on return.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { viewModel.refreshInstallState() }
         }
@@ -175,9 +174,8 @@ struct ExternalEmulatorSetupView: View {
             Image(systemName: scan.matched.isEmpty ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .foregroundStyle(scan.matched.isEmpty ? Color.orange : Color.green)
             if scan.matched.isEmpty {
-                // Saying which of the two went wrong, because they need
-                // opposite fixes: a wrong folder versus saves for games that
-                // are not on this device.
+                // Which of the two went wrong, since a wrong folder and saves
+                // for missing games need opposite fixes.
                 Text(scan.isEmpty
                      ? String(localized: "No saves in that folder. It may be the wrong one.")
                      : String(localized: "\(scan.unmatchedFileNames.count) saves found, but none for games you have here."))
@@ -226,8 +224,8 @@ struct ExternalEmulatorSetupView: View {
 
     private func testHandoff(_ rom: DownloadedROM) {
         Task {
-            // The target is not the saved one yet, since setup has not finished,
-            // so the coordinator is pointed at the app being set up.
+            // Setup has not finished, so the coordinator is pointed at the app
+            // being set up rather than the saved target.
             guard let emulator = viewModel.emulator else { return }
             externalPlay.overrideTarget(.external(emulator))
             let handled = await externalPlay.play(romId: rom.id)
@@ -275,9 +273,8 @@ struct ExternalEmulatorSetupView: View {
 
     private func stepFooter(_ step: ExternalEmulatorSetupStep) -> some View {
         HStack(spacing: 12) {
-            // Where the user is, because four steps without a count feel
-            // open-ended, and the install step can drop out so the total is
-            // not something they can assume.
+            // Counted, because the install step can drop out so the total is
+            // not something the user can assume.
             if let position = stepPosition(step) {
                 Text("Step \(position.current) of \(position.total)")
                     .font(.caption)

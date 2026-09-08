@@ -4,10 +4,8 @@ import SwiftUI
 /// system "Open in" menu, the share sheet for ROMs that menu cannot carry, the
 /// hint for targets that take the ROM off the pasteboard, and the error alert.
 ///
-/// Exists so a screen offering Play needs one line rather than three correct
-/// pieces of wiring. The ROM detail screen wires its own, because there the
-/// menu has to be anchored to the Play button for the iPad popover; a list has
-/// no such anchor and hangs it off the whole view.
+/// The ROM detail screen wires its own instead, because there the menu has to
+/// be anchored to the Play button for the iPad popover.
 struct ExternalPlayHandoffModifier: ViewModifier {
     let coordinator: ExternalPlayCoordinator
 
