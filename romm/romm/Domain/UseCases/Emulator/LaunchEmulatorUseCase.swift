@@ -67,7 +67,7 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
     private let checkEmulatorSupport: PCheckEmulatorSupportUseCase
     private let enginePreference: PEmulatorEnginePreference
     private let platformSupport: PPlatformEngineSupport
-    private let logger = Logger.viewModel
+    private let logger = Logger.emulator
 
     init(
         tokenProvider: PTokenProvider,
@@ -82,23 +82,25 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
     }
 
     func execute(rom: Rom) async -> EmulatorLaunchResult {
-        print("[LaunchEmulator] execute called for rom id=\(rom.id) name=\(rom.name) platformSlug=\(rom.platformSlug ?? "nil")")
+        logger.info("[LaunchEmulator] execute called for rom id=\(rom.id) name=\(rom.name) "
+            + "platformSlug=\(rom.platformSlug ?? "nil")")
         guard tokenProvider.getServerURL() != nil else {
-            print("[LaunchEmulator] FAIL: no server configured")
+            logger.warning("[LaunchEmulator] FAIL: no server configured")
             return .failure(.noServerConfigured)
         }
         guard let platformSlug = rom.platformSlug else {
-            print("[LaunchEmulator] FAIL: platformSlug nil")
+            logger.warning("[LaunchEmulator] FAIL: platformSlug nil")
             return .failure(.unsupportedPlatform("Unknown"))
         }
         guard checkEmulatorSupport.execute(platformSlug: platformSlug) else {
-            print("[LaunchEmulator] FAIL: platform '\(platformSlug)' not supported")
+            logger.warning("[LaunchEmulator] FAIL: platform '\(platformSlug)' not supported")
             return .failure(.unsupportedPlatform(platformSlug))
         }
 
         let supported = platformSupport.supportedEngines(for: platformSlug)
         let pref = enginePreference.current
-        print("[LaunchEmulator] platformSlug='\(platformSlug)', preference=\(pref.rawValue), supported=\(supported.map { $0.rawValue })")
+        logger.info("[LaunchEmulator] platformSlug='\(platformSlug)', preference=\(pref.rawValue), "
+            + "supported=\(supported.map { $0.rawValue })")
         let chosen: EmulatorEngine = {
             switch pref {
             case .web: return supported.contains(.web) ? .web : .native
@@ -106,7 +108,7 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             case .auto: return platformSupport.preferred(for: platformSlug)
             }
         }()
-        print("[LaunchEmulator] chosen engine=\(chosen.rawValue)")
+        logger.info("[LaunchEmulator] chosen engine=\(chosen.rawValue)")
 
         switch chosen {
         case .web:

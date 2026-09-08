@@ -177,16 +177,28 @@ struct RomDetailView: View {
                             }
                         }
                     }
+                    // "Open in another app" from the secondary actions. Plain
+                    // sharing, so nothing is recorded as a handoff.
                     .sheet(item: Binding(
                         get: { viewModel.shareItem },
                         set: { viewModel.shareItem = $0 }
                     ), onDismiss: {
                         viewModel.cleanupShareTemp()
                     }) { item in
+                        ShareSheet(activityItems: item.urls)
+                    }
+                    // A Play handoff of a multi-file ROM, which the "Open in"
+                    // menu cannot carry. Kept separate from the sheet above so
+                    // only an actual handoff is remembered as one.
+                    .sheet(item: Binding(
+                        get: { viewModel.externalPlay.shareItem },
+                        set: { viewModel.externalPlay.shareItem = $0 }
+                    ), onDismiss: {
+                        viewModel.externalPlay.cleanupShareTemp()
+                    }) { item in
                         ShareSheet(activityItems: item.urls) { activityType in
                             guard let activityType else { return }
-                            viewModel.handoffDidComplete(
-                                romId: currentSelectedRom.id,
+                            viewModel.externalPlay.handoffDidComplete(
                                 receivingBundleIdentifier: activityType
                             )
                         }
@@ -228,6 +240,26 @@ struct RomDetailView: View {
                         Button("OK", role: .cancel) { }
                     } message: {
                         Text(viewModel.downloadError ?? "")
+                    }
+                    // A Play handoff that went onto the pasteboard because the
+                    // target app ignores documents from the "Open in" menu.
+                    .alert(
+                        "ROM Copied",
+                        isPresented: Binding(
+                            get: { viewModel.externalPlay.pasteboardHandoff != nil },
+                            set: { if !$0 { viewModel.externalPlay.dismissPasteboardHandoff() } }
+                        ),
+                        presenting: viewModel.externalPlay.pasteboardHandoff
+                    ) { handoff in
+                        Button("Open \(handoff.appName)") {
+                            viewModel.externalPlay.openPasteboardTarget()
+                        }
+                        Button("Done", role: .cancel) {
+                            viewModel.externalPlay.dismissPasteboardHandoff()
+                        }
+                    } message: { handoff in
+                        Text("\(handoff.romName) is on the clipboard. "
+                            + "Open \(handoff.appName) and tap Paste to import it.")
                     }
                 }
             }
@@ -538,15 +570,18 @@ struct RomDetailView: View {
                     // Anchors the "Open in" popover on iPad to the Play button.
                     .background(
                         OpenInMenuPresenter(
-                            item: viewModel.openInItem,
+                            item: viewModel.externalPlay.openInItem,
                             onSent: { bundleIdentifier in
-                                viewModel.handoffDidComplete(
-                                    romId: currentSelectedRom.id,
+                                viewModel.externalPlay.handoffDidComplete(
                                     receivingBundleIdentifier: bundleIdentifier
                                 )
                             },
-                            onDismiss: { viewModel.openInItem = nil },
-                            onNoTargets: { viewModel.handoffFoundNoTargets() }
+                            onDismiss: { viewModel.externalPlay.openInItem = nil },
+                            onNoTargets: {
+                                viewModel.externalPlay.handoffFoundNoTargets()
+                                viewModel.errorMessage = viewModel.externalPlay.errorMessage
+                                viewModel.externalPlay.errorMessage = nil
+                            }
                         )
                     )
                 }
