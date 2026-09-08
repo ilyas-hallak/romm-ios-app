@@ -4,32 +4,27 @@ import UniformTypeIdentifiers
 
 /// Shared component for presenting iOS share sheet
 struct ShareSheet: UIViewControllerRepresentable {
+    private let logger = Logger.ui
+
     let activityItems: [Any]
     /// Called with the activity that handled the share. For "Open in <app>" this
     /// is the receiving bundle identifier, which is how a handoff is confirmed.
     var onCompleted: ((String?) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        print("🔧 Creating UIActivityViewController with \(activityItems.count) items")
-
         // Convert URLs to NSURL file URLs for better compatibility
-        // Based on: https://stackoverflow.com/a/... (CC BY-SA 4.0)
         var filesToShare = [Any]()
 
         for item in activityItems {
             if let url = item as? URL {
                 // Create NSURL with fileURLWithPath for proper file sharing
-                let nsurl = NSURL(fileURLWithPath: url.path)
-                print("   Adding: \(url.lastPathComponent)")
-                print("     Path: \(url.path)")
-                print("     isFileURL: \(url.isFileURL)")
-                filesToShare.append(nsurl)
+                filesToShare.append(NSURL(fileURLWithPath: url.path))
             } else {
-                print("   ⚠️ Non-URL item: \(type(of: item))")
+                logger.warning("Ignoring non-URL share item of type \(type(of: item))")
             }
         }
 
-        print("   Total items to share: \(filesToShare.count)")
+        logger.debug("Sharing \(filesToShare.count) file(s)")
 
         let controller = UIActivityViewController(
             activityItems: filesToShare,
@@ -44,13 +39,13 @@ struct ShareSheet: UIViewControllerRepresentable {
 
         // Be notified of the result when the share sheet is dismissed
         controller.completionWithItemsHandler = { activityType, completed, returnedItems, error in
-            if let error = error {
-                print("❌ Share failed: \(error.localizedDescription)")
+            if let error {
+                logger.error("Share failed: \(error.localizedDescription)")
             } else if completed {
-                print("✅ Share completed with: \(activityType?.rawValue ?? "unknown")")
+                logger.info("Share completed with \(activityType?.rawValue ?? "unknown")")
                 onCompleted?(activityType?.rawValue)
             } else {
-                print("⚠️ Share cancelled")
+                logger.debug("Share cancelled")
             }
         }
 
