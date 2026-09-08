@@ -14,6 +14,17 @@ struct HomeView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Home")
             .toolbar {
+                // Its own button for now. The plan is a menu on the user name
+                // that gathers this and settings, which needs the account UI
+                // from issue #98 first.
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        SyncOverviewView()
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    .accessibilityLabel("Save Sync")
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink {
                         SettingsView()

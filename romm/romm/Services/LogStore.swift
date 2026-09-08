@@ -85,12 +85,20 @@ actor LogStore {
 
     /// Masks sensitive patterns (bearer tokens, long token-like strings, server hosts)
     /// so credentials and private hostnames never end up in the log store or an export.
-    private static func redact(_ message: String) -> String {
+    /// Internal rather than private so the redaction rules can be tested directly;
+    /// a leak here is silent and only shows up in an exported log.
+    static func redact(_ message: String) -> String {
         var result = message
 
         let patterns: [(pattern: String, template: String)] = [
             // Bearer tokens: "Bearer <token>" -> "Bearer <redacted>"
             ("(?i)(Bearer)\\s+[A-Za-z0-9._-]+", "$1 <redacted>"),
+            // Credentials in query strings: "?sspassword=hunter2&..." -> "?sspassword=<redacted>&..."
+            // Has to run before the host is masked, and cannot be left to the
+            // length rule below: passwords and API keys are routinely shorter
+            // than its 20-character threshold.
+            ("(?i)([?&][^=&\\s]*(?:pass(?:word)?|secret|token|api_?key|auth|credential|sig)[^=&\\s]*=)[^&\\s]+",
+             "$1<redacted>"),
             // URLs: keep scheme and path, mask the host
             ("(?i)(https?://)[^/\\s]+", "$1<redacted-host>"),
             // Long token-like strings (>= 20 chars) -> "<redacted>"
@@ -146,6 +154,15 @@ actor LogStore {
     }
 
     func exportAsText() -> String {
+        Self.formatAsText(entries)
+    }
+
+    /// Renders the given entries, so an export can carry exactly what the viewer
+    /// is showing.
+    ///
+    /// Takes the entries as an argument rather than reading the store, so the
+    /// file matches the filtered list and the count shown next to the button.
+    nonisolated static func formatAsText(_ entries: [LogEntry]) -> String {
         var text = "RomM Debug Logs\n"
         text += "Generated: \(DateFormatter.exportTimestamp.string(from: Date()))\n"
         text += "Total Entries: \(entries.count)\n"
@@ -153,7 +170,7 @@ actor LogStore {
 
         for entry in entries {
             text += "[\(entry.formattedTimestamp)] "
-            text += "[\(entry.level.emoji) \(levelName(for: entry.level))] "
+            text += "[\(entry.level.emoji) \(Self.levelName(for: entry.level))] "
             text += "[\(entry.category.rawValue)] "
             text += "\(entry.fileName):\(entry.line) "
             text += "\(entry.function)\n"
@@ -164,8 +181,13 @@ actor LogStore {
     }
 
     func exportAsZippedData() throws -> (data: Data, filename: String) {
+        try exportAsZippedData(entries)
+    }
+
+    /// Zips exactly the given entries, so the ZIP matches the filtered list too.
+    func exportAsZippedData(_ entries: [LogEntry]) throws -> (data: Data, filename: String) {
         // Generate log text
-        let logText = exportAsText()
+        let logText = Self.formatAsText(entries)
         guard let logData = logText.data(using: .utf8) else {
             throw NSError(domain: "LogStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert logs to UTF-8"])
         }
@@ -312,7 +334,7 @@ actor LogStore {
         }
     }
 
-    private func levelName(for level: LogLevel) -> String {
+    nonisolated private static func levelName(for level: LogLevel) -> String {
         switch level.rawValue {
         case 0: return "DEBUG"
         case 1: return "INFO"
