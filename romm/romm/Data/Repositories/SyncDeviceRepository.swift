@@ -33,11 +33,24 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
         self.heartbeat = heartbeat
     }
 
-    /// Whether the connected server is new enough to expose the sync API. Based
-    /// on the version cached by the heartbeat check at login/connect.
-    var isSyncAPISupported: Bool {
-        guard let version = heartbeat.getLastKnownServerVersion() else { return false }
-        return Self.compareVersions(version, minSyncVersion) >= 0
+    func syncAPIAvailability() async -> SyncAPIAvailability {
+        if let cached = heartbeat.getLastKnownServerVersion() {
+            return availability(for: cached)
+        }
+        // The cache is only written by a *successful* version check, so it is
+        // empty both before the first check and for a server this build
+        // considers out of range. Neither means old, so the version is asked
+        // for rather than assumed.
+        guard let fetched = try? await heartbeat.getHeartbeat().version else { return .unknown }
+        // Not written back: that write also arms HeartbeatRepository's "server
+        // version changed" warning, which is the version check's to raise.
+        return availability(for: fetched)
+    }
+
+    private func availability(for version: String) -> SyncAPIAvailability {
+        Self.compareVersions(version, minSyncVersion) >= 0
+            ? .available
+            : .serverTooOld(version: version)
     }
 
     private var storedDeviceId: String? {
@@ -50,7 +63,7 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
     /// fall back to the legacy full-sync path.
     func deviceId() async -> String? {
         if let id = storedDeviceId { return id }
-        guard isSyncAPISupported else { return nil }
+        guard case .available = await syncAPIAvailability() else { return nil }
 
         if let inFlight { return await inFlight.value }
         let task = Task<String?, Never> { [apiClient, userDefaults, deviceIdKey] in

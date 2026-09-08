@@ -510,9 +510,12 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var externalSaveFolderStore: PExternalSaveFolderStore = UserDefaultsExternalSaveFolderStore()
     lazy var externalEmulatorSetupStore: PExternalEmulatorSetupStore = UserDefaultsExternalEmulatorSetupStore()
 
+    private lazy var externalSaveFileRepository: PExternalSaveFileRepository =
+        ExternalSaveFileRepository(folderStore: externalSaveFolderStore)
+
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase {
         ScanExternalSavesUseCase(
-            folderStore: externalSaveFolderStore,
+            saveFiles: externalSaveFileRepository,
             localROMs: localROMRepository,
             handoffStore: externalEmulatorHandoffStore
         )

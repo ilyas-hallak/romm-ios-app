@@ -12,6 +12,11 @@ struct DeltaExternalEmulator: PExternalEmulator {
     var id: ExternalEmulatorID { .delta }
     var displayName: String { "Delta" }
     var urlScheme: String { "delta" }
+    /// Not on every storefront: in the EU, Delta is distributed through AltStore
+    /// rather than the App Store, so this page can answer "not available in your
+    /// country". Still the right link, because it is the only one Apple lets us
+    /// open, and it names the app the user is looking for.
+    var appStoreURL: URL? { URL(string: "https://apps.apple.com/app/id1048524688") }
     var identifierKind: ExternalGameIdentifierKind { .sha1OfROMData }
     var wantsUnpackedROM: Bool { true }
 

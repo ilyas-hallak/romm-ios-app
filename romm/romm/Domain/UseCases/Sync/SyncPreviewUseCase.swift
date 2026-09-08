@@ -39,7 +39,11 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
 
     func execute() async throws -> SyncPreview {
         guard tokenProvider.getServerURL() != nil else { throw SyncPreviewError.notConnected }
-        guard syncDevice.isSyncAPISupported else { throw SyncPreviewError.serverTooOld }
+        switch await syncDevice.syncAPIAvailability() {
+        case .available: break
+        case .serverTooOld(let version): throw SyncPreviewError.serverTooOld(version: version)
+        case .unknown: throw SyncPreviewError.serverVersionUnknown
+        }
         guard let deviceId = await syncDevice.deviceId() else {
             throw SyncPreviewError.deviceRegistrationFailed
         }

@@ -40,6 +40,18 @@ struct ExternalEmulatorSetupView: View {
                 if case .success(let url) = result { viewModel.grantFolder(url) }
             }
             .externalPlayHandoff(externalPlay)
+            .alert(
+                "Setup",
+                isPresented: Binding(
+                    get: { viewModel.errorMessage != nil },
+                    set: { if !$0 { viewModel.errorMessage = nil } }
+                ),
+                presenting: viewModel.errorMessage
+            ) { _ in
+                Button("OK", role: .cancel) { viewModel.errorMessage = nil }
+            } message: { message in
+                Text(message)
+            }
         }
         // Coming back from the App Store is the only way the install step ends,
         // and nothing tells us it happened, so it is re-checked on return.
@@ -120,7 +132,9 @@ struct ExternalEmulatorSetupView: View {
                 icon: "arrow.down.app",
                 text: String(localized: "\(navigationTitle) is not on this device yet. Install it, then come back here.")
             )
-            Button("Open the App Store") { viewModel.openAppStore() }
+            if viewModel.canOpenAppStore {
+                Button("Open the App Store") { viewModel.openAppStore() }
+            }
         } header: {
             Text(ExternalEmulatorSetupStep.install.title)
         } footer: {

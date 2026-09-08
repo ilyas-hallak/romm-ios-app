@@ -77,6 +77,7 @@ struct EmulatorEngineSettingsView: View {
     var body: some View {
         Form {
             playWithSection
+            emulatorAppsSection
 
             Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it, handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
 
@@ -161,10 +162,47 @@ struct EmulatorEngineSettingsView: View {
                     Text(label(for: playChoice)).foregroundStyle(.secondary)
                 }
             }
+        }
+    }
 
-            // Adding is its own row rather than more entries in the picker:
-            // an app has to be set up before it can be played to, and a picker
-            // entry would let it be chosen before any of that happened.
+    /// The apps that have been set up, each leading to its own settings, plus the
+    /// way to add another.
+    ///
+    /// Reachable removal is what makes adding safe. Without it a configured app
+    /// could never be un-configured, and once every supported app had been added
+    /// the assistant had no entry point left at all.
+    ///
+    /// Adding is a row rather than another picker entry: an app has to be set up
+    /// before it can be played to, and a picker entry would let it be chosen
+    /// before any of that happened.
+    @ViewBuilder
+    private var emulatorAppsSection: some View {
+        Section(
+            header: Text("Emulator Apps"),
+            footer: Text("Games are handed to the app you pick above. Each app's save folder is set up here.")
+        ) {
+            ForEach(configuredEmulators, id: \.self) { emulator in
+                NavigationLink {
+                    ExternalEmulatorAppSettingsView(emulator: emulator) {
+                        refreshInstalledEmulators()
+                        playChoice = PlayChoice(
+                            engine: preference.current,
+                            target: playTargetPreference.current
+                        )
+                    }
+                } label: {
+                    HStack {
+                        Text(emulator.emulator.displayName)
+                        if !installedEmulators.contains(emulator) {
+                            Spacer()
+                            Text("Not installed")
+                                .font(.caption)
+                                .foregroundStyle(Color.orange)
+                        }
+                    }
+                }
+            }
+
             if !ExternalEmulatorID.allCases.allSatisfy(configuredEmulators.contains) {
                 Button {
                     isAddingEmulator = true

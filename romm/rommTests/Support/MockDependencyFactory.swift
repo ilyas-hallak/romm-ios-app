@@ -458,7 +458,7 @@ class MockDependencyFactory: PDependencyFactory {
 
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase {
         ScanExternalSavesUseCase(
-            folderStore: externalSaveFolderStore,
+            saveFiles: ExternalSaveFileRepository(folderStore: externalSaveFolderStore),
             localROMs: localROMRepository,
             handoffStore: externalEmulatorHandoffStore
         )

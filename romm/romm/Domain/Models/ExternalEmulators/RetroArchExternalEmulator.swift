@@ -9,6 +9,7 @@ struct RetroArchExternalEmulator: PExternalEmulator {
     var id: ExternalEmulatorID { .retroarch }
     var displayName: String { "RetroArch" }
     var urlScheme: String { "retroarch" }
+    var appStoreURL: URL? { URL(string: "https://apps.apple.com/app/id6499539433") }
     var identifierKind: ExternalGameIdentifierKind { .fileName }
     var wantsUnpackedROM: Bool { false }
 

@@ -15,6 +15,7 @@ struct ManicEmuExternalEmulator: PExternalEmulator {
     var id: ExternalEmulatorID { .manicEmu }
     var displayName: String { "Manic EMU" }
     var urlScheme: String { "manicemu" }
+    var appStoreURL: URL? { URL(string: "https://apps.apple.com/app/id6743335790") }
     var identifierKind: ExternalGameIdentifierKind { .manicGameID }
     var wantsUnpackedROM: Bool { true }
 

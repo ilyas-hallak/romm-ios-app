@@ -57,7 +57,11 @@ enum SyncPreviewError: Error, LocalizedError, Equatable {
     /// No server configured, or the user is not signed in.
     case notConnected
     /// The server predates the sync API (RomM 4.9).
-    case serverTooOld
+    case serverTooOld(version: String)
+    /// The server's version could not be established, so whether it can sync is
+    /// unknown. Kept apart from `serverTooOld`, which is a verdict: this one
+    /// asks the user to reconnect rather than telling them to upgrade.
+    case serverVersionUnknown
     /// Registration was refused, so there is no device to negotiate for.
     case deviceRegistrationFailed
     /// Negotiation itself failed.
@@ -67,8 +71,10 @@ enum SyncPreviewError: Error, LocalizedError, Equatable {
         switch self {
         case .notConnected:
             return String(localized: "Connect to a RomM server to sync saves.")
-        case .serverTooOld:
-            return String(localized: "This server is too old to sync saves. RomM 4.9 or newer is required.")
+        case .serverTooOld(let version):
+            return String(localized: "This server runs RomM \(version), which is too old to sync saves. RomM 4.9 or newer is required.")
+        case .serverVersionUnknown:
+            return String(localized: "Could not tell which RomM version this server runs. Reconnect to it and try again.")
         case .deviceRegistrationFailed:
             return String(localized: "This device could not be registered with the server.")
         case .negotiationFailed(let message):

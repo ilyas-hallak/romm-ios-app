@@ -107,12 +107,24 @@ final class ExternalEmulatorSetupViewModel {
 
     // MARK: - Steps
 
+    /// Whether the install step has a page to send the user to. False leaves the
+    /// step explaining what to do rather than offering a button that goes nowhere.
+    var canOpenAppStore: Bool {
+        emulator?.emulator.appStoreURL != nil
+    }
+
     func openAppStore() {
         // Nothing here can install an app; this only gets the user to where they
         // can, and `refreshInstallState` picks it up when they come back.
-        guard let emulator, let url = emulator.emulator.probeURL else { return }
-        Task { _ = await launcher.open(emulator.emulator) }
-        _ = url
+        guard let emulator else { return }
+        Task {
+            guard await launcher.openAppStorePage(emulator.emulator) else {
+                errorMessage = String(
+                    localized: "The App Store page for \(emulator.emulator.displayName) could not be opened."
+                )
+                return
+            }
+        }
     }
 
     func grantFolder(_ url: URL) {

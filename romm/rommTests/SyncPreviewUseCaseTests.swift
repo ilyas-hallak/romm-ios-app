@@ -42,8 +42,9 @@ private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable 
 }
 
 private final class FakeSyncDevice: PSyncDeviceRepository, @unchecked Sendable {
-    var isSyncAPISupported: Bool = true
+    var availability: SyncAPIAvailability = .available
     var idToReturn: String? = "device-1"
+    func syncAPIAvailability() async -> SyncAPIAvailability { availability }
     func deviceId() async -> String? { idToReturn }
 }
 
@@ -212,9 +213,20 @@ struct SyncPreviewUseCaseTests {
 
     @Test func failsOnAServerWithoutTheSyncAPI() async throws {
         let device = FakeSyncDevice()
-        device.isSyncAPISupported = false
+        device.availability = .serverTooOld(version: "4.8.1")
 
-        await #expect(throws: SyncPreviewError.serverTooOld) {
+        await #expect(throws: SyncPreviewError.serverTooOld(version: "4.8.1")) {
+            try await makeUseCase(store: makeStore(), device: device).execute()
+        }
+    }
+
+    /// An unestablished version is its own case: reporting it as too old told
+    /// users on a current server to upgrade it.
+    @Test func separatesAnUnknownVersionFromAnOldOne() async throws {
+        let device = FakeSyncDevice()
+        device.availability = .unknown
+
+        await #expect(throws: SyncPreviewError.serverVersionUnknown) {
             try await makeUseCase(store: makeStore(), device: device).execute()
         }
     }

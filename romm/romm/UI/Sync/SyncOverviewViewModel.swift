@@ -26,19 +26,16 @@ final class SyncOverviewViewModel {
     /// device behind a failed request would be the wrong way round.
     private(set) var externalScans: [ExternalEmulatorID: ExternalSaveScan] = [:]
 
-    /// Set when picking a folder failed, e.g. the grant could not be stored.
-    var folderError: String?
-
     private let previewUseCase: PSyncPreviewUseCase
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let scanExternalSaves: PScanExternalSavesUseCase
-    private let folderStore: PExternalSaveFolderStore
+    private let setupStore: PExternalEmulatorSetupStore
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
         self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
-        self.folderStore = factory.externalSaveFolderStore
+        self.setupStore = factory.externalEmulatorSetupStore
     }
 
     /// Starts in a given state, for previews.
@@ -55,23 +52,30 @@ final class SyncOverviewViewModel {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
         self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
-        self.folderStore = factory.externalSaveFolderStore
+        self.setupStore = factory.externalEmulatorSetupStore
         self.state = state
         self.romNames = romNames
         self.externalScans = externalScans
     }
 
-    /// The apps that could be read from, whether or not a folder was granted yet.
+    /// The apps this screen reports on: the ones set up, whose saves can be
+    /// located at all.
     ///
-    /// An app with no described layout is left out entirely rather than shown as
-    /// unconfigured: there would be nothing the user could do about it.
+    /// Only configured apps, because setting one up now happens in settings.
+    /// Listing an app that was never added would offer a source the user cannot
+    /// act on from here.
     var externalSources: [ExternalEmulatorID] {
-        ExternalEmulatorID.allCases.filter { $0.emulator.saveLayout != nil }
+        setupStore.configuredEmulators().filter { $0.emulator.saveLayout != nil }
     }
 
     var isLoading: Bool {
         if case .loading = state { return true }
         return false
+    }
+
+    var preview: SyncPreview? {
+        if case .loaded(let preview) = state { return preview }
+        return nil
     }
 
     func load() async {
@@ -89,25 +93,6 @@ final class SyncOverviewViewModel {
         } catch {
             state = .failed(.negotiationFailed(error.localizedDescription))
         }
-    }
-
-    /// Stores the grant for a folder the user just picked and reads it at once,
-    /// so picking the wrong one is visible immediately rather than at the next
-    /// sync.
-    func grantFolder(_ url: URL, for emulator: ExternalEmulatorID) {
-        do {
-            try folderStore.remember(folderURL: url, for: emulator)
-            rescanExternalFolders()
-        } catch {
-            folderError = String(
-                localized: "Could not keep access to that folder: \(error.localizedDescription)"
-            )
-        }
-    }
-
-    func revokeFolder(for emulator: ExternalEmulatorID) {
-        folderStore.forget(emulator)
-        externalScans[emulator] = nil
     }
 
     func rescanExternalFolders() {

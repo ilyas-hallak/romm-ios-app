@@ -1,32 +1,5 @@
 import Foundation
 
-/// A battery save found in another app's folder, matched to a ROM here.
-struct ExternalSaveFile: Identifiable, Equatable {
-    var id: URL { url }
-    let url: URL
-    let romId: Int
-    let fileName: String
-    let sizeBytes: Int
-    let modifiedAt: Date
-}
-
-/// What one app's folder holds.
-struct ExternalSaveScan: Equatable {
-    let emulator: ExternalEmulatorID
-    let matched: [ExternalSaveFile]
-    /// Files that look like saves but belong to no ROM this device knows.
-    ///
-    /// Counted rather than dropped, because this is the number that says whether
-    /// a scan is working: saves found but unmatched means the folder is right and
-    /// the matching is wrong, while nothing found at all means the folder or the
-    /// path hints are wrong. Those need different fixes.
-    let unmatchedFileNames: [String]
-    /// True when the granted folder resolved but has moved since.
-    let isStale: Bool
-
-    var isEmpty: Bool { matched.isEmpty && unmatchedFileNames.isEmpty }
-}
-
 protocol PScanExternalSavesUseCase {
     /// Reads one app's granted folder. Returns nil when no folder was granted.
     func execute(for emulator: ExternalEmulatorID) throws -> ExternalSaveScan?
@@ -34,64 +7,57 @@ protocol PScanExternalSavesUseCase {
     func executeForAllGranted() -> [ExternalSaveScan]
 }
 
-/// Finds the battery saves another emulator app has written.
+/// Matches the battery saves another emulator app has written to the ROMs this
+/// device has downloaded.
 ///
-/// Read-only, and deliberately so for now: the entitlement is
-/// `user-selected.read-only`, which is enough to offer these saves to the server
-/// but not to write anything back.
+/// Only the matching lives here. Finding the files is
+/// `PExternalSaveFileRepository`'s job, which keeps bookmarks, security scopes
+/// and directory walks out of the domain.
 final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
 
     private let logger = Logger.emulator
-    private let folderStore: PExternalSaveFolderStore
+    private let saveFiles: PExternalSaveFileRepository
     private let localROMs: PLocalROMRepository
     private let handoffStore: PExternalEmulatorHandoffStore
-    private let fileManager: FileManager
 
     init(
-        folderStore: PExternalSaveFolderStore,
+        saveFiles: PExternalSaveFileRepository,
         localROMs: PLocalROMRepository,
-        handoffStore: PExternalEmulatorHandoffStore,
-        fileManager: FileManager = .default
+        handoffStore: PExternalEmulatorHandoffStore
     ) {
-        self.folderStore = folderStore
+        self.saveFiles = saveFiles
         self.localROMs = localROMs
         self.handoffStore = handoffStore
-        self.fileManager = fileManager
     }
 
     func execute(for emulator: ExternalEmulatorID) throws -> ExternalSaveScan? {
         guard let layout = emulator.emulator.saveLayout,
-              let grant = folderStore.grantedFolder(for: emulator) else { return nil }
+              let contents = saveFiles.contents(for: emulator) else { return nil }
 
         let index = try romIndex(for: emulator, layout: layout)
+        var matched: [ExternalSaveFile] = []
+        var unmatched: [String] = []
 
-        return grant.withAccess { root in
-            var matched: [ExternalSaveFile] = []
-            var unmatched: [String] = []
-
-            for url in candidateFiles(under: root, layout: layout) {
-                guard let key = layout.batteryKey(forFileName: url.lastPathComponent) else { continue }
-                if let romId = index[key.lowercased()] {
-                    if let file = saveFile(at: url, romId: romId) {
-                        matched.append(file)
-                    }
-                } else {
-                    unmatched.append(url.lastPathComponent)
-                }
+        for candidate in contents.candidates {
+            guard let key = layout.batteryKey(forFileName: candidate.fileName) else { continue }
+            if let romId = index[key.lowercased()] {
+                matched.append(ExternalSaveFile(candidate: candidate, romId: romId))
+            } else {
+                unmatched.append(candidate.fileName)
             }
-
-            logger.info("Scanned \(emulator.rawValue): \(matched.count) matched, \(unmatched.count) unmatched")
-            return ExternalSaveScan(
-                emulator: emulator,
-                matched: matched,
-                unmatchedFileNames: unmatched,
-                isStale: grant.isStale
-            )
         }
+
+        logger.info("Scanned \(emulator.rawValue): \(matched.count) matched, \(unmatched.count) unmatched")
+        return ExternalSaveScan(
+            emulator: emulator,
+            matched: matched,
+            unmatchedFileNames: unmatched,
+            isStale: contents.isStale
+        )
     }
 
     func executeForAllGranted() -> [ExternalSaveScan] {
-        folderStore.grantedEmulators().compactMap { try? execute(for: $0) }
+        saveFiles.emulatorsWithFolder().compactMap { try? execute(for: $0) }
     }
 
     // MARK: - Private
@@ -128,51 +94,5 @@ final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
             }
         }
         return index
-    }
-
-    /// Files worth looking at, hints first and the whole folder only as a
-    /// fallback, never deeper than the layout allows.
-    private func candidateFiles(under root: URL, layout: ExternalSaveLayout) -> [URL] {
-        for hint in layout.searchHints {
-            let directory = hint.split(separator: "/").reduce(root) {
-                $0.appendingPathComponent(String($1), isDirectory: true)
-            }
-            var isDirectory: ObjCBool = false
-            guard fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else { continue }
-            let found = files(under: directory, depth: layout.maxSearchDepth)
-            if !found.isEmpty {
-                logger.debug("Using hint \(hint), \(found.count) candidates")
-                return found
-            }
-        }
-        logger.debug("No hint matched, walking the granted folder")
-        return files(under: root, depth: layout.maxSearchDepth)
-    }
-
-    private func files(under directory: URL, depth: Int) -> [URL] {
-        guard depth > 0 else { return [] }
-        guard let entries = try? fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
-        return entries.flatMap { url -> [URL] in
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            return isDirectory ? files(under: url, depth: depth - 1) : [url]
-        }
-    }
-
-    private func saveFile(at url: URL, romId: Int) -> ExternalSaveFile? {
-        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        guard let size = values?.fileSize, size > 0 else { return nil }
-        return ExternalSaveFile(
-            url: url,
-            romId: romId,
-            fileName: url.lastPathComponent,
-            sizeBytes: size,
-            modifiedAt: values?.contentModificationDate ?? Date(timeIntervalSince1970: 0)
-        )
     }
 }

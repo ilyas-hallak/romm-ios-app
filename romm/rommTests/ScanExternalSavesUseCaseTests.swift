@@ -86,7 +86,14 @@ struct ScanExternalSavesUseCaseTests {
         let handoff = FakeHandoffStore()
         handoff.identifiers = identifiers
         return (
-            ScanExternalSavesUseCase(folderStore: folders, localROMs: localROMs, handoffStore: handoff),
+            ScanExternalSavesUseCase(
+                // The real repository over a temporary directory: the folder
+                // walk, the hints and the depth limit are what these tests are
+                // about, so faking it away would leave nothing under test.
+                saveFiles: ExternalSaveFileRepository(folderStore: folders),
+                localROMs: localROMs,
+                handoffStore: handoff
+            ),
             folders
         )
     }
@@ -223,7 +230,9 @@ struct ScanExternalSavesUseCaseTests {
 
     @Test func returnsNothingWithoutAGrantedFolder() throws {
         let useCase = ScanExternalSavesUseCase(
-            folderStore: FakeFolderStore(), localROMs: FakeLocalROMs(), handoffStore: FakeHandoffStore()
+            saveFiles: ExternalSaveFileRepository(folderStore: FakeFolderStore()),
+            localROMs: FakeLocalROMs(),
+            handoffStore: FakeHandoffStore()
         )
 
         #expect(try useCase.execute(for: .retroarch) == nil)

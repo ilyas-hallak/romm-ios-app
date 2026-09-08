@@ -2,20 +2,24 @@ import Foundation
 
 /// An emulator app outside of RomM that a downloaded ROM can be handed off to.
 ///
-/// Handing a ROM over takes two steps: iOS does not let us preselect a target in
-/// the share sheet, so the first launch goes through the system "Open in" menu
-/// and every later one uses the target app's own URL scheme.
+/// Handing a ROM over takes two steps, because iOS does not let us preselect a
+/// share sheet target: the first launch goes through the system "Open in" menu,
+/// every later one through the target's URL scheme.
 ///
-/// Implementations describe a target app and stay free of file access, so they
-/// remain synchronously testable. Deriving the identifier a target app uses can
-/// mean reading and hashing a whole ROM, which is
-/// `ResolveExternalGameIdentifierUseCase`'s job instead.
+/// Implementations only describe an app and never touch files, which keeps them
+/// synchronously testable. Resolving an identifier can mean hashing a whole ROM
+/// and belongs to `ResolveExternalGameIdentifierUseCase`.
 protocol PExternalEmulator: Sendable {
     var id: ExternalEmulatorID { get }
     var displayName: String { get }
     /// Scheme used both for the installation check and for the deep link. It has
     /// to be listed in `LSApplicationQueriesSchemes` or `canOpenURL` always says no.
     var urlScheme: String { get }
+    /// The app's App Store page, or nil for an app not distributed there.
+    ///
+    /// Without a default on purpose: a missing page leaves the setup assistant's
+    /// install step with nothing to open, so it has to be a per-app decision.
+    var appStoreURL: URL? { get }
     /// How this app addresses a ROM it has already imported.
     var identifierKind: ExternalGameIdentifierKind { get }
     /// Whether the handoff has to carry the plain ROM rather than the archive it
@@ -29,15 +33,14 @@ protocol PExternalEmulator: Sendable {
     /// ROM extensions this app accepts on platforms the built-in engines have no
     /// `DeltaGameType` for, or nil to support only the platforms they do.
     ///
-    /// Only consulted as a fallback: a known platform resolves through its game
-    /// type, which is narrower and therefore picks the right file on ROMs that
-    /// ship several. Archive extensions must stay out, or the handoff would pass
-    /// the archive and hash that instead of what the target app unpacks from it.
+    /// A fallback only: a known platform resolves through its game type, which
+    /// is narrower and picks the right file in a multi-file ROM. Archive
+    /// extensions must stay out, or the handoff hashes the archive instead of
+    /// what the target app unpacks from it.
     var romExtensions: Set<String>? { get }
-    /// Whether an app that just received a document is this emulator.
-    ///
-    /// `UIDocumentInteractionController` reports the receiving bundle identifier,
-    /// which is the only reliable signal that the handoff actually happened.
+    /// Whether an app that just received a document is this emulator. The
+    /// bundle identifier `UIDocumentInteractionController` reports is the only
+    /// reliable signal that the handoff happened.
     func matches(bundleIdentifier: String) -> Bool
     /// Deep link that boots a ROM the target app has already imported.
     func launchURL(gameIdentifier: String) -> URL?
@@ -51,18 +54,16 @@ extension PExternalEmulator {
     /// Most targets only handle what the built-in engines handle.
     var romExtensions: Set<String>? { nil }
 
-    /// The "Open in" menu is the only route that reports which app took the file,
-    /// so it stays the default and anything else has to opt out deliberately.
+    /// The "Open in" menu is the only route that reports which app took the
+    /// file, so anything else has to opt out deliberately.
     var romDelivery: ExternalROMDelivery { .openInMenu }
 
     /// Saves are only read out of an app that has described where it writes them.
     var saveLayout: ExternalSaveLayout? { nil }
 
-    /// What the user has to do the first time a ROM goes to this app.
-    ///
-    /// Worth saying out loud during setup, because the first handoff is the one
-    /// step this app cannot complete on the user's behalf, and an app that
-    /// silently waits for a paste looks like a Play button that does nothing.
+    /// What the user has to do the first time a ROM goes to this app. Said out
+    /// loud during setup, because it is the one step that cannot be done for
+    /// them, and an app silently waiting for a paste looks like a dead button.
     var handoffExplanation: String {
         switch romDelivery {
         case .openInMenu:
@@ -94,11 +95,8 @@ enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
     case delta
     case manicEmu = "manicemu"
 
-    /// The behaviour behind this identity.
-    ///
-    /// Deliberately a `switch` rather than a registry array: adding a case
-    /// without wiring it up then fails to compile instead of resolving to nil at
-    /// runtime.
+    /// The behaviour behind this identity. A `switch` rather than a registry,
+    /// so an unwired case fails to compile instead of resolving to nil.
     var emulator: any PExternalEmulator {
         switch self {
         case .retroarch: return RetroArchExternalEmulator()
@@ -113,8 +111,8 @@ enum ExternalROMDelivery: Sendable {
     /// The system "Open in" menu, which copies the file into the target's inbox
     /// and tells us which app took it.
     case openInMenu
-    /// The general pasteboard, carrying the file as an `NSItemProvider`. The user
-    /// has to paste it in the target app, so the handoff cannot be confirmed.
+    /// The general pasteboard, carrying the file as an `NSItemProvider`. The
+    /// user pastes it themselves, so the handoff cannot be confirmed.
     case pasteboard
 }
 

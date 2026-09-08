@@ -108,3 +108,11 @@ struct ExternalSaveLayoutTests {
         #expect(!layout.batteryExtensions.isEmpty)
     }
 }
+
+private extension ExternalSaveLayout {
+    /// The contract as these tests read it: this file is that key's battery
+    /// save. Not on the layout itself, where nothing but a test would call it.
+    func isBatterySave(fileName: String, matching key: String) -> Bool {
+        batteryKey(forFileName: fileName)?.caseInsensitiveCompare(key) == .orderedSame
+    }
+}
