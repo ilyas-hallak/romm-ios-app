@@ -48,6 +48,9 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
     private var lastReport: Date?
     private static let reportInterval: TimeInterval = 0.1
 
+    /// Body of a non-2xx response, so the caller can surface the server's message.
+    private(set) var errorBody = Data()
+
     var completion: ((Result<(URL, URLResponse), Error>) -> Void)?
 
     init(
@@ -59,6 +62,17 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
         self.fallbackExpectedSize = fallbackExpectedSize
         self.progressHandler = progressHandler
         super.init()
+    }
+
+    /// Resumes the caller exactly once.
+    ///
+    /// Cancelling the task on a write error still produces a
+    /// `didCompleteWithError` afterwards, and resuming a checked continuation a
+    /// second time traps, so the handler is consumed on first use.
+    private func finish(_ result: Result<(URL, URLResponse), Error>) {
+        guard let completion else { return }
+        self.completion = nil
+        completion(result)
     }
 
     func urlSession(
@@ -95,7 +109,7 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
             windowStartBytes = 0
         } catch {
             completionHandler(.cancel)
-            completion?(.failure(error))
+            finish(.failure(error))
             return
         }
         completionHandler(.allow)
@@ -111,7 +125,7 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
             try fileHandle.write(contentsOf: data)
         } catch {
             dataTask.cancel()
-            completion?(.failure(error))
+            finish(.failure(error))
             return
         }
         receivedBytes += Int64(data.count)
@@ -123,21 +137,18 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
         fileHandle = nil
 
         if let error {
-            completion?(.failure(error))
+            finish(.failure(error))
             return
         }
         guard let response else {
-            completion?(.failure(URLError(.badServerResponse)))
+            finish(.failure(URLError(.badServerResponse)))
             return
         }
         // A final report, so the bar lands exactly on the number of bytes that
         // actually arrived rather than wherever throttling left it.
         progressHandler?(receivedBytes, expectedSize, currentRate)
-        completion?(.success((destinationURL, response)))
+        finish(.success((destinationURL, response)))
     }
-
-    /// Body of a non-2xx response, so the caller can surface the server's message.
-    private(set) var errorBody = Data()
 
     private func reportProgress() {
         let now = Date()
