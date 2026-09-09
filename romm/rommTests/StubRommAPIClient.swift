@@ -11,7 +11,7 @@ import Foundation
 class StubRommAPIClient: PRommAPIClient {
     func makeRequest<T: Codable>(path: String, method: HTTPMethod, body: Data?, responseType: T.Type) async throws -> T { fatalError("makeRequest not stubbed") }
     func makeRequest(path: String, method: HTTPMethod, body: Data?) async throws -> Data { fatalError("makeRequest not stubbed") }
-    func downloadFile(path: String, progressHandler: ((Int64, Int64) -> Void)?) async throws -> URL { fatalError("downloadFile not stubbed") }
+    func downloadFile(path: String, expectedSize: Int64, progressHandler: ((Int64, Int64, Double?) -> Void)?) async throws -> URL { fatalError("downloadFile not stubbed") }
     func multipartRequest(path: String, method: HTTPMethod, boundary: String, formData: Data, additionalHeaders: [String: String]?) async throws -> Data { fatalError("multipartRequest not stubbed") }
     func get<T: Codable>(_ path: String, responseType: T.Type) async throws -> T { fatalError("get not stubbed") }
     func get(_ path: String) async throws -> Data { fatalError("get not stubbed") }
@@ -47,6 +47,22 @@ class StubRommAPIClient: PRommAPIClient {
     func getHeartbeat() async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
     func getHeartbeat(from serverURL: String) async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema { fatalError("updateRomLastPlayed not stubbed") }
+    func makeDownloadRequest(path: String) throws -> URLRequest { fatalError("makeDownloadRequest not stubbed") }
+
+    /// Composed the way the real client composes it, so a subclass that only
+    /// overrides `makeDownloadRequest` still sees the production path and a test
+    /// reading the path off a started transfer is not reading a stub's idea of
+    /// it.
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest {
+        try makeDownloadRequest(
+            path: RommAPIClient.romContentPath(
+                romId: romId,
+                fileName: fileName,
+                usesLegacyContentPath: usesLegacyContentPath
+            )
+        )
+    }
+
     func getStats() async throws -> StatsReturn { fatalError("getStats not stubbed") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("getSaves not stubbed") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("getStates not stubbed") }

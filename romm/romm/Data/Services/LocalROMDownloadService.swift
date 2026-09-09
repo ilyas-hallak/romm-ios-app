@@ -27,70 +27,45 @@ protocol PLocalROMDownloadService {
     /// - Parameters:
     ///   - rom: The ROM to download
     ///   - files: The specific files to download
-    ///   - progressHandler: Called with (downloaded bytes, total bytes) during download
+    ///   - progressHandler: Called with (downloaded bytes, total bytes, bytes per second)
+    ///     during download. A non-positive total means the size is unknown.
     /// - Returns: The downloaded ROM metadata
     func downloadROM(
         rom: Rom,
         files: [RomFileInfo],
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws -> DownloadedROM
 }
 
 class LocalROMDownloadService: PLocalROMDownloadService {
 
     private let apiClient: PRommAPIClient
-    private let repository: PLocalROMRepository
+    private let finalizer: PROMDownloadFinalizer
     private let fileManager = FileManager.default
 
     init(
         apiClient: PRommAPIClient,
-        repository: PLocalROMRepository = LocalROMRepository()
+        finalizer: PROMDownloadFinalizer = ROMDownloadFinalizer()
     ) {
         self.apiClient = apiClient
-        self.repository = repository
+        self.finalizer = finalizer
     }
 
     func downloadROM(
         rom: Rom,
         files: [RomFileInfo],
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws -> DownloadedROM {
 
-        // 1. Calculate total size
-        let totalSize = files.reduce(0) { $0 + $1.fileSizeBytes }
-
-        // 2. Check available storage asynchronously to avoid blocking main thread
-        let deviceManager = await MainActor.run { LocalDeviceManager.shared }
-        await deviceManager.updateStorageInfoAsync()
-
-        let hasEnoughStorage = await MainActor.run {
-            deviceManager.hasEnoughStorage(for: totalSize)
-        }
-
-        guard hasEnoughStorage else {
-            let availableStorage = await MainActor.run { deviceManager.availableStorageBytes }
-            throw LocalROMDownloadError.insufficientStorage(
-                required: totalSize,
-                available: availableStorage
-            )
-        }
-
-        // 3. Create ROM directory
-        let platformName = rom.platform?.name ?? rom.platformSlug ?? ""
-        let romDirectoryPath = LocalROMRepository.createROMDirectoryPath(
-            platformName: platformName,
-            romName: rom.name
+        // 1. Check storage and create the ROM directory. This path downloads one
+        // ROM at a time, so no bytes are reserved for other transfers.
+        let destination = try await finalizer.prepare(
+            rom: rom,
+            files: files,
+            reservedBytes: 0
         )
 
-        let romDirectoryURL = repository.romsBaseURL.appendingPathComponent(romDirectoryPath)
-
-        try fileManager.createDirectory(
-            at: romDirectoryURL,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-
-        // 4. Download each file
+        // 2. Download each file
         var downloadedFiles: [DownloadedROMFile] = []
         var totalDownloadedBytes: Int64 = 0
 
@@ -98,7 +73,7 @@ class LocalROMDownloadService: PLocalROMDownloadService {
             print("📥 Downloading file \(index + 1)/\(files.count): \(fileInfo.fileName)")
 
             // Download file from server
-            let localFileURL = romDirectoryURL.appendingPathComponent(fileInfo.fileName)
+            let localFileURL = destination.directoryURL.appendingPathComponent(fileInfo.fileName)
 
             // Metadata sizes of files not started yet — used to fill in the grand
             // total while the current file's real size is learned from URLSession.
@@ -110,74 +85,61 @@ class LocalROMDownloadService: PLocalROMDownloadService {
                     romId: rom.id,
                     to: localFileURL,
                     expectedSize: fileInfo.fileSizeBytes
-                ) { downloadedBytes, fileTotalBytes in
-                    // Prefer the authoritative size reported by URLSession; fall
-                    // back to the metadata size when the server omits Content-Length.
-                    let perFileTotal = fileTotalBytes > 0 ? fileTotalBytes : fileInfo.fileSizeBytes
+                ) { downloadedBytes, fileTotalBytes, bytesPerSecond in
+                    // `fileTotalBytes` is the announced size, or the metadata size
+                    // passed in above when the server announced none. Clamped so an
+                    // under-reported size cannot push the bar past 100%.
                     let currentTotalBytes = totalDownloadedBytes + downloadedBytes
-                    let grandTotal = totalDownloadedBytes + perFileTotal + remainingMetadata
+                    let grandTotal: Int64
+                    if fileTotalBytes > 0 {
+                        grandTotal = max(
+                            totalDownloadedBytes + fileTotalBytes + remainingMetadata,
+                            currentTotalBytes
+                        )
+                    } else {
+                        grandTotal = 0
+                    }
                     Task { @MainActor in
-                        progressHandler(currentTotalBytes, grandTotal)
+                        progressHandler(currentTotalBytes, grandTotal, bytesPerSecond)
                     }
                 }
 
-                // Verify file was downloaded
-                guard fileManager.fileExists(atPath: localFileURL.path) else {
-                    throw LocalROMDownloadError.fileValidationFailed("File not found after download: \(fileInfo.fileName)")
-                }
+                // The size on disk drives the progress accounting for the files
+                // that follow, so each file is validated as soon as it lands.
+                let downloadedFile = try finalizer.validateTransferredFile(
+                    named: fileInfo.fileName,
+                    expectedSize: fileInfo.fileSizeBytes,
+                    in: destination
+                )
 
-                // Get actual file size
-                let attributes = try fileManager.attributesOfItem(atPath: localFileURL.path)
-                let actualSize = attributes[FileAttributeKey.size] as? Int64 ?? 0
-
-                // Validate file size
-                if actualSize != fileInfo.fileSizeBytes {
-                    print("⚠️ Warning: Downloaded file size mismatch for \(fileInfo.fileName)")
-                    print("   Expected: \(fileInfo.fileSizeBytes), Got: \(actualSize)")
-                    // Don't throw - some files might have compression differences
-                }
-
-                downloadedFiles.append(DownloadedROMFile(
-                    fileName: fileInfo.fileName,
-                    fileSizeBytes: actualSize,
-                    md5Hash: nil
-                ))
-
-                totalDownloadedBytes += actualSize
+                downloadedFiles.append(downloadedFile)
+                totalDownloadedBytes += downloadedFile.fileSizeBytes
 
             } catch {
                 // Clean up on error
-                try? fileManager.removeItem(at: romDirectoryURL)
+                finalizer.cleanUp(destination)
                 throw LocalROMDownloadError.downloadFailed(error.localizedDescription)
             }
         }
 
-        // 5. Create DownloadedROM metadata
-        let downloadedROM = DownloadedROM(
-            id: rom.id,
-            name: rom.name,
-            platformName: platformName,
-            platformSlug: rom.platformSlug ?? "",
-            downloadedAt: Date(),
-            totalSizeBytes: totalDownloadedBytes,
-            localDirectory: romDirectoryPath,
-            files: downloadedFiles,
-            urlCover: rom.urlCover
-        )
-
-        // 6. Save metadata
+        // 3. Write the metadata for the files validated above
+        let downloadedROM: DownloadedROM
         do {
-            try repository.saveDownloadedROM(downloadedROM)
+            downloadedROM = try finalizer.writeMetadata(
+                rom: rom,
+                destination: destination,
+                validatedFiles: downloadedFiles
+            )
         } catch {
             // Clean up on error
-            try? fileManager.removeItem(at: romDirectoryURL)
-            throw LocalROMDownloadError.saveFailed(error.localizedDescription)
+            finalizer.cleanUp(destination)
+            throw error
         }
 
         print("✅ Successfully downloaded ROM: \(rom.name)")
-        print("   Files: \(downloadedFiles.count)")
-        print("   Total size: \(ByteCountFormatter.string(fromByteCount: totalDownloadedBytes, countStyle: .file))")
-        print("   Location: \(romDirectoryURL.path)")
+        print("   Files: \(downloadedROM.files.count)")
+        print("   Total size: \(ByteCountFormatter.string(fromByteCount: downloadedROM.totalSizeBytes, countStyle: .file))")
+        print("   Location: \(destination.directoryURL.path)")
 
         return downloadedROM
     }
@@ -189,7 +151,7 @@ class LocalROMDownloadService: PLocalROMDownloadService {
         romId: Int,
         to destinationURL: URL,
         expectedSize: Int64,
-        progressHandler: @escaping (Int64, Int64) -> Void
+        progressHandler: @escaping (Int64, Int64, Double?) -> Void
     ) async throws {
         let encodedFileName = encodePathComponent(fileName)
         // RomM 5.1 requires the filename in the path; RomM 5.0 used the bare
@@ -200,15 +162,21 @@ class LocalROMDownloadService: PLocalROMDownloadService {
 
         let tempFileURL: URL
         do {
-            tempFileURL = try await apiClient.downloadFile(path: newPath) { downloadedBytes, totalBytes in
-                progressHandler(downloadedBytes, totalBytes)
+            tempFileURL = try await apiClient.downloadFile(
+                path: newPath,
+                expectedSize: expectedSize
+            ) { downloadedBytes, totalBytes, bytesPerSecond in
+                progressHandler(downloadedBytes, totalBytes, bytesPerSecond)
             }
         } catch let error {
             if case APIClientError.invalidResponse(404, _) = error {
                 print("📥 /content/{filename} returned 404 — falling back to legacy /content (RomM 5.0)")
                 do {
-                    tempFileURL = try await apiClient.downloadFile(path: legacyPath) { downloadedBytes, totalBytes in
-                        progressHandler(downloadedBytes, totalBytes)
+                    tempFileURL = try await apiClient.downloadFile(
+                        path: legacyPath,
+                        expectedSize: expectedSize
+                    ) { downloadedBytes, totalBytes, bytesPerSecond in
+                        progressHandler(downloadedBytes, totalBytes, bytesPerSecond)
                     }
                 } catch {
                     throw LocalROMDownloadError.downloadFailed(error.localizedDescription)
@@ -231,7 +199,8 @@ class LocalROMDownloadService: PLocalROMDownloadService {
         if expectedSize > 0, actualSize <= 0 {
             throw LocalROMDownloadError.fileValidationFailed("Downloaded file is empty")
         }
-        progressHandler(actualSize, actualSize)
+        // No rate here: this file is done, the number would be stale.
+        progressHandler(actualSize, actualSize, nil)
     }
 
     private func encodePathComponent(_ value: String) -> String {

@@ -21,32 +21,6 @@ struct DuplicateFileInfo: Identifiable {
     }
 }
 
-struct RomFileInfo: Identifiable, Hashable {
-    let id: String
-    let fileName: String
-    let fileSizeBytes: Int64
-    let fileExtension: String
-    
-    init(from romFile: RomFileSchema) {
-        self.id = romFile.fileName
-        self.fileName = romFile.fileName
-        self.fileSizeBytes = Int64(romFile.fileSizeBytes)
-        // Extract file extension from fileName
-        self.fileExtension = (romFile.fileName as NSString).pathExtension
-    }
-    
-    init(id: String, fileName: String, fileSizeBytes: Int64, fileExtension: String) {
-        self.id = id
-        self.fileName = fileName
-        self.fileSizeBytes = fileSizeBytes
-        self.fileExtension = fileExtension
-    }
-    
-    var displaySize: String {
-        ByteCountFormatter.string(fromByteCount: fileSizeBytes, countStyle: .file)
-    }
-}
-
 @MainActor
 @Observable
 class SFTPUploadViewModel {
@@ -439,7 +413,7 @@ class SFTPUploadViewModel {
             let _ = try await downloadService.downloadROM(
                 rom: rom,
                 files: filesToDownload,
-                progressHandler: { [weak self] downloadedBytes, totalBytes in
+                progressHandler: { [weak self] downloadedBytes, totalBytes, _ in
                     DispatchQueue.main.async {
                         guard let strongSelf = self, !strongSelf.isCompleted else {
                             return
@@ -513,7 +487,10 @@ class SFTPUploadViewModel {
         let path = "api/roms/\(rom.id)/content/\(encodedFileName)"
 
         do {
-            let tempURL = try await apiClient.downloadFile(path: path) { [weak self] downloadedBytes, totalBytes in
+            let tempURL = try await apiClient.downloadFile(
+                path: path,
+                expectedSize: fileInfo.fileSizeBytes
+            ) { [weak self] downloadedBytes, totalBytes, _ in
                 Task { @MainActor in
                     guard let self = self, self.isPreparing else { return }
 

@@ -92,7 +92,7 @@ final class FakeAPIClient: PRommAPIClient {
 
     func makeRequest<T: Codable>(path: String, method: HTTPMethod, body: Data?, responseType: T.Type) async throws -> T { fatalError("not used in these tests") }
     func makeRequest(path: String, method: HTTPMethod, body: Data?) async throws -> Data { fatalError("not used in these tests") }
-    func downloadFile(path: String, progressHandler: ((Int64, Int64) -> Void)?) async throws -> URL { fatalError("not used in these tests") }
+    func downloadFile(path: String, expectedSize: Int64, progressHandler: ((Int64, Int64, Double?) -> Void)?) async throws -> URL { fatalError("not used in these tests") }
     func multipartRequest(path: String, method: HTTPMethod, boundary: String, formData: Data, additionalHeaders: [String: String]?) async throws -> Data { fatalError("not used in these tests") }
     func get<T: Codable>(_ path: String, responseType: T.Type) async throws -> T { fatalError("not used in these tests") }
     func get(_ path: String) async throws -> Data { fatalError("not used in these tests") }
@@ -128,6 +128,8 @@ final class FakeAPIClient: PRommAPIClient {
     func getPlatformFirmware(platformId: Int) async throws -> [FirmwareSchema] { fatalError("not used in these tests") }
     func downloadFirmwareContent(id: Int, fileName: String) async throws -> Data { fatalError("not used in these tests") }
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema { fatalError("not used in these tests") }
+    func makeDownloadRequest(path: String) throws -> URLRequest { fatalError("not used in these tests") }
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest { fatalError("not used in these tests") }
     func getStats() async throws -> StatsReturn { fatalError("not used in these tests") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("not used in these tests") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("not used in these tests") }

@@ -150,3 +150,6 @@ Vendor/Libretro/ppsspp_libretro_ios.dylib
 
 # Xcode-Projektsicherungen
 *.pbxproj.bak-*
+
+# Stray object files from ad hoc compiles, the build writes into DerivedData
+*.o

@@ -59,7 +59,8 @@ class RomDetailViewModel {
     enum DownloadButtonState: Equatable {
         case idle
         case queued
-        case downloading(Double?) // 0...1, or nil when size is unknown
+        /// Progress 0...1 (nil when the size is unknown) and the current rate.
+        case downloading(Double?, Double?)
         case downloaded
         case failed
     }
@@ -68,9 +69,15 @@ class RomDetailViewModel {
         if isDownloaded { return .downloaded }
         switch downloadQueue.status(forRomId: id) {
         case .queued: return .queued
-        case .downloading(let progress): return .downloading(progress)
+        case .downloading(let progress, let bytesPerSecond): return .downloading(progress, bytesPerSecond)
+        // Filing the ROM away is the tail end of the download, so the button
+        // keeps showing a full bar rather than a state of its own.
+        case .finalizing: return .downloading(1, nil)
         case .finished: return .downloaded
         case .failed: return .failed
+        // A cancelled download leaves the ROM off the device, so the button
+        // offers it again.
+        case .cancelled: return .idle
         case nil: return .idle
         }
     }
@@ -410,6 +417,12 @@ class RomDetailViewModel {
         guard !isDownloaded else { return }
         downloadQueue.enqueue(rom: rom)
         showAddedToast = true
+    }
+
+    /// Stops the queued or running download of this ROM. The queue keeps a
+    /// cancelled row behind, which the Downloads tab shows until it is cleared.
+    func cancelDownload(romId: Int) {
+        downloadQueue.cancel(id: romId)
     }
 
     /// Prepares the downloaded ROM files for the iOS share sheet ("Open In…").
