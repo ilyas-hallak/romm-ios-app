@@ -47,6 +47,22 @@ class StubRommAPIClient: PRommAPIClient {
     func getHeartbeat() async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
     func getHeartbeat(from serverURL: String) async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema { fatalError("updateRomLastPlayed not stubbed") }
+    func makeDownloadRequest(path: String) throws -> URLRequest { fatalError("makeDownloadRequest not stubbed") }
+
+    /// Composed the way the real client composes it, so a subclass that only
+    /// overrides `makeDownloadRequest` still sees the production path and a test
+    /// reading the path off a started transfer is not reading a stub's idea of
+    /// it.
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest {
+        try makeDownloadRequest(
+            path: RommAPIClient.romContentPath(
+                romId: romId,
+                fileName: fileName,
+                usesLegacyContentPath: usesLegacyContentPath
+            )
+        )
+    }
+
     func getStats() async throws -> StatsReturn { fatalError("getStats not stubbed") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("getSaves not stubbed") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("getStates not stubbed") }

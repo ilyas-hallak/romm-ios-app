@@ -21,32 +21,6 @@ struct DuplicateFileInfo: Identifiable {
     }
 }
 
-struct RomFileInfo: Identifiable, Hashable {
-    let id: String
-    let fileName: String
-    let fileSizeBytes: Int64
-    let fileExtension: String
-    
-    init(from romFile: RomFileSchema) {
-        self.id = romFile.fileName
-        self.fileName = romFile.fileName
-        self.fileSizeBytes = Int64(romFile.fileSizeBytes)
-        // Extract file extension from fileName
-        self.fileExtension = (romFile.fileName as NSString).pathExtension
-    }
-    
-    init(id: String, fileName: String, fileSizeBytes: Int64, fileExtension: String) {
-        self.id = id
-        self.fileName = fileName
-        self.fileSizeBytes = fileSizeBytes
-        self.fileExtension = fileExtension
-    }
-    
-    var displaySize: String {
-        ByteCountFormatter.string(fromByteCount: fileSizeBytes, countStyle: .file)
-    }
-}
-
 @MainActor
 @Observable
 class SFTPUploadViewModel {

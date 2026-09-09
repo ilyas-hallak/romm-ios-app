@@ -17,10 +17,17 @@ struct DownloadQueueView: View {
                 } else {
                     List {
                         if !activeTasks.isEmpty {
-                            Section("In Progress") {
+                            Section {
                                 ForEach(activeTasks) { task in
                                     row(for: task)
                                 }
+                            } header: {
+                                Text("In Progress")
+                            } footer: {
+                                // Promises only what the background session can
+                                // keep: iOS drops its transfers when the user
+                                // force quits, so that is spelled out.
+                                Text("Downloads keep going while the app is in the background or closed, but stop if you force quit it from the app switcher.")
                             }
                         }
                         if !completedTasks.isEmpty {
@@ -123,6 +130,10 @@ struct DownloadQueueView: View {
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.4), value: progress)
             }
+        case .finalizing:
+            Text("Finishing up…")
+                .font(.caption)
+                .foregroundColor(.secondary)
         case .finished:
             Text("Downloaded")
                 .font(.caption)
@@ -132,20 +143,43 @@ struct DownloadQueueView: View {
                 .font(.caption)
                 .foregroundColor(.red)
                 .lineLimit(2)
+        case .cancelled:
+            Text("Cancelled")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
     @ViewBuilder
     private func trailing(for task: DownloadTask) -> some View {
         switch task.status {
-        case .queued:
-            Image(systemName: "clock")
-                .foregroundColor(.secondary)
-        case .downloading:
+        case .queued, .downloading:
+            // The row the user is looking at is also where the download is
+            // stopped, so the trailing spot carries the way out instead of
+            // repeating a status the line underneath the name already gives.
+            Button {
+                queue.cancel(id: task.id)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.secondary)
+                    // Grows the hit area towards the name, so the icon keeps
+                    // sitting exactly where the status icons of other rows do.
+                    .padding(.vertical, 8)
+                    .padding(.leading, 8)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel Download")
+        case .finalizing:
+            // Every file is on disk and is being filed away in one go, so there
+            // is no transfer left to stop, only a move to interrupt halfway.
             ProgressView()
         case .finished:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.green)
+        case .cancelled:
+            Image(systemName: "slash.circle")
+                .foregroundColor(.secondary)
         case .failed:
             Button {
                 queue.retry(id: task.id)
@@ -154,11 +188,16 @@ struct DownloadQueueView: View {
                     .foregroundColor(.accentColor)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Retry Download")
         }
     }
 
+    /// Whether the row is busy transferring or filing the ROM away, which is
+    /// when it must not be swiped out of the list.
     private func isDownloading(_ task: DownloadTask) -> Bool {
-        if case .downloading = task.status { return true }
-        return false
+        switch task.status {
+        case .downloading, .finalizing: return true
+        case .queued, .finished, .failed, .cancelled: return false
+        }
     }
 }

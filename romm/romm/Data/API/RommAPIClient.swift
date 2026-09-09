@@ -85,6 +85,18 @@ protocol PRommAPIClient {
     // ROM user props
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema
 
+    // Download request building
+    /// Builds an authenticated URLRequest for downloading a file from a remote path,
+    /// allowing callers outside the client to obtain a complete request with auth headers.
+    func makeDownloadRequest(path: String) throws -> URLRequest
+
+    /// Builds an authenticated URLRequest for one file of a ROM.
+    ///
+    /// - Parameter usesLegacyContentPath: Which of the two content endpoints to
+    ///   ask. Whether a download has to fall back to the legacy one is the
+    ///   caller's decision, this only builds the path for it.
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest
+
     // Stats, Saves, States
     func getStats() async throws -> StatsReturn
     func getSaves(romId: Int) async throws -> [SaveSchema]
@@ -277,6 +289,54 @@ class RommAPIClient: PRommAPIClient {
         }
     }
 
+    // MARK: - makeDownloadRequest
+
+    func makeDownloadRequest(path: String) throws -> URLRequest {
+        let url = try buildURL(path: path)
+        let authHeader = try makeAuthHeader()
+
+        var request = URLRequest(url: url)
+        request.httpMethod = HTTPMethod.get.rawValue
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 60.0
+
+        logger.debug("Download URL: \(url.absoluteString)")
+        #if DEBUG
+        logger.debug("Download Auth header (debug-only): \(authHeader)")
+        #endif
+
+        return request
+    }
+
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest {
+        try makeDownloadRequest(
+            path: Self.romContentPath(
+                romId: romId,
+                fileName: fileName,
+                usesLegacyContentPath: usesLegacyContentPath
+            )
+        )
+    }
+
+    /// RomM 5.1 serves every file of a ROM under its own name, RomM 5.0 only
+    /// knows the bare content endpoint and picks the file itself.
+    ///
+    /// Static and nonisolated so test doubles of the client can compose the same
+    /// path instead of inventing one of their own.
+    nonisolated static func romContentPath(romId: Int, fileName: String, usesLegacyContentPath: Bool) -> String {
+        guard !usesLegacyContentPath else { return "api/roms/\(romId)/content" }
+        return "api/roms/\(romId)/content/\(encodePathComponent(fileName))"
+    }
+
+    /// Percent encodes one path component. `urlPathAllowed` lets slashes through,
+    /// which would turn a file name into two components, so it is taken out.
+    private nonisolated static func encodePathComponent(_ value: String) -> String {
+        var allowedCharacterSet = CharacterSet.urlPathAllowed
+        allowedCharacterSet.remove(charactersIn: "/")
+        return value.addingPercentEncoding(withAllowedCharacters: allowedCharacterSet) ?? value
+    }
+
     // MARK: - downloadFile
 
     /// - Parameters:
@@ -295,19 +355,7 @@ class RommAPIClient: PRommAPIClient {
         let measurement = PerformanceMeasurement(operation: "DOWNLOAD \(path)")
         logger.logNetworkRequest(method: HTTPMethod.get.rawValue, url: path)
 
-        let url = try buildURL(path: path)
-        let authHeader = try makeAuthHeader()
-
-        var request = URLRequest(url: url)
-        request.httpMethod = HTTPMethod.get.rawValue
-        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-        request.setValue("*/*", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 60.0
-
-        logger.debug("Download URL: \(url.absoluteString)")
-        #if DEBUG
-        logger.debug("Download Auth header (debug-only): \(authHeader)")
-        #endif
+        let request = try makeDownloadRequest(path: path)
 
         // Streamed through a data task so the bytes can be counted here as they
         // are written. The system's own progress reporting is unusable when the

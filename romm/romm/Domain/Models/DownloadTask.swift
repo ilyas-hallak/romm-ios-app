@@ -14,14 +14,20 @@ struct DownloadTask: Identifiable {
         /// `progress` is 0...1, or nil when the size is unknown. `bytesPerSecond`
         /// is nil until enough time has passed to measure a rate.
         case downloading(progress: Double?, bytesPerSecond: Double? = nil)
+        /// Every file is on disk and the ROM is being filed away. Short lived,
+        /// but the user must not be able to remove the entry while it runs.
+        case finalizing
         case finished
         case failed(String)
+        /// The user stopped this download. The entry stays until it is cleared,
+        /// so cancelling gives visible feedback rather than a vanishing row.
+        case cancelled
     }
 
     var isActive: Bool {
         switch status {
-        case .queued, .downloading: return true
-        case .finished, .failed: return false
+        case .queued, .downloading, .finalizing: return true
+        case .finished, .failed, .cancelled: return false
         }
     }
 }

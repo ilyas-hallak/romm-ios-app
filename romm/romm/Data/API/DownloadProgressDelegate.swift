@@ -37,16 +37,11 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
     private var receivedBytes: Int64 = 0
     private var response: URLResponse?
 
-    /// Rate is measured over a window rather than since the start, so a slow
-    /// patch late in a large download is actually visible.
-    private var windowStart: Date?
-    private var windowStartBytes: Int64 = 0
+    /// Measures transfer rate over a sliding window and throttles reporting.
+    private var rateMeter = TransferRateMeter()
+    /// Cached rate from the meter, to avoid recalculating if the caller needs it
+    /// after reporting is throttled.
     private var currentRate: Double?
-    private static let rateWindow: TimeInterval = 1.0
-
-    /// Throttled so a fast local server does not post thousands of updates.
-    private var lastReport: Date?
-    private static let reportInterval: TimeInterval = 0.1
 
     /// Body of a non-2xx response, so the caller can surface the server's message.
     private(set) var errorBody = Data()
@@ -105,8 +100,7 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
             try? FileManager.default.removeItem(at: destinationURL)
             FileManager.default.createFile(atPath: destinationURL.path, contents: nil)
             fileHandle = try FileHandle(forWritingTo: destinationURL)
-            windowStart = Date()
-            windowStartBytes = 0
+            rateMeter.start(at: Date())
         } catch {
             completionHandler(.cancel)
             finish(.failure(error))
@@ -153,17 +147,12 @@ final class DownloadProgressDelegate: PrivateNetworkURLSessionDelegate, URLSessi
     private func reportProgress() {
         let now = Date()
 
-        if let windowStart, now.timeIntervalSince(windowStart) >= Self.rateWindow {
-            let elapsed = now.timeIntervalSince(windowStart)
-            currentRate = Double(receivedBytes - windowStartBytes) / elapsed
-            self.windowStart = now
-            windowStartBytes = receivedBytes
+        if let rate = rateMeter.record(totalBytes: receivedBytes, at: now) {
+            currentRate = rate
         }
 
-        if let lastReport, now.timeIntervalSince(lastReport) < Self.reportInterval {
-            return
+        if rateMeter.shouldReport(at: now) {
+            progressHandler?(receivedBytes, expectedSize, currentRate)
         }
-        lastReport = now
-        progressHandler?(receivedBytes, expectedSize, currentRate)
     }
 }

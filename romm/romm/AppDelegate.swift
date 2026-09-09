@@ -16,7 +16,36 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // A previous run may have been killed while the screen was blanked for
         // TV play, which would leave the panel dark at brightness 0.
         PhoneScreenBlanker.shared.recoverIfNeeded()
+        // Downloads keep transferring while the app is gone, so the queue has to
+        // be reconciled with what the session actually still holds. This also
+        // runs when the app was only relaunched to be handed session events,
+        // which is exactly when the queue would otherwise be empty.
+        Task { @MainActor in
+            await DownloadQueueManager.shared.resumeInterruptedJobs()
+        }
         return true
+    }
+
+    /// The system relaunches the app in the background purely to deliver the
+    /// events of a background session, and faults it if the handler is not
+    /// called once they have all been dealt with.
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        // Isolation is assumed rather than hopped to, because the handler has to
+        // be taken before this method returns. UIKit calls it on the main thread.
+        MainActor.assumeIsolated {
+            let queue = DownloadQueueManager.shared
+            guard queue.handlesBackgroundSession(identifier: identifier) else {
+                // Not a session of ours, so nothing here is waiting on it.
+                Logger.data.warning("Background session events for unknown identifier: \(identifier)")
+                completionHandler()
+                return
+            }
+            queue.handleBackgroundSessionEvents(completionHandler: completionHandler)
+        }
     }
 
     func application(

@@ -128,6 +128,8 @@ final class FakeAPIClient: PRommAPIClient {
     func getPlatformFirmware(platformId: Int) async throws -> [FirmwareSchema] { fatalError("not used in these tests") }
     func downloadFirmwareContent(id: Int, fileName: String) async throws -> Data { fatalError("not used in these tests") }
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema { fatalError("not used in these tests") }
+    func makeDownloadRequest(path: String) throws -> URLRequest { fatalError("not used in these tests") }
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest { fatalError("not used in these tests") }
     func getStats() async throws -> StatsReturn { fatalError("not used in these tests") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("not used in these tests") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("not used in these tests") }
