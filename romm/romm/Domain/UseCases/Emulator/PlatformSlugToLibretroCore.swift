@@ -22,7 +22,7 @@ enum LibretroCore: String, Codable, Sendable {
         switch self {
         case .pcsxRearmed: return "PlayStation (PCSX ReARMed)"
         case .beetlePCEFast: return "PC Engine / TurboGrafx-16 (Beetle PCE FAST)"
-        case .genesisPlusGX: return "Sega Master System / Game Gear / CD (Genesis Plus GX)"
+        case .genesisPlusGX: return "Sega Mega Drive / Master System / Game Gear / CD (Genesis Plus GX)"
         case .flycast: return "Sega Dreamcast (Flycast)"
         case .ppsspp: return "PlayStation Portable (PPSSPP)"
         }
@@ -68,10 +68,15 @@ enum PlatformSlugToLibretroCore {
             || s.contains("turbografx") || s.contains("pc engine") || s.contains("pc-engine") {
             return .beetlePCEFast
         }
-        // Genesis Plus GX only serves the Sega systems Delta does NOT cover.
-        // Genesis/Mega Drive stay on DeltaCore (PlatformSlugToGameType wins first
-        // in LaunchEmulatorUseCase), so they are intentionally NOT mapped here.
-        if s == "sms" || s == "master-system" || s == "sega-master-system"
+        // Genesis Plus GX covers every Sega system up to Mega Drive, including
+        // Genesis/Mega Drive itself. Listing it here changes nothing where the
+        // Delta cores are present, PlatformSlugToGameType is asked first in
+        // LaunchEmulatorUseCase and keeps winning. It is what makes Mega Drive
+        // playable at all in the App Store build, which has no GPGXDeltaCore.
+        if s == "genesis-slash-megadrive" || s == "genesis" || s == "megadrive"
+            || s == "mega-drive" || s == "sega-genesis" || s == "md" || s == "smd"
+            || s.contains("mega drive") || s.contains("megadrive") || s.contains("genesis")
+            || s == "sms" || s == "master-system" || s == "sega-master-system"
             || s == "mark-iii" || s.contains("master system")
             || s == "gamegear" || s == "game-gear" || s == "gg" || s.contains("game gear")
             || s == "sg1000" || s == "sg-1000" || s.contains("sg-1000")

@@ -1,4 +1,5 @@
 import Foundation
+#if !APP_STORE
 import DeltaCore
 import GBADeltaCore
 import SNESDeltaCore
@@ -7,12 +8,19 @@ import NESDeltaCore
 import GBCDeltaCore
 import N64DeltaCore
 import MelonDSDeltaCore
+#endif
 
 enum AppBootstrap {
     static func run() {
         unbufferStandardOutput()
+        #if !APP_STORE
         registerNativeCores()
+        // DeltaCore's own MFi/keyboard controller tracking, which
+        // NativeEmulatorSession reads from. The libretro engine tracks
+        // controllers itself (see EmulatorControllerState), so this has
+        // nothing to warm up without Delta cores.
         ExternalGameControllerManager.shared.startMonitoring()
+        #endif
     }
 
     /// `print()` schreibt nach stdout, und stdout ist an einer Pipe (etwa
@@ -26,6 +34,7 @@ enum AppBootstrap {
         #endif
     }
 
+    #if !APP_STORE
     private static func registerNativeCores() {
         Delta.register(GBA.core)
         Delta.register(SNES.core)
@@ -35,4 +44,5 @@ enum AppBootstrap {
         Delta.register(N64.core)
         Delta.register(MelonDS.core)
     }
+    #endif
 }
