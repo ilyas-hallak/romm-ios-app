@@ -69,6 +69,54 @@ git submodule update --init --recursive
 
 Then open `romm/romm.xcodeproj` in Xcode and build.
 
+### Building on a device
+
+Building for the Simulator needs nothing extra. To run on a physical device you
+need your own Apple Developer team and a bundle identifier that is unique to you.
+The upstream `de.ilyashallak.*` identifiers are already registered to the
+maintainer and cannot be re-registered to your account.
+
+The project reads those two values from a gitignored `Signing.xcconfig`, so you
+never have to edit `project.pbxproj`:
+
+```sh
+cp romm/Config/Signing.xcconfig.template romm/Config/Signing.xcconfig
+```
+
+Then edit `romm/Config/Signing.xcconfig` and set:
+
+- `DEVELOPMENT_TEAM`, your 10-character Team ID (Xcode > Settings > Accounts, or
+  the Apple Developer site under Membership details)
+- `ROMM_BUNDLE_ID_PREFIX`, a reverse-DNS prefix only you use, e.g. `com.yourname`
+
+Signing is automatic, so Xcode registers the App ID and provisioning profile the
+first time you build to a connected device.
+
+#### The emulator core submodules
+
+`Signing.xcconfig` only applies to this project's targets, not to the DeltaCore
+projects under `Vendor/`. Several of those pin their own `DEVELOPMENT_TEAM`, so a
+device build needs your team applied to them too:
+
+- **Xcode (UI):** in each `Vendor/*/…xcodeproj`, select every target and set your
+  team under Signing & Capabilities. These edits stay in the submodule working
+  trees, don't commit them.
+- **Command line:** pass `DEVELOPMENT_TEAM` on the `xcodebuild` invocation. It
+  applies to every target in the graph, submodules included, so nothing under
+  `Vendor/` needs editing:
+
+  ```sh
+  xcodebuild -project romm/romm.xcodeproj -scheme romm \
+    -destination 'generic/platform=iOS' \
+    -allowProvisioningUpdates \
+    DEVELOPMENT_TEAM=YOURTEAMID \
+    build
+  ```
+
+  `Signing.xcconfig` is still required, it supplies the unique app bundle
+  identifier (`ROMM_BUNDLE_ID_PREFIX`) that no command-line override can set
+  per-target.
+
 ## Credits
 
 > *Standing on the shoulders of giants.*
