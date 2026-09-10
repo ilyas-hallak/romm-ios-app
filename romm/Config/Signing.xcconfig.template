@@ -1,0 +1,20 @@
+// Signing.xcconfig.template
+//
+// Copy this file to "Signing.xcconfig" in the same directory, then fill in your
+// own values to build romm on a physical device:
+//
+//     cp romm/Config/Signing.xcconfig.template romm/Config/Signing.xcconfig
+//
+// Signing.xcconfig is gitignored, so your team ID never lands in a commit and
+// you never have to edit romm.xcodeproj/project.pbxproj to build.
+
+// Your 10-character Apple Developer Team ID.
+// Find it in Xcode > Settings > Accounts (select your team), or at
+// https://developer.apple.com/account under Membership details.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+
+// A reverse-DNS prefix that is unique to you. A bundle identifier is global
+// across Apple's ecosystem, so the upstream "de.ilyashallak" prefix cannot be
+// registered to your team. Use something only you control, e.g. com.yourname.
+// The app then builds as <prefix>.rommanagerplus, tests as <prefix>.rommTests.
+ROMM_BUNDLE_ID_PREFIX = com.example

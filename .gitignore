@@ -1,6 +1,9 @@
 # Claude Code MCP config (contains secrets)
 .mcp.json
 
+# Per-developer code signing (team ID + bundle prefix), never commit
+romm/Config/Signing.xcconfig
+
 # Logs (may contain usernames, hostnames, tokens)
 *.log
 log.txt
