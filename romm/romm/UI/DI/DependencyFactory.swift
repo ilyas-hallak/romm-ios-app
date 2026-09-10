@@ -443,7 +443,7 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     // MARK: - Controller Skins
 
-    #if DELTA_CORES
+    #if !APP_STORE
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
     #else
     private lazy var controllerSkinInspector: PControllerSkinInspector = NoOpControllerSkinInspector()

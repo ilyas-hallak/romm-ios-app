@@ -9,7 +9,7 @@ import Foundation
 
 enum LaunchDecision: Identifiable {
     case web(rom: Rom)
-    #if DELTA_CORES
+    #if !APP_STORE
     case native(rom: Rom, gameType: DeltaGameType)
     #endif
     case libretro(rom: Rom, core: LibretroCore)
@@ -17,7 +17,7 @@ enum LaunchDecision: Identifiable {
     var id: String {
         switch self {
         case .web(let rom): return "web-\(rom.id)"
-        #if DELTA_CORES
+        #if !APP_STORE
         case .native(let rom, _): return "native-\(rom.id)"
         #endif
         case .libretro(let rom, _): return "libretro-\(rom.id)"
@@ -29,7 +29,7 @@ enum LaunchDecision: Identifiable {
     var supportsSaveStates: Bool {
         switch self {
         case .web: return false
-        #if DELTA_CORES
+        #if !APP_STORE
         case .native, .libretro: return true
         #else
         case .libretro: return true
@@ -113,12 +113,12 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             switch pref {
             case .web:
                 if supported.contains(.web) { return .web }
-                #if DELTA_CORES
+                #if !APP_STORE
                 return .native
                 #else
                 return .auto
                 #endif
-            #if DELTA_CORES
+            #if !APP_STORE
             case .native: return supported.contains(.native) ? .native : .web
             #endif
             case .auto: return platformSupport.preferred(for: platformSlug)
@@ -129,7 +129,7 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
         switch chosen {
         case .web:
             return .success(.web(rom: rom))
-        #if DELTA_CORES
+        #if !APP_STORE
         case .native:
             if let gameType = PlatformSlugToGameType.map(platformSlug) {
                 return .success(.native(rom: rom, gameType: gameType))

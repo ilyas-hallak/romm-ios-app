@@ -1,4 +1,4 @@
-#if DELTA_CORES
+#if !APP_STORE
 import SwiftUI
 
 struct EmulatorMenuSheet: View {

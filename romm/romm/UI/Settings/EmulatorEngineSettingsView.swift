@@ -23,7 +23,7 @@ private enum PlayChoice: Hashable {
     /// own, so they resolve to the one that does.
     private static func usableEngine(_ engine: EmulatorEngine) -> EmulatorEngine {
         guard AppFeatures.webEmulatorEnabled, engine == .web else {
-            #if DELTA_CORES
+            #if !APP_STORE
             return .native
             #else
             return .auto
@@ -214,7 +214,7 @@ struct EmulatorEngineSettingsView: View {
     }
 
     private var choices: [PlayChoice] {
-        #if DELTA_CORES
+        #if !APP_STORE
         var choices: [PlayChoice] = AppFeatures.webEmulatorEnabled
             ? [.builtIn(.web), .builtIn(.native)]
             : [.builtIn(.native)]
@@ -231,7 +231,7 @@ struct EmulatorEngineSettingsView: View {
         switch choice {
         case .builtIn(let engine):
             guard AppFeatures.webEmulatorEnabled else { return "Built-in emulator" }
-            #if DELTA_CORES
+            #if !APP_STORE
             return engine == .web ? "Web (EmulatorJS)" : "Native (DeltaCore, etc.)"
             #else
             return engine == .web ? "Web (EmulatorJS)" : "Native (libretro)"

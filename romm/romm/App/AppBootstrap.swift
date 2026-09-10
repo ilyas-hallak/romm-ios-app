@@ -1,5 +1,5 @@
 import Foundation
-#if DELTA_CORES
+#if !APP_STORE
 import DeltaCore
 import GBADeltaCore
 import SNESDeltaCore
@@ -13,7 +13,7 @@ import MelonDSDeltaCore
 enum AppBootstrap {
     static func run() {
         unbufferStandardOutput()
-        #if DELTA_CORES
+        #if !APP_STORE
         registerNativeCores()
         // DeltaCore's own MFi/keyboard controller tracking, which
         // NativeEmulatorSession reads from. The libretro engine tracks
@@ -34,7 +34,7 @@ enum AppBootstrap {
         #endif
     }
 
-    #if DELTA_CORES
+    #if !APP_STORE
     private static func registerNativeCores() {
         Delta.register(GBA.core)
         Delta.register(SNES.core)
