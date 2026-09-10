@@ -1,3 +1,4 @@
+#if DELTA_CORES
 import DeltaCore
 import GameController
 
@@ -182,3 +183,4 @@ final class NativeMenuShortcutInput: NSObject, GameControllerReceiver {
         }
     }
 }
+#endif

@@ -9,13 +9,17 @@ import Foundation
 
 enum LaunchDecision: Identifiable {
     case web(rom: Rom)
+    #if DELTA_CORES
     case native(rom: Rom, gameType: DeltaGameType)
+    #endif
     case libretro(rom: Rom, core: LibretroCore)
 
     var id: String {
         switch self {
         case .web(let rom): return "web-\(rom.id)"
+        #if DELTA_CORES
         case .native(let rom, _): return "native-\(rom.id)"
+        #endif
         case .libretro(let rom, _): return "libretro-\(rom.id)"
         }
     }
@@ -25,7 +29,11 @@ enum LaunchDecision: Identifiable {
     var supportsSaveStates: Bool {
         switch self {
         case .web: return false
+        #if DELTA_CORES
         case .native, .libretro: return true
+        #else
+        case .libretro: return true
+        #endif
         }
     }
 }
@@ -103,8 +111,16 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             + "supported=\(supported.map { $0.rawValue })")
         let chosen: EmulatorEngine = {
             switch pref {
-            case .web: return supported.contains(.web) ? .web : .native
+            case .web:
+                if supported.contains(.web) { return .web }
+                #if DELTA_CORES
+                return .native
+                #else
+                return .auto
+                #endif
+            #if DELTA_CORES
             case .native: return supported.contains(.native) ? .native : .web
+            #endif
             case .auto: return platformSupport.preferred(for: platformSlug)
             }
         }()
@@ -113,6 +129,7 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
         switch chosen {
         case .web:
             return .success(.web(rom: rom))
+        #if DELTA_CORES
         case .native:
             if let gameType = PlatformSlugToGameType.map(platformSlug) {
                 return .success(.native(rom: rom, gameType: gameType))
@@ -128,6 +145,19 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             return .failure(.unsupportedPlatform(platformSlug))
         case .auto:
             return .success(.web(rom: rom))
+        #else
+        case .auto:
+            // No Delta cores in this build: the only on-device engine is
+            // libretro, so this is where it is tried, falling back to web
+            // when the platform has no libretro core either.
+            if let core = PlatformSlugToLibretroCore.map(platformSlug) {
+                return .success(.libretro(rom: rom, core: core))
+            }
+            if AppFeatures.webEmulatorEnabled {
+                return .success(.web(rom: rom))
+            }
+            return .failure(.unsupportedPlatform(platformSlug))
+        #endif
         }
     }
 }

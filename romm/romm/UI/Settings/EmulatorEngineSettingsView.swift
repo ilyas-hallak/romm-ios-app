@@ -22,7 +22,13 @@ private enum PlayChoice: Hashable {
     /// `.auto`, and `.web` in builds without the web engine, have no row of their
     /// own, so they resolve to the one that does.
     private static func usableEngine(_ engine: EmulatorEngine) -> EmulatorEngine {
-        guard AppFeatures.webEmulatorEnabled, engine == .web else { return .native }
+        guard AppFeatures.webEmulatorEnabled, engine == .web else {
+            #if DELTA_CORES
+            return .native
+            #else
+            return .auto
+            #endif
+        }
         return .web
     }
 }
@@ -208,9 +214,15 @@ struct EmulatorEngineSettingsView: View {
     }
 
     private var choices: [PlayChoice] {
+        #if DELTA_CORES
         var choices: [PlayChoice] = AppFeatures.webEmulatorEnabled
             ? [.builtIn(.web), .builtIn(.native)]
             : [.builtIn(.native)]
+        #else
+        var choices: [PlayChoice] = AppFeatures.webEmulatorEnabled
+            ? [.builtIn(.web), .builtIn(.auto)]
+            : [.builtIn(.auto)]
+        #endif
         choices += pickableEmulators.map { .external($0) }
         return choices
     }
@@ -219,7 +231,11 @@ struct EmulatorEngineSettingsView: View {
         switch choice {
         case .builtIn(let engine):
             guard AppFeatures.webEmulatorEnabled else { return "Built-in emulator" }
+            #if DELTA_CORES
             return engine == .web ? "Web (EmulatorJS)" : "Native (DeltaCore, etc.)"
+            #else
+            return engine == .web ? "Web (EmulatorJS)" : "Native (libretro)"
+            #endif
         case .external(let id):
             return "External: \(id.emulator.displayName)"
         }

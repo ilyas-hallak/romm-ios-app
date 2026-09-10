@@ -1,3 +1,4 @@
+#if DELTA_CORES
 import Foundation
 import Observation
 import SwiftUI
@@ -125,3 +126,4 @@ final class NativeEmulatorViewModel {
         }
     }
 }
+#endif

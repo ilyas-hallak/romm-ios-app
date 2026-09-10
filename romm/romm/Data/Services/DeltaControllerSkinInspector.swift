@@ -1,3 +1,4 @@
+#if DELTA_CORES
 import Foundation
 import DeltaCore
 
@@ -26,3 +27,4 @@ final class DeltaControllerSkinInspector: PControllerSkinInspector {
         )
     }
 }
+#endif

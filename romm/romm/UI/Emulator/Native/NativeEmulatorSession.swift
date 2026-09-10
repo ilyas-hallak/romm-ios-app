@@ -1,3 +1,4 @@
+#if DELTA_CORES
 import Foundation
 import UIKit
 import AVFoundation
@@ -729,3 +730,4 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if DELTA_CORES
 import UIKit
 import AVFoundation
 import DeltaCore
@@ -45,3 +46,4 @@ final class ExternalGameScreenView: UIView {
         gameView.frame = AVMakeRect(aspectRatio: renderingSize, insideRect: bounds).integral
     }
 }
+#endif

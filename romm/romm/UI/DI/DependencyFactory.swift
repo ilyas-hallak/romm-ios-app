@@ -443,7 +443,11 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     // MARK: - Controller Skins
 
+    #if DELTA_CORES
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
+    #else
+    private lazy var controllerSkinInspector: PControllerSkinInspector = NoOpControllerSkinInspector()
+    #endif
     private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)
     private lazy var controllerSkinDownloader: PControllerSkinDownloader = ControllerSkinDownloadService()
     private lazy var controllerSkinPreference: PControllerSkinPreference = UserDefaultsControllerSkinPreferenceStore()

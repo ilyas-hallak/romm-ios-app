@@ -1,3 +1,4 @@
+#if DELTA_CORES
 import DeltaCore
 
 /// Rewrites a DeltaCore input mapping so the two pairs of face buttons drive
@@ -34,3 +35,4 @@ enum FaceButtonInputMapping {
         return mapping
     }
 }
+#endif

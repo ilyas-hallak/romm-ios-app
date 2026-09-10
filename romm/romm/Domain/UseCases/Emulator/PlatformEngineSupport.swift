@@ -21,16 +21,29 @@ final class PlatformEngineSupport: PPlatformEngineSupport {
         if AppFeatures.webEmulatorEnabled, webSupport.execute(platformSlug: slug) {
             result.insert(.web)
         }
+        #if DELTA_CORES
         if PlatformSlugToGameType.map(slug) != nil || PlatformSlugToLibretroCore.map(slug) != nil {
             result.insert(.native)
         }
+        #else
+        // No Delta cores in this build, so the only on-device engine is
+        // libretro. `.auto` doubles as the "some on-device engine can run
+        // this" flag here, since `.native` does not exist without DELTA_CORES.
+        if PlatformSlugToLibretroCore.map(slug) != nil {
+            result.insert(.auto)
+        }
+        #endif
         return result
     }
 
     func preferred(for platformSlug: String) -> EmulatorEngine {
         let supported = supportedEngines(for: platformSlug)
         if supported.contains(.web) { return .web }
+        #if DELTA_CORES
         return .native
+        #else
+        return .auto
+        #endif
     }
 
     func isEmulationAvailable(for platformSlug: String) -> Bool {

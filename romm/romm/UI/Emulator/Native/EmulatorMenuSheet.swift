@@ -1,3 +1,4 @@
+#if DELTA_CORES
 import SwiftUI
 
 struct EmulatorMenuSheet: View {
@@ -433,3 +434,4 @@ struct EmulatorErrorOverlay: View {
         .padding()
     }
 }
+#endif
