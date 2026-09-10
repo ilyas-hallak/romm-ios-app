@@ -223,6 +223,10 @@ struct SettingsView: View {
                             }
                         }
 
+                        NavigationLink(destination: RetroAchievementsCredentialsView()) {
+                            Label("Live achievement credentials", systemImage: "key.fill")
+                        }
+
                         Toggle(isOn: $cloudSyncSettings.isEnabled) {
                             HStack {
                                 Image(systemName: "icloud.and.arrow.up")
