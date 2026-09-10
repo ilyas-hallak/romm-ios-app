@@ -61,6 +61,7 @@ struct RomMapper {
             releaseYear: releaseYear,
             isFavourite: false, // Resolved separately via the Favourites collection
             hasRetroAchievements: apiRom.raId != nil,
+            retroAchievementsGameId: apiRom.raId,
             isPlayable: !apiRom.missingFromFs,
             sizeBytes: apiRom.fsSizeBytes,
             createdAt: DateFormatter.iso8601Full.string(from: apiRom.createdAt),

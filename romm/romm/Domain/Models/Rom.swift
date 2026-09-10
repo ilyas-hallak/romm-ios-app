@@ -41,6 +41,7 @@ struct Rom: Identifiable, Equatable {
     let releaseYear: Int?
     let isFavourite: Bool
     let hasRetroAchievements: Bool
+    let retroAchievementsGameId: Int?
     let isPlayable: Bool
     
     // Additional fields for table display
@@ -70,6 +71,7 @@ struct Rom: Identifiable, Equatable {
         releaseYear: Int? = nil,
         isFavourite: Bool = false,
         hasRetroAchievements: Bool = false,
+        retroAchievementsGameId: Int? = nil,
         isPlayable: Bool = false,
         sizeBytes: Int? = nil,
         createdAt: String? = nil,
@@ -92,6 +94,7 @@ struct Rom: Identifiable, Equatable {
         self.releaseYear = releaseYear
         self.isFavourite = isFavourite
         self.hasRetroAchievements = hasRetroAchievements
+        self.retroAchievementsGameId = retroAchievementsGameId
         self.isPlayable = isPlayable
         self.sizeBytes = sizeBytes
         self.createdAt = createdAt
