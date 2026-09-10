@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "44C746D77B0B1B8B8A265368"
-               BuildableName = "romm-AppStore.app"
+               BuildableName = "romm.app"
                BlueprintName = "romm-AppStore"
                ReferencedContainer = "container:romm.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "44C746D77B0B1B8B8A265368"
-            BuildableName = "romm-AppStore.app"
+            BuildableName = "romm.app"
             BlueprintName = "romm-AppStore"
             ReferencedContainer = "container:romm.xcodeproj">
          </BuildableReference>
@@ -54,7 +54,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "44C746D77B0B1B8B8A265368"
-            BuildableName = "romm-AppStore.app"
+            BuildableName = "romm.app"
             BlueprintName = "romm-AppStore"
             ReferencedContainer = "container:romm.xcodeproj">
          </BuildableReference>
@@ -71,7 +71,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "44C746D77B0B1B8B8A265368"
-            BuildableName = "romm-AppStore.app"
+            BuildableName = "romm.app"
             BlueprintName = "romm-AppStore"
             ReferencedContainer = "container:romm.xcodeproj">
          </BuildableReference>
