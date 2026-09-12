@@ -102,6 +102,9 @@ protocol PRommAPIClient {
     func getSaves(romId: Int) async throws -> [SaveSchema]
     func getStates(romId: Int) async throws -> [StateSchema]
 
+    // Tasks
+    func getTasksStatus() async throws -> [TaskStatusSchema]
+
     // Saves sync
     func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
     func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
