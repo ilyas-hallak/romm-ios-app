@@ -4,9 +4,8 @@
 //
 //  Created by Ilyas Hallak on 12.09.26.
 //
-//  Read-only view of the running/last library scan (issue #160). Starting a
-//  scan needs the server's Socket.IO endpoint, which this app does not speak
-//  yet, so the sheet only ever shows status.
+//  The library scan sheet (issue #160): the status of the last run, the live
+//  view of a running one, and the controls to start and stop a scan.
 //
 
 import SwiftUI
@@ -27,6 +26,12 @@ struct LibraryScanView: View {
                         .fontWeight(.semibold)
                     }
                 }
+                .safeAreaInset(edge: .bottom) {
+                    actionBar
+                }
+                .sheet(isPresented: $viewModel.isShowingCredentialsPrompt) {
+                    ScanCredentialsSheet(viewModel: viewModel)
+                }
                 .onAppear {
                     if viewModel.scan == nil && !viewModel.isLoading {
                         Task {
@@ -35,50 +40,135 @@ struct LibraryScanView: View {
                     }
                 }
                 .onDisappear {
+                    // The server keeps scanning, this only closes the socket
+                    // and stops polling.
                     viewModel.cancelAllTasks()
                 }
+        }
+        .sheet(isPresented: $viewModel.isShowingStartSheet) {
+            LibraryScanStartSheet(viewModel: viewModel)
         }
     }
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.isLoading && viewModel.scan == nil {
+        if viewModel.isLoading && viewModel.scan == nil && !viewModel.isLive {
             LoadingView("Loading scan status...", fillScreen: true)
-        } else if let errorMessage = viewModel.errorMessage {
+        } else if let errorMessage = viewModel.errorMessage, !viewModel.isLive {
             errorStateView(message: errorMessage)
-        } else if let scan = viewModel.scan {
-            scanContentView(scan: scan)
         } else {
-            emptyStateView
+            scanList
         }
     }
 
-    // MARK: - Content
+    // MARK: - List
 
     @ViewBuilder
-    private func scanContentView(scan: LibraryScanStatus) -> some View {
+    private var scanList: some View {
         List {
-            Section {
-                statusHeader(scan: scan)
-            }
-
-            if let stats = scan.stats {
+            if viewModel.isLive {
                 Section {
-                    statsGridSection(stats: stats)
+                    LibraryScanLiveHeader(platform: viewModel.currentPlatform, stats: viewModel.liveStats)
                 } header: {
-                    Text("Scan Results")
-                        .font(.headline)
+                    Text("Running now")
                 }
             }
 
-            Section {
-                footnoteView
+            if let notice = viewModel.scanNotice {
+                Section {
+                    noticeView(notice)
+                }
+            }
+
+            if let scan = viewModel.scan, !viewModel.isLive {
+                Section {
+                    statusHeader(scan: scan)
+                } header: {
+                    Text("Last scan")
+                }
+            }
+
+            if let stats = displayedStats {
+                Section {
+                    LibraryScanStatsGrid(stats: stats)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
+                } header: {
+                    Text(viewModel.isLive ? "Counters" : "Scan results")
+                }
+            }
+
+            if !viewModel.recentRoms.isEmpty {
+                Section {
+                    ForEach(viewModel.recentRoms) { rom in
+                        LibraryScanRomRow(rom: rom)
+                    }
+                } header: {
+                    Text("ROMs found")
+                } footer: {
+                    Text("The most recent \(LibraryScanViewModel.liveRomLimit) ROMs of this run, newest first.")
+                }
+            }
+
+            if viewModel.scan == nil && !viewModel.isLive && viewModel.scanNotice == nil {
+                Section {
+                    emptyStateView
+                        .listRowBackground(Color.clear)
+                }
             }
         }
         .refreshable {
             await viewModel.load()
         }
     }
+
+    private var displayedStats: LibraryScanStats? {
+        viewModel.liveStats ?? viewModel.scan?.stats
+    }
+
+    // MARK: - Action bar
+
+    @ViewBuilder
+    private var actionBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+
+            Button {
+                if viewModel.isScanRunning {
+                    viewModel.stopScan()
+                } else {
+                    viewModel.showStartSheet()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if viewModel.isStarting || viewModel.isStopping {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: viewModel.isScanRunning ? "stop.fill" : "play.fill")
+                    }
+                    Text(actionTitle)
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(viewModel.isScanRunning ? .red : .blue)
+            .disabled(viewModel.isStarting || viewModel.isStopping)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(.bar)
+    }
+
+    private var actionTitle: String {
+        if viewModel.isStarting { return "Starting..." }
+        if viewModel.isStopping { return "Stopping..." }
+        return viewModel.isScanRunning ? "Stop Scan" : "Start Scan"
+    }
+
+    // MARK: - Status
 
     @ViewBuilder
     private func statusHeader(scan: LibraryScanStatus) -> some View {
@@ -102,7 +192,7 @@ struct LibraryScanView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title(for: scan))
                         .font(.headline)
-                    Text("Scanning…")
+                    Text("Scanning, started elsewhere or earlier")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -110,9 +200,11 @@ struct LibraryScanView: View {
 
             if let stats = scan.stats, stats.totalRoms > 0 {
                 ProgressView(value: Double(stats.scannedRoms), total: Double(stats.totalRoms))
+                    .tint(.blue)
                 Text("\(stats.scannedRoms) of \(stats.totalRoms) ROMs scanned")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .monospacedDigit()
             }
 
             if let startedAt = scan.startedAt {
@@ -121,7 +213,7 @@ struct LibraryScanView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 
     private enum HeaderTone {
@@ -133,20 +225,26 @@ struct LibraryScanView: View {
     @ViewBuilder
     private func completedHeader(scan: LibraryScanStatus, tone: HeaderTone) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: tone == .failure ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.system(size: 18))
                     .foregroundColor(color(for: tone))
-                Text(title(for: scan))
-                    .font(.headline)
-            }
 
-            Text(tone == .failure ? "Scan failed" : "Completed")
-                .font(.subheadline)
-                .foregroundColor(color(for: tone))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title(for: scan))
+                        .font(.headline)
+
+                    Text(tone == .failure ? "Scan failed" : "Completed")
+                        .font(.caption)
+                        .foregroundColor(color(for: tone))
+                }
+
+                Spacer(minLength: 0)
+            }
 
             if let endedAt = scan.endedAt {
                 Text(endedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundColor(.secondary)
             }
 
@@ -154,9 +252,10 @@ struct LibraryScanView: View {
                 Text(note)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 
     /// The server labels each run itself, e.g. "Quick Scan" or "Complete Scan".
@@ -172,60 +271,40 @@ struct LibraryScanView: View {
         }
     }
 
+    // MARK: - Notices and states
+
     @ViewBuilder
-    private func statsGridSection(stats: LibraryScanStats) -> some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                StatCardView(icon: "gamecontroller", value: "\(stats.scannedPlatforms)", label: "Platforms Scanned")
-                StatCardView(icon: "plus.circle", value: "\(stats.newPlatforms)", label: "New Platforms")
-            }
-
-            HStack(spacing: 12) {
-                StatCardView(icon: "checkmark.circle", value: "\(stats.identifiedPlatforms)", label: "Identified Platforms")
-                StatCardView(icon: "opticaldisc", value: "\(stats.scannedRoms)", label: "ROMs Scanned")
-            }
-
-            HStack(spacing: 12) {
-                StatCardView(icon: "plus.circle", value: "\(stats.newRoms)", label: "New ROMs")
-                StatCardView(icon: "checkmark.circle", value: "\(stats.identifiedRoms)", label: "Identified ROMs")
-            }
-
-            HStack(spacing: 12) {
-                StatCardView(icon: "cpu", value: "\(stats.scannedFirmware)", label: "Firmware Scanned")
-                StatCardView(icon: "plus.circle", value: "\(stats.newFirmware)", label: "New Firmware")
-            }
+    private func noticeView(_ notice: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .foregroundColor(.blue)
+            Text(notice)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .padding(.horizontal)
+        .padding(.vertical, 4)
     }
-
-    // MARK: - Empty / Error states
 
     @ViewBuilder
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 12) {
             Image(systemName: "externaldrive.badge.questionmark")
-                .font(.system(size: 80))
+                .font(.system(size: 44))
                 .foregroundColor(.secondary)
 
-            VStack(spacing: 8) {
-                Text("No Library Scan")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+            Text("No Library Scan")
+                .font(.headline)
 
-                Text("No library scan has run yet.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            footnoteView
-                .padding(.top, 8)
+            Text("No scan has run yet. Start one to let the server pick up new files and metadata.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
     }
 
     @ViewBuilder
@@ -254,14 +333,6 @@ struct LibraryScanView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
-    }
-
-    @ViewBuilder
-    private var footnoteView: some View {
-        Text("Scans can currently only be started from the RomM web UI.")
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .multilineTextAlignment(.center)
     }
 
     // MARK: - Duration

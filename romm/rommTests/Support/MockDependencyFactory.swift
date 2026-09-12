@@ -29,6 +29,7 @@ class MockDependencyFactory: PDependencyFactory {
     var statsRepository: PStatsRepository
     var heartbeatRepository: PHeartbeatRepository
     var apiClient: PRommAPIClient
+    var tasksRepository: PTasksRepository
 
     // Side-effecting dependencies (disk, keychain, Core Data). These trap on
     // access unless a test injects a double, via the `_injected…` backing
@@ -79,6 +80,13 @@ class MockDependencyFactory: PDependencyFactory {
     private let _injectedFileValidationService: PFileValidationService?
     var fileValidationService: PFileValidationService {
         _injectedFileValidationService ?? { fatalError("PFileValidationService was not stubbed") }()
+    }
+
+    // Starting a scan logs in for a session cookie and opens a web socket, so
+    // there is no safe real implementation to fall back to.
+    private let _injectedScanRepository: PScanRepository?
+    var scanRepository: PScanRepository {
+        _injectedScanRepository ?? { fatalError("PScanRepository was not stubbed") }()
     }
 
     // Emulator engine
@@ -139,7 +147,8 @@ class MockDependencyFactory: PDependencyFactory {
         apiClient: PRommAPIClient? = nil,
         fileValidationService: PFileValidationService? = nil,
         transferHistoryRepository: PTransferHistoryRepository? = nil,
-        localROMRepository: PLocalROMRepository? = nil
+        localROMRepository: PLocalROMRepository? = nil,
+        scanRepository: PScanRepository? = nil
     ) {
         // Resolve the API client first so every server-only repository shares it.
         // Defaults to a harmless fake, never the production client.
@@ -155,6 +164,7 @@ class MockDependencyFactory: PDependencyFactory {
         self.collectionsRepository = collectionsRepository ?? CollectionsRepository(apiClient: resolvedAPIClient)
         self.statsRepository = statsRepository ?? StatsRepository(apiClient: resolvedAPIClient)
         self.heartbeatRepository = heartbeatRepository ?? HeartbeatRepository(apiClient: resolvedAPIClient)
+        self.tasksRepository = TasksRepository(apiClient: resolvedAPIClient)
 
         // Side-effecting dependencies: kept as injected doubles only. When a
         // test omits one, the corresponding property traps on access instead of
@@ -168,8 +178,25 @@ class MockDependencyFactory: PDependencyFactory {
         _injectedSFTPConnectionManager = sftpConnectionManager
         _injectedTransferHistoryRepository = transferHistoryRepository
         _injectedLocalROMRepository = localROMRepository
+        _injectedScanRepository = scanRepository
     }
     
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase {
+        GetLatestLibraryScanUseCase(tasksRepository: tasksRepository)
+    }
+
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase {
+        StartLibraryScanUseCase(scanRepository: scanRepository)
+    }
+
+    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase {
+        StopLibraryScanUseCase(scanRepository: scanRepository)
+    }
+
+    func makeSaveScanCredentialsUseCase() -> SaveScanCredentialsUseCase {
+        SaveScanCredentialsUseCase(scanRepository: scanRepository)
+    }
+
     func makeLogoutUseCase() -> LogoutUseCase {
         LogoutUseCase(authRepository: authRepository)
     }

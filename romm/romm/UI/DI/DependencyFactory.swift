@@ -21,6 +21,7 @@ protocol PDependencyFactory {
     var statsRepository: PStatsRepository { get }
     var heartbeatRepository: PHeartbeatRepository { get }
     var tasksRepository: PTasksRepository { get }
+    var scanRepository: PScanRepository { get }
 
     // Services
     var sftpKeychainService: PSFTPKeychainService { get }
@@ -48,6 +49,9 @@ protocol PDependencyFactory {
     func makeAddPlatformUseCase() -> AddPlatformUseCase
     func makeGetStatsUseCase() -> GetStatsUseCase
     func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase
+    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase
+    func makeSaveScanCredentialsUseCase() -> SaveScanCredentialsUseCase
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase
     func makeCheckServerVersionUseCase() -> CheckServerVersionUseCase
     func makeClearServerVersionUseCase() -> ClearServerVersionUseCase
@@ -176,6 +180,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
     lazy var tasksRepository: PTasksRepository = TasksRepository(apiClient: apiClient)
+    lazy var scanRepository: PScanRepository = ScanRepository(
+        apiClient: apiClient,
+        tokenProvider: tokenProvider,
+        sessionProvider: scanSessionProvider
+    )
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
     
     // MARK: - Services (Singletons)
@@ -194,6 +203,10 @@ class DefaultDependencyFactory: PDependencyFactory {
     }()
     lazy var apiClient: PRommAPIClient = RommAPIClient.shared
     lazy var tokenProvider: PTokenProvider = TokenProvider()
+    lazy var scanSessionProvider: PScanSessionProvider = ScanSessionProvider(
+        apiClient: apiClient,
+        tokenProvider: tokenProvider
+    )
 
     private init() {}
     
@@ -267,6 +280,18 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase {
         GetLatestLibraryScanUseCase(tasksRepository: tasksRepository)
+    }
+
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase {
+        StartLibraryScanUseCase(scanRepository: scanRepository)
+    }
+
+    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase {
+        StopLibraryScanUseCase(scanRepository: scanRepository)
+    }
+
+    func makeSaveScanCredentialsUseCase() -> SaveScanCredentialsUseCase {
+        SaveScanCredentialsUseCase(scanRepository: scanRepository)
     }
 
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase {

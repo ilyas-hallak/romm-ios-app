@@ -143,6 +143,8 @@ final class FakeAPIClient: PRommAPIClient {
     func deleteStates(ids: [Int]) async throws {}
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("not used in these tests") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("not used in these tests") }
+    func getTasksStatus() async throws -> [TaskStatusSchema] { fatalError("not used in these tests") }
+    func login(username: String, password: String) async throws -> RommSessionCookie { fatalError("not used in these tests") }
 }
 
 // MARK: - Fixtures
