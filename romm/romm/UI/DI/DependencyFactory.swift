@@ -20,6 +20,7 @@ protocol PDependencyFactory {
     var localROMRepository: PLocalROMRepository { get }
     var statsRepository: PStatsRepository { get }
     var heartbeatRepository: PHeartbeatRepository { get }
+    var tasksRepository: PTasksRepository { get }
 
     // Services
     var sftpKeychainService: PSFTPKeychainService { get }
@@ -46,6 +47,7 @@ protocol PDependencyFactory {
     func makeGetPlatformsUseCase() -> GetPlatformsUseCase
     func makeAddPlatformUseCase() -> AddPlatformUseCase
     func makeGetStatsUseCase() -> GetStatsUseCase
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase
     func makeCheckServerVersionUseCase() -> CheckServerVersionUseCase
     func makeClearServerVersionUseCase() -> ClearServerVersionUseCase
@@ -173,6 +175,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var localROMRepository: PLocalROMRepository = LocalROMRepository()
     lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
+    lazy var tasksRepository: PTasksRepository = TasksRepository(apiClient: apiClient)
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
     
     // MARK: - Services (Singletons)
@@ -260,6 +263,10 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeGetStatsUseCase() -> GetStatsUseCase {
         GetStatsUseCase(statsRepository: statsRepository)
+    }
+
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase {
+        GetLatestLibraryScanUseCase(tasksRepository: tasksRepository)
     }
 
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase {
