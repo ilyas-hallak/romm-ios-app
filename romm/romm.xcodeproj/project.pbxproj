@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		10C51B019C7A71C8120F0423 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		11C6C5129B71C8033FBCE239 /* ppsspp_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		2A01DADE8F42BC494C6265CE /* FAQ.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DFA9001000000000000F101 /* FAQ.md */; };
+		38AFEA70627FEE5C26D970EC /* PPSSPPAssets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */; };
+		4078AF6F8ABF7BDBBDDF6712 /* OpenGLES.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DBEEF00000000000000F001 /* OpenGLES.framework */; };
 		5D2C4E1F2F7B9A43009CF871 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 5D2C4E1E2F7B9A43009CF871 /* SWCompression */; };
 		5D7501352E97A35300DAE612 /* mft.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D2B9D032E5BA8C200F5233E /* mft.xcframework */; };
 		5D7501362E97A35300DAE612 /* mft.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D2B9D032E5BA8C200F5233E /* mft.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -28,21 +33,33 @@
 		5D9D918E2E5F8F21009AF769 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 5D9D918D2E5F8F21009AF769 /* Kingfisher */; };
 		5DAA110000000007ABCD0007 /* SNESDeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; };
 		5DAA110000000008ABCD0008 /* SNESDeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DAA110000000003ABCD0003 /* SNESDeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		5DBEEF00000000000000F002 /* OpenGLES.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DBEEF00000000000000F001 /* OpenGLES.framework */; };
+		5DCA1106000000000000C102 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
+		5DCB1107000000000000D103 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
 		5DF893F92FB7D26D0083B111 /* DeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF893F82FB7D26D0083B111 /* DeltaCore.framework */; };
 		5DF893FA2FB7D26D0083B111 /* DeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF893F82FB7D26D0083B111 /* DeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5DF893FB2FB7D26D0083B111 /* GBADeltaCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF893F52FB7D2210083B111 /* GBADeltaCore.framework */; };
 		5DF893FC2FB7D26D0083B111 /* GBADeltaCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF893F52FB7D2210083B111 /* GBADeltaCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5DF8940F2FB7D79F0083B111 /* ZIPFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */; };
 		5DF894102FB7D79F0083B111 /* ZIPFoundation.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		5DFA9001000000000000F102 /* FAQ.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DFA9001000000000000F101 /* FAQ.md */; };
+		5F377B151F5F80FFF7CC8A48 /* ZIPFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */; };
+		733F4F093824A9185F0DA895 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D93A8932FC2419700086CE8 /* pcsx_rearmed_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		8687569EE06EC8E5672B0228 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 5D9D918D2E5F8F21009AF769 /* Kingfisher */; };
+		9C0D7485625EE79123E8A6BE /* ZIPFoundation.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		9FD1BD8998A461A6E0D29968 /* mft.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5D2B9D032E5BA8C200F5233E /* mft.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE01 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE11 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE21 /* flycast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE22 /* flycast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE31 /* ppsspp_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE41 /* PPSSPPAssets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */; };
-		5DCA1106000000000000C102 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
-		5DFA9001000000000000F102 /* FAQ.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DFA9001000000000000F101 /* FAQ.md */; };
-		5DCB1107000000000000D103 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
-		5DBEEF00000000000000F002 /* OpenGLES.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DBEEF00000000000000F001 /* OpenGLES.framework */; };
+		B15E618AAC568C724782CEBF /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
+		B2C50E58DD04BAFE1871D2DB /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 06AE83611D07CF381A3FF1E6 /* Foundation.framework */; };
+		C76A342286C84AAC02000105 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 5D2C4E1E2F7B9A43009CF871 /* SWCompression */; };
+		CC634C86D707B1E1E0BD66A1 /* mft.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D2B9D032E5BA8C200F5233E /* mft.xcframework */; };
+		CE9DA7E6DD79A81FA79C5B94 /* flycast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE22 /* flycast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		E05BBBE9B7CD8AFFE493D063 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		E2B20CAE412AED44C8EBF1B4 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 5DCA1106000000000000C101 /* CHANGELOG.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -167,9 +184,27 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		964D919EAE31F36E26039BC3 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				9C0D7485625EE79123E8A6BE /* ZIPFoundation.framework in Embed Frameworks */,
+				9FD1BD8998A461A6E0D29968 /* mft.xcframework in Embed Frameworks */,
+				733F4F093824A9185F0DA895 /* pcsx_rearmed_libretro_ios.framework in Embed Frameworks */,
+				10C51B019C7A71C8120F0423 /* mednafen_pce_fast_libretro_ios.framework in Embed Frameworks */,
+				E05BBBE9B7CD8AFFE493D063 /* genesis_plus_gx_libretro_ios.framework in Embed Frameworks */,
+				CE9DA7E6DD79A81FA79C5B94 /* flycast_libretro_ios.framework in Embed Frameworks */,
+				11C6C5129B71C8033FBCE239 /* ppsspp_libretro_ios.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		06AE83611D07CF381A3FF1E6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		5D2B9D032E5BA8C200F5233E /* mft.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:8J69P655GN:Ilyas Hallak"; lastKnownFileType = wrapper.xcframework; name = mft.xcframework; path = "../../mft 2025-08-24 21-54-12/mft.xcframework"; sourceTree = "<group>"; };
 		5D93A11E2FBF55AE00086CE8 /* GPGXDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GPGXDeltaCore.xcodeproj; path = ../Vendor/GPGXDeltaCore/GPGXDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5D93A1342FBF67DB00086CE8 /* NESDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = NESDeltaCore.xcodeproj; path = ../Vendor/NESDeltaCore/NESDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
@@ -181,20 +216,28 @@
 		5DA7E4332E43D872003680D9 /* rommTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rommTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DA7E43D2E43D872003680D9 /* rommUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rommUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DAA110000000001ABCD0001 /* SNESDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = SNESDeltaCore.xcodeproj; path = ../Vendor/SNESDeltaCore/SNESDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
+		5DBEEF00000000000000F001 /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = System/Library/Frameworks/OpenGLES.framework; sourceTree = SDKROOT; };
+		5DCA1106000000000000C101 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = CHANGELOG.md; path = ../CHANGELOG.md; sourceTree = SOURCE_ROOT; };
 		5DF893EB2FB7D2200083B111 /* GBADeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GBADeltaCore.xcodeproj; path = ../Vendor/GBADeltaCore/GBADeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5DF893F82FB7D26D0083B111 /* DeltaCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = DeltaCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DF8940E2FB7D79F0083B111 /* ZIPFoundation.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ZIPFoundation.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		5DFA9001000000000000F101 /* FAQ.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = FAQ.md; path = ../FAQ.md; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F600000000CE02 /* mednafen_pce_fast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = mednafen_pce_fast_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE12 /* genesis_plus_gx_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = genesis_plus_gx_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE22 /* flycast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = flycast_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = ppsspp_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = PPSSPPAssets; sourceTree = "<group>"; };
-		5DCA1106000000000000C101 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = CHANGELOG.md; path = ../CHANGELOG.md; sourceTree = SOURCE_ROOT; };
-		5DFA9001000000000000F101 /* FAQ.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = FAQ.md; path = ../FAQ.md; sourceTree = SOURCE_ROOT; };
-		5DBEEF00000000000000F001 /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = System/Library/Frameworks/OpenGLES.framework; sourceTree = SDKROOT; };
+		DFF3D5729B89724B00B1BE2E /* romm-AppStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "romm-AppStore.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4CCBE615E17EA98620016109 /* Exceptions for "romm" folder in "romm-AppStore" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 44C746D77B0B1B8B8A265368 /* romm-AppStore */;
+		};
 		5DC8DCDD2E453EC1009DD0CA /* Exceptions for "romm" folder in "romm" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -209,17 +252,22 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				5DC8DCDD2E453EC1009DD0CA /* Exceptions for "romm" folder in "romm" target */,
+				4CCBE615E17EA98620016109 /* Exceptions for "romm" folder in "romm-AppStore" target */,
 			);
 			path = romm;
 			sourceTree = "<group>";
 		};
 		5DA7E4362E43D872003680D9 /* rommTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = rommTests;
 			sourceTree = "<group>";
 		};
 		5DA7E4402E43D872003680D9 /* rommUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = rommUITests;
 			sourceTree = "<group>";
 		};
@@ -263,9 +311,38 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8710F702895FEFB7BA2E10E3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2C50E58DD04BAFE1871D2DB /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE4E598EB5AE0EBB4E9E0A29 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8687569EE06EC8E5672B0228 /* Kingfisher in Frameworks */,
+				B15E618AAC568C724782CEBF /* MarkdownUI in Frameworks */,
+				C76A342286C84AAC02000105 /* SWCompression in Frameworks */,
+				CC634C86D707B1E1E0BD66A1 /* mft.xcframework in Frameworks */,
+				5F377B151F5F80FFF7CC8A48 /* ZIPFoundation.framework in Frameworks */,
+				4078AF6F8ABF7BDBBDDF6712 /* OpenGLES.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		487AE467C1FEAC706A5C14C5 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				06AE83611D07CF381A3FF1E6 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		5D2B9D022E5BA8C200F5233E /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -273,6 +350,7 @@
 				5DF893F82FB7D26D0083B111 /* DeltaCore.framework */,
 				5D2B9D032E5BA8C200F5233E /* mft.xcframework */,
 				5DBEEF00000000000000F001 /* OpenGLES.framework */,
+				487AE467C1FEAC706A5C14C5 /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -360,6 +438,7 @@
 				5DA7E4202E43D870003680D9 /* romm.app */,
 				5DA7E4332E43D872003680D9 /* rommTests.xctest */,
 				5DA7E43D2E43D872003680D9 /* rommUITests.xctest */,
+				DFF3D5729B89724B00B1BE2E /* romm-AppStore.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -383,6 +462,32 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		44C746D77B0B1B8B8A265368 /* romm-AppStore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF8C7D112365ABCE7F458695 /* Build configuration list for PBXNativeTarget "romm-AppStore" */;
+			buildPhases = (
+				8E084055CB36C06A2CE3DB01 /* Sources */,
+				AE4E598EB5AE0EBB4E9E0A29 /* Frameworks */,
+				356A549C035586F937316BDA /* Resources */,
+				964D919EAE31F36E26039BC3 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5DA7E4222E43D870003680D9 /* romm */,
+			);
+			name = "romm-AppStore";
+			packageProductDependencies = (
+				5D9D918D2E5F8F21009AF769 /* Kingfisher */,
+				5DCB1107000000000000D102 /* MarkdownUI */,
+				5D2C4E1E2F7B9A43009CF871 /* SWCompression */,
+			);
+			productName = "romm-AppStore";
+			productReference = DFF3D5729B89724B00B1BE2E /* romm-AppStore.app */;
+			productType = "com.apple.product-type.application";
+		};
 		5DA7E41F2E43D870003680D9 /* romm */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5DA7E4472E43D872003680D9 /* Build configuration list for PBXNativeTarget "romm" */;
@@ -428,8 +533,6 @@
 				5DA7E4362E43D872003680D9 /* rommTests */,
 			);
 			name = rommTests;
-			packageProductDependencies = (
-			);
 			productName = rommTests;
 			productReference = 5DA7E4332E43D872003680D9 /* rommTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -451,8 +554,6 @@
 				5DA7E4402E43D872003680D9 /* rommUITests */,
 			);
 			name = rommUITests;
-			packageProductDependencies = (
-			);
 			productName = rommUITests;
 			productReference = 5DA7E43D2E43D872003680D9 /* rommUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -533,6 +634,7 @@
 				5DA7E41F2E43D870003680D9 /* romm */,
 				5DA7E4322E43D872003680D9 /* rommTests */,
 				5DA7E43C2E43D872003680D9 /* rommUITests */,
+				44C746D77B0B1B8B8A265368 /* romm-AppStore */,
 			);
 		};
 /* End PBXProject section */
@@ -604,6 +706,16 @@
 /* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
+		356A549C035586F937316BDA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E2B20CAE412AED44C8EBF1B4 /* CHANGELOG.md in Resources */,
+				2A01DADE8F42BC494C6265CE /* FAQ.md in Resources */,
+				38AFEA70627FEE5C26D970EC /* PPSSPPAssets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5DA7E41E2E43D870003680D9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -628,6 +740,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E3FB0A2D3C744B10AF65D3B2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -646,6 +765,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5DA7E4392E43D872003680D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E084055CB36C06A2CE3DB01 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1911746251615C1CFF895DC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -830,6 +963,7 @@
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "romm/romm-Bridging-Header.h";
@@ -875,6 +1009,7 @@
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "romm/romm-Bridging-Header.h";
@@ -974,6 +1109,98 @@
 			};
 			name = Release;
 		};
+		98EB8430DBDEB59FACD6A95B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = romm/romm.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 41;
+				DEVELOPMENT_TEAM = 8J69P655GN;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = romm/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Romm;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.ilyashallak.rommanagerplus;
+				PRODUCT_NAME = romm;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) APP_STORE";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "romm/romm-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				XROS_DEPLOYMENT_TARGET = 2.5;
+			};
+			name = Release;
+		};
+		ED5326288E0E535AF33F3573 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = romm/romm.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 41;
+				DEVELOPMENT_TEAM = 8J69P655GN;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = romm/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Romm;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.ilyashallak.rommanagerplus;
+				PRODUCT_NAME = romm;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) APP_STORE";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "romm/romm-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				XROS_DEPLOYMENT_TARGET = 2.5;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1009,6 +1236,15 @@
 			buildConfigurations = (
 				5DA7E44E2E43D872003680D9 /* Debug */,
 				5DA7E44F2E43D872003680D9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DF8C7D112365ABCE7F458695 /* Build configuration list for PBXNativeTarget "romm-AppStore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				98EB8430DBDEB59FACD6A95B /* Release */,
+				ED5326288E0E535AF33F3573 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
