@@ -584,7 +584,7 @@ struct SetupView: View {
                 .buttonStyle(.plain)
                 .disabled(!viewModel.deviceFlowButtonEnabled)
 
-                Text("Approve this device in your browser — no password needed.")
+                Text("Approve this device in your browser, no password needed.")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.5))
                     .multilineTextAlignment(.center)
