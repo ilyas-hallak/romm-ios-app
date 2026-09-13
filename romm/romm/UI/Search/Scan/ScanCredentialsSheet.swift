@@ -11,7 +11,7 @@ import SwiftUI
 /// server only lets a scan start from a real session, and a session needs a
 /// username and password.
 struct ScanCredentialsSheet: View {
-    @Bindable var viewModel: LibraryScanViewModel
+    let prompt: ScanCredentialsPromptPresenter
 
     @State private var username = ""
     @State private var password = ""
@@ -45,7 +45,7 @@ struct ScanCredentialsSheet: View {
                     Text("Starting a scan needs a server session, which the server only hands out for a username and password. They are stored in the keychain and used for nothing else.")
                 }
 
-                if let notice = viewModel.credentialsNotice {
+                if let notice = prompt.retryReason {
                     Section {
                         Label(notice, systemImage: "exclamationmark.triangle.fill")
                             .font(.subheadline)
@@ -58,7 +58,7 @@ struct ScanCredentialsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        viewModel.dismissCredentialsPrompt()
+                        prompt.cancel()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -79,7 +79,10 @@ struct ScanCredentialsSheet: View {
 
     private func submit() {
         guard canSubmit else { return }
-        viewModel.submitCredentials(username: username, password: password)
+        prompt.submit(
+            username: username.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: password
+        )
         password = ""
     }
 }

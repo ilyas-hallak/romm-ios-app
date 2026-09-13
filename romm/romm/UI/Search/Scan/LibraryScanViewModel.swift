@@ -11,7 +11,7 @@ import Observation
 /// Holds the live scan task outside the main actor's isolation so `deinit` can
 /// cancel it. Cancelling the task ends the event stream, which closes the
 /// socket, and a socket left open keeps the server's scan session alive.
-final class ScanTaskHandle: @unchecked Sendable {
+nonisolated final class ScanTaskHandle: @unchecked Sendable {
     private let lock = NSLock()
     private var task: Task<Void, Never>?
 
@@ -57,14 +57,13 @@ class LibraryScanViewModel {
     /// The server's own word on the run, e.g. that a scan is already going.
     var scanNotice: String?
 
-    // Credentials prompt
-    var isShowingCredentialsPrompt = false
-    var credentialsNotice: String?
+    /// Only handed to the view so it can put the sheet on screen. The scan
+    /// flow itself never touches it, the session provider drives the prompt.
+    let credentialsPrompt: ScanCredentialsPromptPresenter
 
     private let getLatestLibraryScanUseCase: GetLatestLibraryScanUseCase
     private let startLibraryScanUseCase: StartLibraryScanUseCase
     private let stopLibraryScanUseCase: StopLibraryScanUseCase
-    private let saveScanCredentialsUseCase: SaveScanCredentialsUseCase
     private let getPlatformsUseCase: GetPlatformsUseCase
 
     private var pollingTask: Task<Void, Never>?
@@ -74,8 +73,8 @@ class LibraryScanViewModel {
         self.getLatestLibraryScanUseCase = factory.makeGetLatestLibraryScanUseCase()
         self.startLibraryScanUseCase = factory.makeStartLibraryScanUseCase()
         self.stopLibraryScanUseCase = factory.makeStopLibraryScanUseCase()
-        self.saveScanCredentialsUseCase = factory.makeSaveScanCredentialsUseCase()
         self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
+        self.credentialsPrompt = factory.scanCredentialsPrompt
     }
 
     deinit {
@@ -192,33 +191,12 @@ class LibraryScanViewModel {
             defer { isStopping = false }
             do {
                 try await stopLibraryScanUseCase.execute()
-            } catch let error as ScanAuthError {
-                handle(authError: error)
+            } catch is CancellationError {
+                // The user dismissed the sign-in prompt, that is not an error.
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
-    }
-
-    // MARK: - Credentials
-
-    func submitCredentials(username: String, password: String) {
-        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedUsername.isEmpty, !password.isEmpty else { return }
-
-        do {
-            try saveScanCredentialsUseCase.execute(username: trimmedUsername, password: password)
-            isShowingCredentialsPrompt = false
-            credentialsNotice = nil
-            startScan()
-        } catch {
-            credentialsNotice = error.localizedDescription
-        }
-    }
-
-    func dismissCredentialsPrompt() {
-        isShowingCredentialsPrompt = false
-        credentialsNotice = nil
     }
 
     // MARK: - Live feed
@@ -232,14 +210,15 @@ class LibraryScanViewModel {
             liveScanTask.replace(with: Task { [weak self] in
                 for await event in events {
                     guard let self else { return }
-                    await self.apply(event: event)
+                    self.apply(event: event)
                 }
                 guard let self else { return }
                 await self.finishLiveRun()
             })
-        } catch let error as ScanAuthError {
+        } catch is CancellationError {
+            // The user dismissed the sign-in prompt, so there is nothing to
+            // report and nothing to run.
             isStarting = false
-            handle(authError: error)
         } catch {
             isStarting = false
             errorMessage = error.localizedDescription
@@ -280,19 +259,6 @@ class LibraryScanViewModel {
         isLive = false
         currentPlatform = nil
         await load()
-    }
-
-    private func handle(authError: ScanAuthError) {
-        switch authError {
-        case .credentialsRequired:
-            credentialsNotice = nil
-            isShowingCredentialsPrompt = true
-        case .credentialsRejected:
-            credentialsNotice = authError.errorDescription
-            isShowingCredentialsPrompt = true
-        case .serverNotConfigured, .sessionCookieMissing:
-            errorMessage = authError.errorDescription
-        }
     }
 
     // MARK: - Polling

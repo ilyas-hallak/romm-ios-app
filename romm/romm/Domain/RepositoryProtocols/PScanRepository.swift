@@ -16,8 +16,4 @@ protocol PScanRepository {
     /// Asks the server to stop the running scan. Works whether the scan was
     /// started from this app or somewhere else.
     func stopScan() async throws
-
-    /// Stores the credentials a scan session needs, for the case where the app
-    /// signed in with a token and has no password on hand.
-    func saveScanCredentials(username: String, password: String) throws
 }

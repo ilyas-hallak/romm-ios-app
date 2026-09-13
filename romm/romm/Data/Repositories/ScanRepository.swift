@@ -102,10 +102,6 @@ class ScanRepository: PScanRepository {
         await client.disconnect()
     }
 
-    func saveScanCredentials(username: String, password: String) throws {
-        try sessionProvider.saveCredentials(username: username, password: password)
-    }
-
     /// Every metadata source the server has configured, which is the web UI's
     /// default too. The app deliberately has no source picker, the scan sheet
     /// only asks for a scan type and platforms.

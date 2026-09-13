@@ -7,21 +7,15 @@
 
 import Foundation
 
-/// Starting a scan needs a server session, which only a username and password
-/// can create. Token and browser sign-ins do not carry one, hence the extra
-/// prompt these errors drive.
+/// What can go wrong on the way to a scan session, beyond the credentials
+/// themselves. A refused password never surfaces here, the session provider
+/// asks again instead.
 enum ScanAuthError: LocalizedError, Equatable {
-    case credentialsRequired
-    case credentialsRejected
     case serverNotConfigured
     case sessionCookieMissing
 
     var errorDescription: String? {
         switch self {
-        case .credentialsRequired:
-            return "Starting a scan needs your RomM username and password."
-        case .credentialsRejected:
-            return "The server did not accept these credentials."
         case .serverNotConfigured:
             return "No server is configured."
         case .sessionCookieMissing:

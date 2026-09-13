@@ -88,6 +88,7 @@ class MockDependencyFactory: PDependencyFactory {
     var scanRepository: PScanRepository {
         _injectedScanRepository ?? { fatalError("PScanRepository was not stubbed") }()
     }
+    lazy var scanCredentialsPrompt = ScanCredentialsPromptPresenter()
 
     // Emulator engine
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
@@ -191,10 +192,6 @@ class MockDependencyFactory: PDependencyFactory {
 
     func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase {
         StopLibraryScanUseCase(scanRepository: scanRepository)
-    }
-
-    func makeSaveScanCredentialsUseCase() -> SaveScanCredentialsUseCase {
-        SaveScanCredentialsUseCase(scanRepository: scanRepository)
     }
 
     func makeLogoutUseCase() -> LogoutUseCase {

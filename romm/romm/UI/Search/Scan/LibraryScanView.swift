@@ -29,8 +29,8 @@ struct LibraryScanView: View {
                 .safeAreaInset(edge: .bottom) {
                     actionBar
                 }
-                .sheet(isPresented: $viewModel.isShowingCredentialsPrompt) {
-                    ScanCredentialsSheet(viewModel: viewModel)
+                .sheet(isPresented: credentialsPromptBinding) {
+                    ScanCredentialsSheet(prompt: viewModel.credentialsPrompt)
                 }
                 .onAppear {
                     if viewModel.scan == nil && !viewModel.isLoading {
@@ -48,6 +48,19 @@ struct LibraryScanView: View {
         .sheet(isPresented: $viewModel.isShowingStartSheet) {
             LibraryScanStartSheet(viewModel: viewModel)
         }
+    }
+
+    /// Every way the sheet can close, the cancel button and a swipe alike,
+    /// has to answer the pending request or the scan waits forever.
+    private var credentialsPromptBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.credentialsPrompt.isPresented },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.credentialsPrompt.cancel()
+                }
+            }
+        )
     }
 
     @ViewBuilder
