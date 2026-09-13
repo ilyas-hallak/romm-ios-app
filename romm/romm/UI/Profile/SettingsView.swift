@@ -27,6 +27,26 @@ struct SettingsView: View {
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
+
+    /// The App Store build ships the libretro cores as a regular feature, so the
+    /// section belongs to that target rather than to the receipt the build was
+    /// installed with. Everywhere else it stays the TestFlight/Debug experiment
+    /// it has been.
+    private var showsEmulatorSection: Bool {
+        #if APP_STORE
+        return true
+        #else
+        return Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild
+        #endif
+    }
+
+    private var emulatorSectionFooter: String {
+        #if APP_STORE
+        return "Play ROMs directly in the app, or hand them to an emulator app you already have."
+        #else
+        return "Experimental: play ROMs directly in the app. Only available in TestFlight and Debug builds."
+        #endif
+    }
     
     var body: some View {
         @Bindable var profileVM = profileViewModel
@@ -166,8 +186,8 @@ struct SettingsView: View {
                 }
             }
 
-            // Emulator Section (TestFlight & Debug only)
-            if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
+            // Emulator Section
+            if showsEmulatorSection {
                 Section {
                     Toggle(isOn: $experimentalSettings.isEmulatorEnabled) {
                         HStack {
@@ -189,6 +209,12 @@ struct SettingsView: View {
                             }
                         }
 
+                        // Skins need a DeltaCore to inspect the .deltaskin, which
+                        // the App Store build does not have, and BIOS images stay
+                        // out of that build entirely. Dropping the rows here means
+                        // PlayStation and Dreamcast have no way to get their
+                        // mandatory BIOS there, see LibretroBIOSRequirement.
+                        #if !APP_STORE
                         NavigationLink(destination: BIOSSettingsView()) {
                             HStack {
                                 Image(systemName: "cpu")
@@ -202,6 +228,7 @@ struct SettingsView: View {
                                 Text("Controller Skins")
                             }
                         }
+                        #endif
 
                         NavigationLink(destination: ExternalDisplaySettingsView()) {
                             HStack {
@@ -238,7 +265,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Emulator")
                 } footer: {
-                    Text("Experimental: play ROMs directly in the app. Only available in TestFlight and Debug builds.")
+                    Text(emulatorSectionFooter)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
