@@ -209,12 +209,9 @@ struct SettingsView: View {
                             }
                         }
 
-                        // Skins need a DeltaCore to inspect the .deltaskin, which
-                        // the App Store build does not have, and BIOS images stay
-                        // out of that build entirely. Dropping the rows here means
-                        // PlayStation and Dreamcast have no way to get their
-                        // mandatory BIOS there, see LibretroBIOSRequirement.
-                        #if !APP_STORE
+                        // Stays in every build: PlayStation and Dreamcast do not
+                        // start without their BIOS, see LibretroBIOSRequirement,
+                        // and the libretro cores ship App Store side too.
                         NavigationLink(destination: BIOSSettingsView()) {
                             HStack {
                                 Image(systemName: "cpu")
@@ -222,6 +219,10 @@ struct SettingsView: View {
                             }
                         }
 
+                        // Skins need a DeltaCore to inspect the .deltaskin, which
+                        // the App Store build does not have, so the page would
+                        // only ever come back empty there.
+                        #if !APP_STORE
                         NavigationLink(destination: ControllerSkinsSettingsView()) {
                             HStack {
                                 Image(systemName: "paintbrush.fill")
