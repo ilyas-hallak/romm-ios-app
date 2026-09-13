@@ -6,23 +6,15 @@
 //
 //  A minimal Engine.IO v4 / Socket.IO client on top of URLSessionWebSocketTask.
 //  Transport only, it knows nothing about RomM: the caller brings the handshake
-//  URL, the session cookie and the event names.
-//
-//  Frame grammar (all text frames, the numeric prefix is ASCII at the start of
-//  the same frame as the JSON, there is no separator):
-//    0{...}   engine open
-//    40       connect the default namespace, the client has to send this
-//    40{...}  the server acknowledged the namespace, only now may events flow
-//    42[...]  an event, ["<name>", <payload>]
-//    2 / 3    engine ping / pong
-//    41 / 1   namespace disconnect / engine close
+//  URL, the session cookie and the event names. Reading a frame is SocketIOFrame's
+//  job, this is what the client does about one.
 //
 
 import Foundation
 
 /// One decoded Socket.IO event. The payload is handed over as raw JSON so
 /// callers decode it with Codable instead of poking at dictionaries.
-struct SocketIOEvent: Sendable {
+nonisolated struct SocketIOEvent: Sendable, Equatable {
     let name: String
     let data: Data?
 }
@@ -233,53 +225,26 @@ actor SocketIOClient {
         await handle(frame: frame)
     }
 
-    private func handle(frame: String) async {
-        // Heartbeats never reach the caller.
-        if frame == "2" {
+    private func handle(frame text: String) async {
+        switch SocketIOFrame(text: text) {
+        case .enginePing:
+            // Heartbeats never reach the caller.
             await sendRaw("3")
-            return
-        }
-        if frame == "3" { return }
-
-        guard let type = frame.first else { return }
-        let body = String(frame.dropFirst())
-
-        switch type {
-        case "0":
-            // Engine open. The namespace has to be connected explicitly before
-            // anything may be emitted.
+        case .engineOpen:
+            // The namespace has to be connected explicitly before anything may
+            // be emitted.
             await sendRaw("40")
-        case "1":
-            // Engine close.
-            disconnect()
-        case "4":
-            handleSocketIOPacket(body)
-        default:
-            break
-        }
-    }
-
-    /// `body` is the Socket.IO packet, i.e. the frame without its leading `4`.
-    /// Only the default namespace is used here, so a namespace prefix is not
-    /// expected and is ignored along with the rest of the packet.
-    private func handleSocketIOPacket(_ body: String) {
-        guard let type = body.first else { return }
-        let payload = String(body.dropFirst())
-
-        switch type {
-        case "0":
+        case .namespaceConnected:
             isNamespaceConnected = true
             resumeConnect(with: .success(()))
-        case "1":
+        case .event(let event):
+            continuation.yield(event)
+        case .connectRejected(let reason):
+            resumeConnect(with: .failure(SocketIOError.connectRejected(reason)))
             disconnect()
-        case "2":
-            if let event = Self.decodeEvent(payload) {
-                continuation.yield(event)
-            }
-        case "4":
-            resumeConnect(with: .failure(SocketIOError.connectRejected(Self.rejectionReason(payload))))
+        case .engineClose, .namespaceDisconnected:
             disconnect()
-        default:
+        case .enginePong, .unknown:
             break
         }
     }
@@ -327,35 +292,6 @@ actor SocketIOClient {
     }
 
     // MARK: - Parsing helpers
-
-    private static func decodeEvent(_ payload: String) -> SocketIOEvent? {
-        // An acknowledgement id may sit between the packet type and the array.
-        guard let arrayStart = payload.firstIndex(of: "[") else { return nil }
-        let json = String(payload[arrayStart...])
-
-        guard let data = json.data(using: .utf8),
-              let packet = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [Any],
-              let name = packet.first as? String else {
-            return nil
-        }
-        guard packet.count > 1 else {
-            return SocketIOEvent(name: name, data: nil)
-        }
-
-        let encoded = try? JSONSerialization.data(withJSONObject: packet[1], options: [.fragmentsAllowed])
-        return SocketIOEvent(name: name, data: encoded)
-    }
-
-    /// A connect error carries either a bare string or `{"message": "…"}`.
-    private static func rejectionReason(_ payload: String) -> String {
-        guard let data = payload.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-            return payload
-        }
-        if let message = (object as? [String: Any])?["message"] as? String { return message }
-        if let message = object as? String { return message }
-        return payload
-    }
 
     private static func origin(for url: URL) -> String? {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
