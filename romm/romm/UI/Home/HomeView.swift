@@ -17,6 +17,10 @@ struct HomeView: View {
                 // Its own button for now. The plan is a menu on the user name
                 // that gathers this and settings, which needs the account UI
                 // from issue #98 first.
+                //
+                // Save sync stays out of the App Store build, so that build has
+                // no way into the overview either.
+                #if !APP_STORE
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink {
                         SyncOverviewView()
@@ -25,6 +29,7 @@ struct HomeView: View {
                     }
                     .accessibilityLabel("Save Sync")
                 }
+                #endif
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink {
                         SettingsView()
