@@ -84,14 +84,18 @@ final class ExternalDisplayDiagnostics {
     /// The app now owns the display. The alternative, plain system mirroring,
     /// produces no frames of ours at all, which is what makes the rate below
     /// meaningful as a comparison.
-    func renderingDidStart(on scene: UIWindowScene) {
+    /// - Parameter countingFrames: Whether the renderer in charge reports its
+    ///   frames. Said out loud because the absence of a rate line afterwards
+    ///   otherwise reads as a rate of zero.
+    func renderingDidStart(on scene: UIWindowScene, countingFrames: Bool) {
         let screen = scene.screen
         renderedSize = String(
             format: "%.0fx%.0f at %.1fx",
             screen.bounds.width, screen.bounds.height, screen.scale
         )
         frameRate.reset()
-        Logger.performance.info("painting the external display ourselves, \(renderedSize ?? "")")
+        let counting = countingFrames ? "" : ", frames not counted on this path"
+        Logger.performance.info("painting the external display ourselves, \(renderedSize ?? "")\(counting)")
     }
 
     func renderingDidStop() {
@@ -147,13 +151,24 @@ struct ExternalFrameRateCounter {
     /// windows make a single late frame look like a rate collapse.
     static let windowSeconds: CFTimeInterval = 1
 
+    /// A gap longer than this is not a slow frame, it is the game standing
+    /// still: the in-game menu, a pause, the app in the background. Counting
+    /// through it would report the pause as a rate collapse on the frame the
+    /// player comes back to.
+    static let pauseSeconds: CFTimeInterval = 0.5
+
     private var windowStart: CFTimeInterval?
+    private var lastFrame: CFTimeInterval?
     private var framesInWindow = 0
 
     /// - Returns: The frame rate of the window that just closed, or `nil` while
     ///   the current one is still open. The first call only opens a window: a
     ///   rate needs two points in time.
     mutating func record(at now: CFTimeInterval) -> Double? {
+        if let lastFrame, now - lastFrame > Self.pauseSeconds {
+            reset()
+        }
+        lastFrame = now
         guard let start = windowStart else {
             windowStart = now
             framesInWindow = 0
@@ -172,6 +187,7 @@ struct ExternalFrameRateCounter {
     /// not diluted by the time the display was not being painted.
     mutating func reset() {
         windowStart = nil
+        lastFrame = nil
         framesInWindow = 0
     }
 }

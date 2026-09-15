@@ -169,7 +169,7 @@ final class ExternalDisplayManager: ObservableObject {
         window.rootViewController = controller
         window.isHidden = false
         self.window = window
-        diagnostics.renderingDidStart(on: scene)
+        diagnostics.renderingDidStart(on: scene, countingFrames: renderTarget?.reportsFrameRate ?? false)
     }
 
     private func teardownWindow() {

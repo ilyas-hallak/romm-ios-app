@@ -31,4 +31,14 @@ protocol PExternalRenderTarget: AnyObject {
     /// Called when the display goes back to plain mirroring, or the session ends.
     /// Must leave nothing of the renderer registered on the surface.
     func stopRendering()
+
+    /// Whether this target reports every frame to `ExternalDisplayDiagnostics`.
+    /// Only true where the app itself puts the picture on the surface. DeltaCore
+    /// hands its frames straight to a `GameView`, so there is no seam to count
+    /// them in, and the measurement has to say so rather than read as zero.
+    var reportsFrameRate: Bool { get }
+}
+
+extension PExternalRenderTarget {
+    var reportsFrameRate: Bool { false }
 }

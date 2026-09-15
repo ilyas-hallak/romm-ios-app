@@ -180,4 +180,26 @@ struct ExternalFrameRateCounterTests {
         #expect(counter.record(at: 10) == nil)
         #expect(counter.record(at: 10.5) == nil)
     }
+
+    /// Nobody calls `reset()` for the in-game menu, so a gap between two frames
+    /// has to speak for itself. Thirty seconds in a menu must not come back as
+    /// a fraction of a frame a second on the frame that follows it.
+    @Test func aGapBetweenFramesCountsAsAPauseRatherThanAStall() {
+        var counter = ExternalFrameRateCounter()
+        _ = counter.record(at: 0)
+        _ = counter.record(at: 0.5)
+        #expect(counter.record(at: 30) == nil)
+        #expect(counter.record(at: 30.5) == nil)
+    }
+
+    /// A late frame is not a pause: the window it lands in still has to close.
+    @Test func aSingleLateFrameStillClosesItsWindow() throws {
+        var counter = ExternalFrameRateCounter()
+        _ = counter.record(at: 0)
+        _ = counter.record(at: 0.4)
+        _ = counter.record(at: 0.8)
+        let reported = counter.record(at: 1.2)
+        let rate = try #require(reported)
+        #expect(abs(rate - 2.5) < 0.001)
+    }
 }

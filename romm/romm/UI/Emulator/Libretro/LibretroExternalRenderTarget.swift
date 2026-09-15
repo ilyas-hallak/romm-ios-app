@@ -21,4 +21,7 @@ final class LibretroExternalRenderTarget: PExternalRenderTarget {
     func stopRendering() {
         videoView?.mirrorLayer = nil
     }
+
+    /// The mirror assignment in `LibretroVideoView.display()` is the seam.
+    var reportsFrameRate: Bool { true }
 }

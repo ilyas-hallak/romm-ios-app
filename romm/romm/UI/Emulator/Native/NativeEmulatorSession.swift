@@ -302,9 +302,14 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             // would mute itself if another app still held the audio by then.
             EmulatorAudioSession.activate()
             self.viewController.startEmulation()
-            // DeltaCore's AudioManager took the session over to `.playAndRecord`
-            // on the way up, which is the slower category to play out of.
-            EmulatorAudioSession.restorePlaybackCategory()
+            // DeltaCore's AudioManager takes the session over to `.playAndRecord`
+            // here, which is the slower category to play out of. It is left
+            // alone on purpose: melonDS opens the DS microphone on the input
+            // this category provides, and taking it back to `.playback` both
+            // silences that microphone for good and makes DeltaCore rebuild its
+            // audio engine on the resulting route change, mid start. Worth
+            // revisiting only with a measurement that says the category costs
+            // real latency, and then per core rather than for all of them.
             self.emulatorCore?.rate = NativeEmulatorPlaybackRate.normal
             // Assigning this re-runs that volume decision, now without the
             // ring switch muting a console the user deliberately started.
