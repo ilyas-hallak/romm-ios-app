@@ -1,6 +1,13 @@
 import Foundation
 
 protocol PSaveStore {
+    /// Every ROM this store holds something for.
+    ///
+    /// Sync negotiation is server-wide rather than per ROM, so a caller has to
+    /// be able to report the whole local library in one request; every other
+    /// read here needs a ROM id it does not yet know.
+    func listRomIds() throws -> [Int]
+
     func readBattery(romId: Int) throws -> Data?
     func writeBattery(romId: Int, data: Data) throws
     func batteryModifiedAt(romId: Int) -> Date?

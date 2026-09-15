@@ -19,6 +19,11 @@ struct SettingsView: View {
     @State private var showingWhatsNew = false
     @State private var showingHelp = false
     private let updateStore: AppUpdateStore = DefaultDependencyFactory.shared.appUpdateStore
+    private let enginePreference: PEmulatorEnginePreference = DefaultDependencyFactory.shared.enginePreference
+    private let playTargetPreference: PPlayTargetPreference = DefaultDependencyFactory.shared.playTargetPreference
+    /// Read on appear rather than computed, so coming back from the engine
+    /// settings picks up a changed Play destination.
+    @State private var playsOnDevice = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -26,6 +31,40 @@ struct SettingsView: View {
     
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    }
+
+    /// The App Store build ships the libretro cores as a regular feature, so the
+    /// section belongs to that target rather than to the receipt the build was
+    /// installed with. Everywhere else it stays the TestFlight/Debug experiment
+    /// it has been.
+    private var showsEmulatorSection: Bool {
+        #if APP_STORE
+        return true
+        #else
+        return Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild
+        #endif
+    }
+
+    /// True when Play runs the game here with a built-in engine, the only case
+    /// a BIOS image is ever read. The web engine runs on the server, and an
+    /// external app brings whatever it needs itself.
+    ///
+    /// The engine preference already coerces a stored `.web` away in builds
+    /// without the web engine, so comparing against it is enough.
+    private func refreshPlayDestination() {
+        guard case .builtIn = playTargetPreference.current else {
+            playsOnDevice = false
+            return
+        }
+        playsOnDevice = enginePreference.current != .web
+    }
+
+    private var emulatorSectionFooter: String {
+        #if APP_STORE
+        return "Play ROMs directly in the app, or hand them to an emulator app you already have."
+        #else
+        return "Experimental: play ROMs directly in the app. Only available in TestFlight and Debug builds."
+        #endif
     }
     
     var body: some View {
@@ -166,8 +205,8 @@ struct SettingsView: View {
                 }
             }
 
-            // Emulator Section (TestFlight & Debug only)
-            if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
+            // Emulator Section
+            if showsEmulatorSection {
                 Section {
                     Toggle(isOn: $experimentalSettings.isEmulatorEnabled) {
                         HStack {
@@ -189,19 +228,31 @@ struct SettingsView: View {
                             }
                         }
 
-                        NavigationLink(destination: BIOSSettingsView()) {
-                            HStack {
-                                Image(systemName: "cpu")
-                                Text("BIOS Files")
+                        // Stays in every build: PlayStation and Dreamcast do not
+                        // start without their BIOS, see LibretroBIOSRequirement,
+                        // and the libretro cores ship App Store side too. Only
+                        // shown while a game actually runs here, the row means
+                        // nothing for the web engine or an external app.
+                        if playsOnDevice {
+                            NavigationLink(destination: BIOSSettingsView()) {
+                                HStack {
+                                    Image(systemName: "cpu")
+                                    Text("BIOS Files")
+                                }
                             }
                         }
 
+                        // Skins need a DeltaCore to inspect the .deltaskin, which
+                        // the App Store build does not have, so the page would
+                        // only ever come back empty there.
+                        #if !APP_STORE
                         NavigationLink(destination: ControllerSkinsSettingsView()) {
                             HStack {
                                 Image(systemName: "paintbrush.fill")
                                 Text("Controller Skins")
                             }
                         }
+                        #endif
 
                         NavigationLink(destination: ExternalDisplaySettingsView()) {
                             HStack {
@@ -238,7 +289,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Emulator")
                 } footer: {
-                    Text("Experimental: play ROMs directly in the app. Only available in TestFlight and Debug builds.")
+                    Text(emulatorSectionFooter)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -269,6 +320,9 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .onAppear {
+            refreshPlayDestination()
+        }
         .sheet(isPresented: $showingWhatsNew) {
             // The whole history from Settings, and no mark-seen side effect.
             ChangelogView(markdown: updateStore.changelog, mode: .versionHistory)

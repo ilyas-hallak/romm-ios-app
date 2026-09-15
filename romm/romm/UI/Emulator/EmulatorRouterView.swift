@@ -18,8 +18,10 @@ struct EmulatorRouterView: View {
         switch decision {
         case .web(let rom):
             EmulatorView(rom: rom)
+        #if !APP_STORE
         case .native(let rom, let gameType):
             NativeEmulatorView(rom: rom, gameType: gameType, resumeSlot: resumeSlot)
+        #endif
         case .libretro(let rom, let core):
             LibretroEmulatorView(rom: rom, core: core, resumeSlot: resumeSlot)
         }

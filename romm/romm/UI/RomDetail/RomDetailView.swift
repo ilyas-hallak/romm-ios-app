@@ -177,16 +177,28 @@ struct RomDetailView: View {
                             }
                         }
                     }
+                    // "Open in another app" from the secondary actions. Plain
+                    // sharing, so nothing is recorded as a handoff.
                     .sheet(item: Binding(
                         get: { viewModel.shareItem },
                         set: { viewModel.shareItem = $0 }
                     ), onDismiss: {
                         viewModel.cleanupShareTemp()
                     }) { item in
+                        ShareSheet(activityItems: item.urls)
+                    }
+                    // A Play handoff of a multi-file ROM, which the "Open in"
+                    // menu cannot carry. Kept separate from the sheet above so
+                    // only an actual handoff is remembered as one.
+                    .sheet(item: Binding(
+                        get: { viewModel.externalPlay.shareItem },
+                        set: { viewModel.externalPlay.shareItem = $0 }
+                    ), onDismiss: {
+                        viewModel.externalPlay.cleanupShareTemp()
+                    }) { item in
                         ShareSheet(activityItems: item.urls) { activityType in
                             guard let activityType else { return }
-                            viewModel.handoffDidComplete(
-                                romId: currentSelectedRom.id,
+                            viewModel.externalPlay.handoffDidComplete(
                                 receivingBundleIdentifier: activityType
                             )
                         }
@@ -228,6 +240,26 @@ struct RomDetailView: View {
                         Button("OK", role: .cancel) { }
                     } message: {
                         Text(viewModel.downloadError ?? "")
+                    }
+                    // A Play handoff that went onto the pasteboard because the
+                    // target app ignores documents from the "Open in" menu.
+                    .alert(
+                        "ROM Copied",
+                        isPresented: Binding(
+                            get: { viewModel.externalPlay.pasteboardHandoff != nil },
+                            set: { if !$0 { viewModel.externalPlay.dismissPasteboardHandoff() } }
+                        ),
+                        presenting: viewModel.externalPlay.pasteboardHandoff
+                    ) { handoff in
+                        Button("Open \(handoff.appName)") {
+                            viewModel.externalPlay.openPasteboardTarget()
+                        }
+                        Button("Done", role: .cancel) {
+                            viewModel.externalPlay.dismissPasteboardHandoff()
+                        }
+                    } message: { handoff in
+                        Text("\(handoff.romName) is on the clipboard. "
+                            + "Open \(handoff.appName) and tap Paste to import it.")
                     }
                 }
             }
@@ -441,6 +473,17 @@ struct RomDetailView: View {
             let downloadState = viewModel.downloadButtonState(forRomId: currentSelectedRom.id)
             HStack(spacing: 12) {
                 Button(action: {
+                    // While a download runs this button is the way out of it,
+                    // rather than a second button crowding the row.
+                    switch downloadState {
+                    case .queued, .downloading:
+                        viewModel.cancelDownload(romId: currentSelectedRom.id)
+                        return
+                    case .downloaded:
+                        return
+                    case .idle, .failed:
+                        break
+                    }
                     appData.launchDownloadFlight(
                         coverURL: currentSelectedRom.urlCover,
                         from: downloadButtonFrame,
@@ -455,21 +498,26 @@ struct RomDetailView: View {
                         case .queued:
                             ProgressView().progressViewStyle(.circular).tint(.white)
                             Text("Queued").font(.headline)
-                        case .downloading(let progress):
+                            cancelBadge
+                        case .downloading(let progress, let bytesPerSecond):
                             if let progress {
                                 ProgressView(value: progress)
                                     .progressViewStyle(.linear)
                                     .tint(.white)
-                                    .frame(maxWidth: 140)
-                                    .animation(.easeOut(duration: 0.4), value: progress)
-                                Text("\(Int((progress * 100).rounded()))%")
-                                    .font(.headline)
-                                    .contentTransition(.numericText())
+                                    .frame(maxWidth: 110)
                                     .animation(.easeOut(duration: 0.4), value: progress)
                             } else {
                                 ProgressView().progressViewStyle(.circular).tint(.white)
-                                Text("Downloading…").font(.headline)
                             }
+                            // Percentage and rate share the button, so the label
+                            // shrinks rather than truncating on a narrow phone.
+                            Text(DownloadTask.progressLabel(progress: progress, bytesPerSecond: bytesPerSecond))
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .contentTransition(.numericText())
+                                .animation(.easeOut(duration: 0.4), value: progress)
+                            cancelBadge
                         case .downloaded:
                             Label("Downloaded", systemImage: "checkmark.circle.fill")
                                 .font(.headline)
@@ -490,13 +538,8 @@ struct RomDetailView: View {
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                 }
-                .disabled({
-                    switch downloadState {
-                    case .idle, .failed: return false
-                    case .queued, .downloading, .downloaded: return true
-                    }
-                }())
-                .accessibility(hint: Text(downloadState == .downloaded ? "Already downloaded to this device" : "Download this ROM to this device"))
+                .disabled(downloadState == .downloaded)
+                .accessibility(hint: Text(downloadHint(for: downloadState)))
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .global)
                 } action: { newFrame in
@@ -538,15 +581,18 @@ struct RomDetailView: View {
                     // Anchors the "Open in" popover on iPad to the Play button.
                     .background(
                         OpenInMenuPresenter(
-                            item: viewModel.openInItem,
+                            item: viewModel.externalPlay.openInItem,
                             onSent: { bundleIdentifier in
-                                viewModel.handoffDidComplete(
-                                    romId: currentSelectedRom.id,
+                                viewModel.externalPlay.handoffDidComplete(
                                     receivingBundleIdentifier: bundleIdentifier
                                 )
                             },
-                            onDismiss: { viewModel.openInItem = nil },
-                            onNoTargets: { viewModel.handoffFoundNoTargets() }
+                            onDismiss: { viewModel.externalPlay.openInItem = nil },
+                            onNoTargets: {
+                                viewModel.externalPlay.handoffFoundNoTargets()
+                                viewModel.errorMessage = viewModel.externalPlay.errorMessage
+                                viewModel.externalPlay.errorMessage = nil
+                            }
                         )
                     )
                 }
@@ -589,6 +635,26 @@ struct RomDetailView: View {
         .padding(.bottom, 24)
     }
     
+    /// What the primary button does depends on the download, and the icon plus
+    /// progress alone do not say it out loud.
+    private func downloadHint(for state: RomDetailViewModel.DownloadButtonState) -> LocalizedStringKey {
+        switch state {
+        case .queued, .downloading: return "Cancel this download"
+        case .downloaded: return "Already downloaded to this device"
+        case .idle, .failed: return "Download this ROM to this device"
+        }
+    }
+
+    /// Rides along in the primary button while a download runs, so the progress
+    /// reads as something that can be stopped rather than as a dead status.
+    private var cancelBadge: some View {
+        Image(systemName: "xmark.circle.fill")
+            // A notch under the labels next to it, so the badge cannot make the
+            // button taller than it is in any of its other states.
+            .font(.subheadline)
+            .foregroundColor(.white.opacity(0.85))
+    }
+
     /// Routes a Play tap: offer resume when save states exist and the engine can
     /// actually load them, otherwise boot straight into a fresh session.
     private func startPlay() {

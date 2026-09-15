@@ -153,6 +153,7 @@ struct LoggingConfigurationView: View {
         case .manual: return "📚"
         case .viewModel: return "🔄"
         case .sync: return "🔄"
+        case .emulator: return "🎮"
         }
     }
 
@@ -167,6 +168,7 @@ struct LoggingConfigurationView: View {
         case .manual: return String(localized: "PDF manual system")
         case .viewModel: return String(localized: "View model layer, state")
         case .sync: return String(localized: "Synchronization operations")
+        case .emulator: return String(localized: "Launching games, ROM resolution, external apps")
         }
     }
 
@@ -358,6 +360,7 @@ struct CategoryDetailView: View {
         case .manual: return "📚"
         case .viewModel: return "🔄"
         case .sync: return "🔄"
+        case .emulator: return "🎮"
         }
     }
 
@@ -372,6 +375,7 @@ struct CategoryDetailView: View {
         case .manual: return String(localized: "PDF manual system")
         case .viewModel: return String(localized: "View model layer and state")
         case .sync: return String(localized: "Synchronization operations")
+        case .emulator: return String(localized: "Launching games, ROM resolution, external apps")
         }
     }
 

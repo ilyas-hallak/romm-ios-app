@@ -19,7 +19,7 @@ enum HTTPMethod: String {
 protocol PRommAPIClient {
     func makeRequest<T: Codable>(path: String, method: HTTPMethod, body: Data?, responseType: T.Type) async throws -> T
     func makeRequest(path: String, method: HTTPMethod, body: Data?) async throws -> Data
-    func downloadFile(path: String, progressHandler: ((Int64, Int64) -> Void)?) async throws -> URL
+    func downloadFile(path: String, expectedSize: Int64, progressHandler: ((Int64, Int64, Double?) -> Void)?) async throws -> URL
     func multipartRequest(path: String, method: HTTPMethod, boundary: String, formData: Data, additionalHeaders: [String: String]?) async throws -> Data
     func get<T: Codable>(_ path: String, responseType: T.Type) async throws -> T
     func get(_ path: String) async throws -> Data
@@ -84,6 +84,18 @@ protocol PRommAPIClient {
 
     // ROM user props
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema
+
+    // Download request building
+    /// Builds an authenticated URLRequest for downloading a file from a remote path,
+    /// allowing callers outside the client to obtain a complete request with auth headers.
+    func makeDownloadRequest(path: String) throws -> URLRequest
+
+    /// Builds an authenticated URLRequest for one file of a ROM.
+    ///
+    /// - Parameter usesLegacyContentPath: Which of the two content endpoints to
+    ///   ask. Whether a download has to fall back to the legacy one is the
+    ///   caller's decision, this only builds the path for it.
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest
 
     // Stats, Saves, States
     func getStats() async throws -> StatsReturn
@@ -277,12 +289,9 @@ class RommAPIClient: PRommAPIClient {
         }
     }
 
-    // MARK: - downloadFile
+    // MARK: - makeDownloadRequest
 
-    func downloadFile(path: String, progressHandler: ((Int64, Int64) -> Void)? = nil) async throws -> URL {
-        let measurement = PerformanceMeasurement(operation: "DOWNLOAD \(path)")
-        logger.logNetworkRequest(method: HTTPMethod.get.rawValue, url: path)
-
+    func makeDownloadRequest(path: String) throws -> URLRequest {
         let url = try buildURL(path: path)
         let authHeader = try makeAuthHeader()
 
@@ -297,120 +306,159 @@ class RommAPIClient: PRommAPIClient {
         logger.debug("Download Auth header (debug-only): \(authHeader)")
         #endif
 
-        return try await withCheckedThrowingContinuation { continuation in
-            var progressObservation: NSKeyValueObservation?
-            var downloadTask: URLSessionDownloadTask?
+        return request
+    }
 
-            downloadTask = urlSession.downloadTask(with: request) { [weak self] tempURL, response, error in
-                progressObservation?.invalidate()
+    func makeROMContentDownloadRequest(romId: Int, fileName: String, usesLegacyContentPath: Bool) throws -> URLRequest {
+        try makeDownloadRequest(
+            path: Self.romContentPath(
+                romId: romId,
+                fileName: fileName,
+                usesLegacyContentPath: usesLegacyContentPath
+            )
+        )
+    }
 
-                if let error = error as? URLError {
-                    self?.logger.logNetworkError(method: HTTPMethod.get.rawValue, url: path, error: error)
-                    continuation.resume(throwing: APIClientError.networkError(error))
-                    return
-                }
+    /// RomM 5.1 serves every file of a ROM under its own name, RomM 5.0 only
+    /// knows the bare content endpoint and picks the file itself.
+    ///
+    /// Static and nonisolated so test doubles of the client can compose the same
+    /// path instead of inventing one of their own.
+    nonisolated static func romContentPath(romId: Int, fileName: String, usesLegacyContentPath: Bool) -> String {
+        guard !usesLegacyContentPath else { return "api/roms/\(romId)/content" }
+        return "api/roms/\(romId)/content/\(encodePathComponent(fileName))"
+    }
 
-                if let error {
-                    self?.logger.logNetworkError(method: HTTPMethod.get.rawValue, url: path, error: error)
-                    continuation.resume(throwing: APIClientError.networkError(error))
-                    return
-                }
+    /// Percent encodes one path component. `urlPathAllowed` lets slashes through,
+    /// which would turn a file name into two components, so it is taken out.
+    private nonisolated static func encodePathComponent(_ value: String) -> String {
+        var allowedCharacterSet = CharacterSet.urlPathAllowed
+        allowedCharacterSet.remove(charactersIn: "/")
+        return value.addingPercentEncoding(withAllowedCharacters: allowedCharacterSet) ?? value
+    }
 
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    self?.logger.error("Invalid download response type")
-                    continuation.resume(throwing: APIClientError.networkError(URLError(.badServerResponse)))
-                    return
-                }
+    // MARK: - downloadFile
 
-                self?.logger.logNetworkRequest(method: HTTPMethod.get.rawValue, url: path, statusCode: httpResponse.statusCode)
-                let headerKeys = ["Content-Length", "Content-Type", "Content-Encoding", "Transfer-Encoding", "Location", "Server", "X-Accel-Redirect"]
-                let headerDump = headerKeys.compactMap { key -> String? in
-                    guard let value = httpResponse.value(forHTTPHeaderField: key) else { return nil }
-                    return "\(key)=\(value)"
-                }.joined(separator: " | ")
-                self?.logger.info("Download response headers: \(headerDump)")
-                if let tempURL,
-                   let data = try? Data(contentsOf: tempURL) {
-                    self?.logger.info("Download body bytes received: \(data.count)")
-                    if data.count <= 512, let body = String(data: data, encoding: .utf8) {
-                        self?.logger.info("Download body preview: \(body)")
-                    }
-                }
+    /// - Parameters:
+    ///   - expectedSize: Size the caller already knows, e.g. from the ROM metadata.
+    ///     Used as the total whenever the response announces none, which RomM does
+    ///     for archives it builds on the fly. Pass 0 if unknown.
+    ///   - progressHandler: Called with `(bytesWritten, totalBytesExpected, bytesPerSecond)`.
+    ///     The bytes are counted as they are written here, not taken from the system's
+    ///     progress reporting. A non-positive total means the size is unknown; the rate
+    ///     is nil until enough time has passed to measure one.
+    func downloadFile(
+        path: String,
+        expectedSize: Int64 = 0,
+        progressHandler: ((Int64, Int64, Double?) -> Void)? = nil
+    ) async throws -> URL {
+        let measurement = PerformanceMeasurement(operation: "DOWNLOAD \(path)")
+        logger.logNetworkRequest(method: HTTPMethod.get.rawValue, url: path)
 
-                switch httpResponse.statusCode {
-                case 200...299:
-                    guard let tempURL else {
-                        self?.logger.error("Download completed without temporary file")
-                        continuation.resume(throwing: APIClientError.networkError(URLError(.cannotCreateFile)))
-                        return
-                    }
-                    // Move temp file to a persistent location BEFORE the handler returns —
-                    // iOS deletes the URLSession temp file as soon as this handler exits.
-                    // The URLSession temp file carries no meaningful extension, so derive it
-                    // from the Content-Disposition filename (falling back to the requested
-                    // path, then the temp file) to preserve e.g. `.zip` for archive ROMs.
-                    let contentDisposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition")
-                    let fileExtension = DownloadFilename.fileExtension(
-                        contentDisposition: contentDisposition,
-                        requestedPath: path,
-                        tempURL: tempURL
-                    )
-                    var persistentURL = FileManager.default.temporaryDirectory
-                        .appendingPathComponent(UUID().uuidString)
-                    if !fileExtension.isEmpty {
-                        persistentURL.appendPathExtension(fileExtension)
-                    }
-                    do {
-                        try FileManager.default.moveItem(at: tempURL, to: persistentURL)
-                    } catch {
-                        self?.logger.error("Failed to persist download temp file: \(error)")
-                        continuation.resume(throwing: APIClientError.networkError(URLError(.cannotCreateFile)))
-                        return
-                    }
-                    let downloadedBytes = downloadTask?.progress.completedUnitCount ?? 0
-                    let totalBytes = downloadTask?.progress.totalUnitCount ?? 0
-                    let normalizedTotal = totalBytes > 0 ? totalBytes : downloadedBytes
-                    progressHandler?(downloadedBytes, normalizedTotal)
-                    measurement.end()
-                    continuation.resume(returning: persistentURL)
+        let request = try makeDownloadRequest(path: path)
 
-                case 401:
-                    self?.logger.warning("Authentication failed during download")
-                    NotificationCenter.default.post(name: .sessionExpired, object: nil)
-                    continuation.resume(throwing: APIClientError.authenticationRequired)
+        // Streamed through a data task so the bytes can be counted here as they
+        // are written. The system's own progress reporting is unusable when the
+        // server announces no size, which RomM does whenever it builds the
+        // archive on the fly.
+        let stagingURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("romm-download-\(UUID().uuidString)")
+        let progressDelegate = DownloadProgressDelegate(
+            destinationURL: stagingURL,
+            fallbackExpectedSize: expectedSize,
+            progressHandler: progressHandler
+        )
+        let downloadSession = URLSession(
+            configuration: urlSession.configuration,
+            delegate: progressDelegate,
+            delegateQueue: nil
+        )
+        defer { downloadSession.finishTasksAndInvalidate() }
 
-                case 400...599:
-                    let message: String
-                    if let tempURL,
-                       let data = try? Data(contentsOf: tempURL),
-                       let serverMessage = String(data: data.prefix(500), encoding: .utf8),
-                       !serverMessage.isEmpty {
-                        message = serverMessage
-                    } else {
-                        message = "Download request failed"
-                    }
-                    self?.logger.error("Download failed (\(httpResponse.statusCode)): \(message)")
-                    continuation.resume(throwing: APIClientError.invalidResponse(httpResponse.statusCode, message))
-
-                default:
-                    let message = "Unexpected status code: \(httpResponse.statusCode)"
-                    self?.logger.error(message)
-                    continuation.resume(throwing: APIClientError.invalidResponse(httpResponse.statusCode, message))
-                }
+        let tempURL: URL
+        let response: URLResponse
+        do {
+            (tempURL, response) = try await withCheckedThrowingContinuation { continuation in
+                progressDelegate.completion = { continuation.resume(with: $0) }
+                downloadSession.dataTask(with: request).resume()
             }
-
-            guard let downloadTask else {
-                continuation.resume(throwing: APIClientError.networkError(URLError(.unknown)))
-                return
+        } catch {
+            try? FileManager.default.removeItem(at: stagingURL)
+            logger.logNetworkError(method: HTTPMethod.get.rawValue, url: path, error: error)
+            if let urlError = error as? URLError {
+                throw APIClientError.networkError(urlError)
             }
+            throw APIClientError.networkError(error)
+        }
 
-            progressObservation = downloadTask.progress.observe(\.completedUnitCount, options: [.new]) { progress, _ in
-                let downloadedBytes = progress.completedUnitCount
-                let totalBytes = progress.totalUnitCount > 0 ? progress.totalUnitCount : 0
-                progressHandler?(downloadedBytes, totalBytes)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            try? FileManager.default.removeItem(at: tempURL)
+            logger.error("Invalid download response type")
+            throw APIClientError.networkError(URLError(.badServerResponse))
+        }
+
+        logger.logNetworkRequest(method: HTTPMethod.get.rawValue, url: path, statusCode: httpResponse.statusCode)
+        let headerKeys = ["Content-Length", "Content-Type", "Content-Encoding", "Transfer-Encoding", "Location", "Server", "X-Accel-Redirect"]
+        let headerDump = headerKeys.compactMap { key -> String? in
+            guard let value = httpResponse.value(forHTTPHeaderField: key) else { return nil }
+            return "\(key)=\(value)"
+        }.joined(separator: " | ")
+        logger.info("Download response headers: \(headerDump)")
+        // Size comes from the file attributes rather than reading the file in:
+        // a ROM can be several gigabytes and logging must not pull that into memory.
+        let attributes = try? FileManager.default.attributesOfItem(atPath: tempURL.path)
+        let receivedBytes = attributes?[.size] as? Int64 ?? 0
+        logger.info("Download body bytes received: \(receivedBytes)")
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            // The URLSession temp file carries no meaningful extension, so derive it
+            // from the Content-Disposition filename (falling back to the requested
+            // path, then the temp file) to preserve e.g. `.zip` for archive ROMs.
+            let contentDisposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition")
+            let fileExtension = DownloadFilename.fileExtension(
+                contentDisposition: contentDisposition,
+                requestedPath: path,
+                tempURL: tempURL
+            )
+            var persistentURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+            if !fileExtension.isEmpty {
+                persistentURL.appendPathExtension(fileExtension)
             }
+            do {
+                try FileManager.default.moveItem(at: tempURL, to: persistentURL)
+            } catch {
+                logger.error("Failed to persist download temp file: \(error)")
+                throw APIClientError.networkError(URLError(.cannotCreateFile))
+            }
+            measurement.end()
+            return persistentURL
 
-            downloadTask.resume()
+        case 401:
+            try? FileManager.default.removeItem(at: tempURL)
+            logger.warning("Authentication failed during download")
+            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            throw APIClientError.authenticationRequired
+
+        case 400...599:
+            // Error bodies are never streamed to disk, the delegate keeps them.
+            let message: String
+            if let serverMessage = String(data: progressDelegate.errorBody.prefix(500), encoding: .utf8),
+               !serverMessage.isEmpty {
+                message = serverMessage
+            } else {
+                message = "Download request failed"
+            }
+            try? FileManager.default.removeItem(at: tempURL)
+            logger.error("Download failed (\(httpResponse.statusCode)): \(message)")
+            throw APIClientError.invalidResponse(httpResponse.statusCode, message)
+
+        default:
+            try? FileManager.default.removeItem(at: tempURL)
+            let message = "Unexpected status code: \(httpResponse.statusCode)"
+            logger.error(message)
+            throw APIClientError.invalidResponse(httpResponse.statusCode, message)
         }
     }
 

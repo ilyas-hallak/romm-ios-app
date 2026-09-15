@@ -34,6 +34,9 @@ struct PlatformROMsListView: View {
     /// Files a Share swipe has staged, held here rather than in the swipe action
     /// so the presentation survives the row snapping shut.
     @State private var share: ShareROMViewModel
+    /// Play destination and handoff state, the same object the ROM detail screen
+    /// uses, so Play lands in the app the user picked from here as well.
+    @State private var externalPlay: ExternalPlayCoordinator
     private let factory: PDependencyFactory
     private let launchUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
@@ -48,6 +51,7 @@ struct PlatformROMsListView: View {
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
         self.saveStore = factory.saveStore
         _share = State(initialValue: factory.makeShareROMViewModel())
+        _externalPlay = State(initialValue: ExternalPlayCoordinator(factory: factory))
     }
 
     var body: some View {
@@ -55,7 +59,10 @@ struct PlatformROMsListView: View {
             ForEach(roms) { rom in
                 ROMCardRow(
                     rom: rom,
-                    isPlayable: isPlatformSupported(rom.platformSlug),
+                    // An external app decides for itself what it can play, and it
+                    // covers systems no built-in engine does, so the built-in
+                    // support list must not gate Play when one is selected.
+                    isPlayable: isPlatformSupported(rom.platformSlug) || externalPlay.playsExternally,
                     isLaunching: launchingRomId == rom.id,
                     isDisabled: launchingRomId != nil && launchingRomId != rom.id,
                     hasSaveGame: hasSaveGame(romId: rom.id),
@@ -137,6 +144,10 @@ struct PlatformROMsListView: View {
         } message: {
             Text("The ROM files could not be found on this device. They may have been deleted or moved.")
         }
+        // A settings change while this list is open has to be picked up, or Play
+        // would still route to the previous target.
+        .onAppear { externalPlay.refreshPlayTarget() }
+        .externalPlayHandoff(externalPlay)
     }
 
     private func hasSaveGame(romId: Int) -> Bool {
@@ -151,6 +162,13 @@ struct PlatformROMsListView: View {
     /// Resolves the engine first: a ROM booting into the web emulator skips the
     /// resume choice, since only local cores can load a save state.
     private func startPlay(rom: DownloadedROM) async {
+        // Where Play sends a game is one app-wide setting, so an external target
+        // gets first refusal here just as it does on the ROM detail screen.
+        if await externalPlay.play(romId: rom.id) {
+            launchingRomId = nil
+            return
+        }
+
         let start = Date()
         let result = await launchUseCase.execute(rom: rom.toRom())
         guard case .success(let decision) = result else {

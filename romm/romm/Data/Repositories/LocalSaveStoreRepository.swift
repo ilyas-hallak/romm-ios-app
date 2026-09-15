@@ -12,6 +12,20 @@ final class LocalSaveStoreRepository: PSaveStore {
         self.init(rootDirectory: SaveStorePaths.defaultRootDirectory())
     }
 
+    // MARK: - Library
+
+    func listRomIds() throws -> [Int] {
+        guard fileManager.fileExists(atPath: rootDirectory.path) else { return [] }
+        let entries = try fileManager.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        )
+        // The layout is one directory per ROM id, so anything whose name is not
+        // a number was not put there by this store and is skipped rather than
+        // guessed at.
+        return entries.compactMap { Int($0.lastPathComponent) }.sorted()
+    }
+
     // MARK: - Battery
 
     func readBattery(romId: Int) throws -> Data? {

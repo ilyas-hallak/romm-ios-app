@@ -28,6 +28,12 @@ struct DeltaExternalEmulatorTests {
         #expect(delta.identifierKind == .sha1OfROMData)
     }
 
+    /// Delta imports what the "Open in" menu hands it, which is also the only
+    /// route that reports the handoff back, so it must stay on the default.
+    @Test func takesTheROMFromTheOpenInMenu() {
+        #expect(delta.romDelivery == .openInMenu)
+    }
+
     /// The App Store build, plus sideloads that get a team id appended.
     @Test(arguments: [
         "com.rileytestut.Delta",

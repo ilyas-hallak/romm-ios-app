@@ -42,6 +42,7 @@ protocol PROMFileResolver {
 
 final class ROMFileResolver: PROMFileResolver {
 
+    private let logger = Logger.emulator
     private let fileSystem: PFileSystemService
 
     private let extensions: [DeltaGameType: Set<String>] = [
@@ -73,7 +74,7 @@ final class ROMFileResolver: PROMFileResolver {
 
     private func resolveInternal(rom: DownloadedROM, baseURL: URL, allowed: Set<String>) throws -> URL {
         let available = rom.files.map { $0.fileName }
-        print("[ROMFileResolver] allowed=\(allowed) files=\(available)")
+        logger.debug("[ROMFileResolver] allowed=\(allowed) files=\(available)")
 
         if let direct = rom.files.first(where: { allowed.contains(($0.fileName as NSString).pathExtension.lowercased()) }) {
             return try locate(file: direct.fileName, rom: rom, baseURL: baseURL)
@@ -92,12 +93,12 @@ final class ROMFileResolver: PROMFileResolver {
         // Fallback: scan the ROM directory directly (handles old downloads with empty files metadata)
         let romDir = baseURL.appendingPathComponent(rom.localDirectory, isDirectory: true)
         let dirExists = fileSystem.fileExists(at: romDir)
-        print("[ROMFileResolver] fallback scan dir=\(romDir.path) exists=\(dirExists)")
+        logger.debug("[ROMFileResolver] fallback scan dir=\(romDir.path) exists=\(dirExists)")
         if let contents = try? fileSystem.contentsOfDirectory(at: romDir, skipHidden: false) {
             let names = contents.map { $0.lastPathComponent }
-            print("[ROMFileResolver] dir contents: \(names)")
+            logger.debug("[ROMFileResolver] dir contents: \(names)")
             if let match = contents.first(where: { allowed.contains($0.pathExtension.lowercased()) }) {
-                print("[ROMFileResolver] fallback dir scan found: \(match.path)")
+                logger.debug("[ROMFileResolver] fallback dir scan found: \(match.path)")
                 return match
             }
             if let zipFile = contents.first(where: { $0.pathExtension.lowercased() == "zip" }) {
@@ -142,7 +143,7 @@ final class ROMFileResolver: PROMFileResolver {
 
         if fileSystem.fileExists(at: cacheDir),
            let existing = firstROM(in: cacheDir, allowed: allowed) {
-            print("[ROMFileResolver] cached unzip hit: \(existing.path)")
+            logger.debug("[ROMFileResolver] cached unzip hit: \(existing.path)")
             return existing
         }
 
@@ -153,7 +154,7 @@ final class ROMFileResolver: PROMFileResolver {
         for entry in archive where allowed.contains((entry.path as NSString).pathExtension.lowercased()) {
             let dest = cacheDir.appendingPathComponent((entry.path as NSString).lastPathComponent)
             _ = try archive.extract(entry, to: dest)
-            print("[ROMFileResolver] extracted \(entry.path) -> \(dest.path)")
+            logger.debug("[ROMFileResolver] extracted \(entry.path) -> \(dest.path)")
             return dest
         }
 
@@ -167,7 +168,7 @@ final class ROMFileResolver: PROMFileResolver {
 
         if fileSystem.fileExists(at: cacheDir),
            let existing = firstROM(in: cacheDir, allowed: allowed) {
-            print("[ROMFileResolver] cached 7z hit: \(existing.path)")
+            logger.debug("[ROMFileResolver] cached 7z hit: \(existing.path)")
             return existing
         }
 
@@ -182,7 +183,7 @@ final class ROMFileResolver: PROMFileResolver {
             guard allowed.contains(ext), let entryData = entry.data else { continue }
             let dest = cacheDir.appendingPathComponent((entryName as NSString).lastPathComponent)
             try entryData.write(to: dest)
-            print("[ROMFileResolver] extracted 7z \(entryName) -> \(dest.path)")
+            logger.debug("[ROMFileResolver] extracted 7z \(entryName) -> \(dest.path)")
             return dest
         }
 

@@ -117,6 +117,10 @@ protocol PDependencyFactory {
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase
+    func makeSyncPreviewUseCase() -> PSyncPreviewUseCase
+    func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase
+    var externalSaveFolderStore: PExternalSaveFolderStore { get }
+    var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
     @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
@@ -439,7 +443,11 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     // MARK: - Controller Skins
 
+    #if !APP_STORE
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
+    #else
+    private lazy var controllerSkinInspector: PControllerSkinInspector = NoOpControllerSkinInspector()
+    #endif
     private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)
     private lazy var controllerSkinDownloader: PControllerSkinDownloader = ControllerSkinDownloadService()
     private lazy var controllerSkinPreference: PControllerSkinPreference = UserDefaultsControllerSkinPreferenceStore()
@@ -492,6 +500,29 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase {
         EmulatorSaveStatesUseCase(saveStore: saveStore)
+    }
+
+    func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
+        SyncPreviewUseCase(
+            saveStore: saveStore,
+            syncDevice: syncDeviceRepository,
+            apiClient: apiClient,
+            tokenProvider: tokenProvider
+        )
+    }
+
+    lazy var externalSaveFolderStore: PExternalSaveFolderStore = UserDefaultsExternalSaveFolderStore()
+    lazy var externalEmulatorSetupStore: PExternalEmulatorSetupStore = UserDefaultsExternalEmulatorSetupStore()
+
+    private lazy var externalSaveFileRepository: PExternalSaveFileRepository =
+        ExternalSaveFileRepository(folderStore: externalSaveFolderStore)
+
+    func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase {
+        ScanExternalSavesUseCase(
+            saveFiles: externalSaveFileRepository,
+            localROMs: localROMRepository,
+            handoffStore: externalEmulatorHandoffStore
+        )
     }
 
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase {
