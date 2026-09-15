@@ -165,7 +165,7 @@ nonisolated struct DownloadJobRomSnapshot: Codable, Equatable, Identifiable {
             name: rom.name,
             platformId: rom.platformId,
             platformSlug: rom.platformSlug,
-            urlCover: rom.urlCover,
+            urlCover: rom.listCoverURL,
             fileName: rom.fileName,
             sizeBytes: rom.sizeBytes
         )

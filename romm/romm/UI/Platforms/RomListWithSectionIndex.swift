@@ -26,7 +26,12 @@ struct RomListWithSectionIndex: View {
     
     @State private var loadMoreTriggeredRoms: Set<Int> = []
     @State private var lastRomCount: Int = 0
-    
+    @State private var prefetchWindow = CoverPrefetchWindow()
+
+    /// Start loading the next page while this many ROMs are still ahead, so the list does not
+    /// visibly stall once the user reaches the bottom.
+    private static let loadMoreThreshold = 12
+
     var body: some View {
         Group {
             if viewMode == .table {
@@ -86,13 +91,8 @@ struct RomListWithSectionIndex: View {
                                             }
                                             .buttonStyle(CardButtonStyle())
                                             .onAppear {
-                                                // Trigger load more when reaching the last item in the entire list
-                                                if isLastRomInList(rom: rom) && canLoadMore && !loadMoreTriggeredRoms.contains(rom.id) {
-                                                    loadMoreTriggeredRoms.insert(rom.id)
-                                                    Task {
-                                                        await onLoadMore?()
-                                                    }
-                                                }
+                                                prefetchWindow.itemAppeared(id: rom.id)
+                                                triggerLoadMoreIfNeeded(for: rom)
                                             }
                                         }
                                     }
@@ -108,13 +108,8 @@ struct RomListWithSectionIndex: View {
                                         .buttonStyle(PlainButtonStyle())
                                         .padding(.horizontal, 16)
                                         .onAppear {
-                                            // Trigger load more when reaching the last item in the entire list
-                                            if isLastRomInList(rom: rom) && canLoadMore && !loadMoreTriggeredRoms.contains(rom.id) {
-                                                loadMoreTriggeredRoms.insert(rom.id)
-                                                Task {
-                                                    await onLoadMore?()
-                                                }
-                                            }
+                                            prefetchWindow.itemAppeared(id: rom.id)
+                                            triggerLoadMoreIfNeeded(for: rom)
                                         }
                                     }
                                 }
@@ -160,6 +155,7 @@ struct RomListWithSectionIndex: View {
                 loadMoreTriggeredRoms.removeAll()
                 lastRomCount = roms.count
             }
+            refreshPrefetchWindow()
         }
         .onChange(of: roms.count) { oldValue, newValue in
             // Clear triggered roms when new data is loaded
@@ -167,6 +163,9 @@ struct RomListWithSectionIndex: View {
                 loadMoreTriggeredRoms.removeAll()
                 lastRomCount = newValue
             }
+        }
+        .onChange(of: roms.coverPrefetchToken) { _, _ in
+            refreshPrefetchWindow()
         }
     }
     
@@ -195,18 +194,7 @@ struct RomListWithSectionIndex: View {
     // MARK: - Computed Properties
     
     private var groupedSections: [RomSection] {
-        let grouped = Dictionary(grouping: roms) { rom in
-            let firstChar = String(rom.name.prefix(1)).uppercased()
-            if firstChar.rangeOfCharacter(from: CharacterSet.letters) != nil {
-                return firstChar
-            } else {
-                return "#"
-            }
-        }
-        
-        return grouped.map { key, value in
-            RomSection(letter: key, roms: value.sorted { $0.name < $1.name })
-        }.sorted { $0.letter < $1.letter }
+        RomSection.sections(for: roms)
     }
     
     private var sectionTitles: [String] {
@@ -232,11 +220,27 @@ struct RomListWithSectionIndex: View {
         }
     }
     
-    private func isLastRomInList(rom: Rom) -> Bool {
-        guard let lastRom = roms.last else {
-            return false
+    /// IDs of the trailing ROMs that start the next page. Kept as a set so an appearing cell
+    /// does not have to search the whole list.
+    private var loadMoreTriggerRomIDs: Set<Int> {
+        Set(roms.suffix(Self.loadMoreThreshold).map { $0.id })
+    }
+
+    private func triggerLoadMoreIfNeeded(for rom: Rom) {
+        guard canLoadMore,
+              loadMoreTriggerRomIDs.contains(rom.id),
+              !loadMoreTriggeredRoms.contains(rom.id) else { return }
+
+        loadMoreTriggeredRoms.insert(rom.id)
+        Task {
+            await onLoadMore?()
         }
-        return rom.id == lastRom.id
+    }
+
+    /// The sections are what the user actually scrolls through, so the prefetch window has to
+    /// follow their order and not the order the ROMs arrived in.
+    private func refreshPrefetchWindow() {
+        prefetchWindow.update(with: groupedSections.flatMap { $0.roms }) { $0.listCoverURL }
     }
 }
 
@@ -255,6 +259,38 @@ struct CardButtonStyle: ButtonStyle {
 struct RomSection {
     let letter: String
     let roms: [Rom]
+
+    /// Groups ROMs into letter sections without changing the order they arrived in.
+    ///
+    /// The server already returns every page ordered by name, so a later page only ever
+    /// contains names that belong after the ones already on screen. Sorting again on the
+    /// client used Swift's ordinal comparison, which is not the collation the server sorts
+    /// with, so a ROM from page two could land between two ROMs that were already visible.
+    /// In the two column grid that pushed every following card into the other column, and
+    /// because an image that finished loading in the same update carried an animation, the
+    /// cards visibly glided to their new slot instead of staying put.
+    static func sections(for roms: [Rom]) -> [RomSection] {
+        var order: [String] = []
+        var romsByLetter: [String: [Rom]] = [:]
+
+        for rom in roms {
+            let letter = sectionLetter(for: rom)
+            if romsByLetter[letter] == nil {
+                order.append(letter)
+                romsByLetter[letter] = []
+            }
+            romsByLetter[letter]?.append(rom)
+        }
+
+        return order.map { RomSection(letter: $0, roms: romsByLetter[$0] ?? []) }
+    }
+
+    /// Anything that does not start with a letter is collected under `#`, the way the
+    /// section index offers it.
+    static func sectionLetter(for rom: Rom) -> String {
+        let firstChar = String(rom.name.prefix(1)).uppercased()
+        return firstChar.rangeOfCharacter(from: CharacterSet.letters) != nil ? firstChar : "#"
+    }
 }
 
 // MARK: - List Row Views optimized for List
@@ -264,7 +300,7 @@ struct SmallRomListRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            CachedKFImage(urlString: rom.urlCover) { image in
+            CachedKFImage(urlString: rom.listCoverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -306,7 +342,7 @@ struct BigRomListRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            CachedKFImage(urlString: rom.urlCover) { image in
+            CachedKFImage(urlString: rom.listCoverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -433,24 +469,37 @@ struct RomTableView: View {
     let currentOrderDir: String // Current sort direction from ViewModel
     @Binding var loadMoreTriggeredRoms: Set<Int>
     @State private var selectedRom: Rom.ID?
+    @State private var prefetchWindow = CoverPrefetchWindow()
     @Environment(\.horizontalSizeClass) var sizeClass
-    
+
+    /// Start loading the next page while this many ROMs are still ahead, so the table does not
+    /// visibly stall once the user reaches the bottom.
+    private static let loadMoreThreshold = 12
+
     private var isCompact: Bool {
         sizeClass == .compact
     }
-    
+
     // No local sorting - data comes pre-sorted from server
     private var sortedRoms: [Rom] {
         roms
     }
-    
+
     var body: some View {
-        if isCompact {
-            // iPhone: Custom scrollable table implementation
-            iPhoneTableView
-        } else {
-            // iPad/Mac: Native Table
-            iPadTableView
+        Group {
+            if isCompact {
+                // iPhone: Custom scrollable table implementation
+                iPhoneTableView
+            } else {
+                // iPad/Mac: Native Table
+                iPadTableView
+            }
+        }
+        .onAppear {
+            refreshPrefetchWindow()
+        }
+        .onChange(of: sortedRoms.coverPrefetchToken) { _, _ in
+            refreshPrefetchWindow()
         }
     }
     
@@ -478,7 +527,7 @@ struct RomTableView: View {
                             HStack(spacing: 0) {
                                 // Title Column
                                 HStack(spacing: 8) {
-                                    CachedKFImage(urlString: rom.urlCover) { image in
+                                    CachedKFImage(urlString: rom.listCoverURL) { image in
                                         image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
@@ -606,13 +655,8 @@ struct RomTableView: View {
                         .background(Color(.systemBackground))
                         .overlay(Rectangle().fill(Color(.separator)).frame(height: 0.5), alignment: .bottom)
                         .onAppear {
-                            // Trigger load more when reaching the last item
-                            if isLastRom(rom) && !loadMoreTriggeredRoms.contains(rom.id) {
-                                loadMoreTriggeredRoms.insert(rom.id)
-                                Task {
-                                    await onLoadMore?()
-                                }
-                            }
+                            prefetchWindow.itemAppeared(id: rom.id)
+                            triggerLoadMoreIfNeeded(for: rom)
                         }
                     }
                 }
@@ -673,7 +717,7 @@ struct RomTableView: View {
                                 // Title Column
                                 HStack(spacing: 4) {
                                     // Icon
-                                    CachedKFImage(urlString: rom.urlCover) { image in
+                                    CachedKFImage(urlString: rom.listCoverURL) { image in
                                         image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
@@ -774,6 +818,9 @@ struct RomTableView: View {
                         .padding(.leading, 8)
                         .background(Color(.systemBackground))
                         .overlay(Rectangle().fill(Color(.separator)).frame(height: 0.5), alignment: .bottom)
+                        .onAppear {
+                            prefetchWindow.itemAppeared(id: rom.id)
+                        }
                     }
                 }
                 
@@ -889,10 +936,25 @@ struct RomTableView: View {
         .padding(.horizontal, 8)
     }
     
-    private func isLastRom(_ rom: Rom) -> Bool {
-        guard let romIndex = roms.firstIndex(where: { $0.id == rom.id }) else { return false }
-        // Trigger load more when we're within the last 3 ROMs
-        return romIndex >= roms.count - 3
+    /// IDs of the trailing ROMs that start the next page. Kept as a set so an appearing row
+    /// does not have to search the whole list.
+    private var loadMoreTriggerRomIDs: Set<Int> {
+        Set(sortedRoms.suffix(Self.loadMoreThreshold).map { $0.id })
+    }
+
+    private func triggerLoadMoreIfNeeded(for rom: Rom) {
+        guard canLoadMore,
+              loadMoreTriggerRomIDs.contains(rom.id),
+              !loadMoreTriggeredRoms.contains(rom.id) else { return }
+
+        loadMoreTriggeredRoms.insert(rom.id)
+        Task {
+            await onLoadMore?()
+        }
+    }
+
+    private func refreshPrefetchWindow() {
+        prefetchWindow.update(with: sortedRoms) { $0.listCoverURL }
     }
     
     private func formatFileSize(_ bytes: Int) -> String {

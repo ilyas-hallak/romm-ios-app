@@ -77,6 +77,7 @@ class SearchViewModel {
             let results = try await searchRomsUseCase.execute(query: query)
             guard !Task.isCancelled else { return }
             searchResults = results
+            prefetchCovers(for: results)
         } catch is CancellationError {
             return
         } catch let urlError as URLError where urlError.code == .cancelled {
@@ -87,6 +88,7 @@ class SearchViewModel {
                 let legacy = try await DefaultDependencyFactory.shared.romsRepository.searchRomsLegacy(query: query)
                 guard !Task.isCancelled else { return }
                 searchResults = legacy
+                prefetchCovers(for: legacy)
             } catch is CancellationError {
                 return
             } catch let urlError as URLError where urlError.code == .cancelled {
@@ -97,5 +99,11 @@ class SearchViewModel {
                 searchResults = []
             }
         }
+    }
+
+    // Search has no pagination, so every result set is prefetched in one go.
+    private func prefetchCovers(for roms: [Rom]) {
+        let urls = roms.compactMap { $0.listCoverURL }.compactMap { URL(string: $0) }
+        KingfisherCacheManager.shared.preloadImages(urls: urls)
     }
 }

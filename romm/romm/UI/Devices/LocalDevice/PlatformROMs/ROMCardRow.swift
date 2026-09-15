@@ -20,7 +20,7 @@ struct ROMCardRow: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    Image(rom.platformSlug)
+                    Image(PlatformIcon.assetName(for: rom.platformSlug))
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .padding(6)
