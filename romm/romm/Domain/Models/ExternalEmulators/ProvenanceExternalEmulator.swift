@@ -15,8 +15,8 @@ struct ProvenanceExternalEmulator: PExternalEmulator {
     var identifierKind: ExternalGameIdentifierKind { .md5OfROMData }
     var wantsUnpackedROM: Bool { true }
 
-    /// Battery saves land under `Battery States/<system>/<ROM name>.srm`, so the
-    /// hint stops above the per-system directory, which is not one value. `sav`
+    /// Battery saves land under `Battery States/<ROM name>/<ROM name>.srm`, so
+    /// the hint stops above the per-game directory, which is not one value. `sav`
     /// alongside `srm` because Provenance runs both libretro cores, which write
     /// the libretro extension, and its own, which do not.
     ///
@@ -45,6 +45,9 @@ struct ProvenanceExternalEmulator: PExternalEmulator {
 
     /// Provenance reads the identifier out of the query rather than the path,
     /// so the shared `<scheme>://game/<id>` form does not resolve here.
+    ///
+    /// Lower case hex is correct even though Provenance stores the hash upper
+    /// case: it upper-cases the incoming value before looking the game up.
     func launchURL(gameIdentifier: String) -> URL? {
         guard !gameIdentifier.isEmpty else { return nil }
         var components = URLComponents()
