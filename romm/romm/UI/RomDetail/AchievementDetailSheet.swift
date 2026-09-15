@@ -32,7 +32,7 @@ struct AchievementDetailSheet: View {
                 )
                 .foregroundStyle(.green)
 
-                if let date = earnedAchievement.earnedDate {
+                if let date = earnedAchievement.earnedAtDate {
                     Text(date.formatted(date: .abbreviated, time: .shortened))
                         .foregroundStyle(.secondary)
                 }

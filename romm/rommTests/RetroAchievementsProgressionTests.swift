@@ -88,6 +88,7 @@ struct RetroAchievementsProgressionTests {
         let progression = RetroAchievementsProgression(
             gameId: 7,
             awardedCount: 2,
+            awardedHardcoreCount: 1,
             maximumCount: 10,
             earnedAchievements: []
         )
