@@ -76,4 +76,6 @@ class StubRommAPIClient: PRommAPIClient {
     func deleteStates(ids: [Int]) async throws { fatalError("deleteStates not stubbed") }
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("registerDevice not stubbed") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("negotiateSync not stubbed") }
+    func getTasksStatus() async throws -> [TaskStatusSchema] { fatalError("getTasksStatus not stubbed") }
+    func login(username: String, password: String) async throws -> RommSessionCookie { fatalError("login not stubbed") }
 }

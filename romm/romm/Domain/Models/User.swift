@@ -19,6 +19,7 @@ struct User: Identifiable, Equatable {
     let createdAt: Date?
     let retroAchievementsUsername: String?
     let retroAchievementsProgression: [RetroAchievementsProgression]
+    let oauthScopes: [String]
 
     init(
         id: Int,
@@ -31,7 +32,8 @@ struct User: Identifiable, Equatable {
         lastActive: Date? = nil,
         createdAt: Date? = nil,
         retroAchievementsUsername: String? = nil,
-        retroAchievementsProgression: [RetroAchievementsProgression] = []
+        retroAchievementsProgression: [RetroAchievementsProgression] = [],
+        oauthScopes: [String] = []
     ) {
         self.id = id
         self.username = username
@@ -44,6 +46,15 @@ struct User: Identifiable, Equatable {
         self.createdAt = createdAt
         self.retroAchievementsUsername = retroAchievementsUsername
         self.retroAchievementsProgression = retroAchievementsProgression
+        self.oauthScopes = oauthScopes
+    }
+}
+
+extension User {
+    /// Whether the account has the given OAuth scope, e.g. "tasks.run" for
+    /// starting/inspecting server tasks like the library scan.
+    func hasScope(_ scope: String) -> Bool {
+        oauthScopes.contains(scope)
     }
 }
 

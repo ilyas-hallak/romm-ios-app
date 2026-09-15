@@ -102,6 +102,12 @@ protocol PRommAPIClient {
     func getSaves(romId: Int) async throws -> [SaveSchema]
     func getStates(romId: Int) async throws -> [StateSchema]
 
+    // Tasks
+    func getTasksStatus() async throws -> [TaskStatusSchema]
+
+    // Session login, the Socket.IO endpoint only accepts a session cookie
+    func login(username: String, password: String) async throws -> RommSessionCookie
+
     // Saves sync
     func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
     func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
