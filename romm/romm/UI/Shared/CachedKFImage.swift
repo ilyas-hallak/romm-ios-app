@@ -78,7 +78,8 @@ private struct CachedKFImageLoader<Content: View, Placeholder: View>: View {
         // onAppear fires again on every cell reuse, don't reload what is already on screen.
         if loadedImage != nil, loadedURL == url { return }
 
-        let options = KingfisherCacheManager.imageOptions(for: tier)
+        // A cell that is on screen must overtake the queued prefetch downloads.
+        let options = KingfisherCacheManager.imageOptions(for: tier, priority: .visible)
 
         // Return a cached image synchronously to avoid the placeholder flashing while scrolling.
         if let cached = ImageCache.default.retrieveImageInMemoryCache(

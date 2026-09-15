@@ -47,21 +47,51 @@ class KingfisherCacheManager: ObservableObject {
     /// Shared downsampling target so on-demand loads and prefetch produce the same cache key.
     static let downsampleSize = CoverImageTier.full.downsampleSize
 
-    /// Covers are roughly 2 MB each in the thumbnail tier after downsampling, so this budget
-    /// keeps several screens worth of grid cells resident instead of re-decoding them on scroll.
+    /// Timeout for a single cover download, used for the downloader and its session configuration.
+    private static let downloadTimeout: TimeInterval = 30.0
+
+    /// The server thumbnails are 240x360, so a decoded cover costs about 350 KB. Together with
+    /// the count limit below that keeps roughly 500 covers resident, which is many screens worth
+    /// of scrolling in either direction. The detail tier is the expensive one at around 2 MB.
     private static let memoryCacheLimitBytes = 180 * 1024 * 1024
 
-    /// Prefetch must not starve the on-demand loads of the cells that are actually on screen.
-    private static let maxConcurrentPrefetchDownloads = 4
+    /// The prefetch may use most of the connection budget, because visible cells request their
+    /// cover with a higher task priority and therefore overtake the queued prefetch downloads.
+    private static let maxConcurrentPrefetchDownloads = 6
+
+    /// The RomM server speaks HTTP/1.1, so every parallel request needs its own connection and
+    /// `httpMaximumConnectionsPerHost` is a hard cap for the whole app. Measured against a real
+    /// server, throughput stops improving above 8 connections.
+    private static let maxConnectionsPerHost = 8
+
+    /// Requests are queued once the connection budget is used up, so the caller has to say
+    /// whether the image is needed right now or only soon.
+    enum LoadPriority {
+        /// A cell the user is looking at right now.
+        case visible
+        /// Warming the cache ahead of the scroll.
+        case prefetch
+
+        var taskPriority: Float {
+            switch self {
+            case .visible: return URLSessionTask.highPriority
+            case .prefetch: return URLSessionTask.lowPriority
+            }
+        }
+    }
 
     /// Image options shared between CachedKFImage and prefetching so both hit the same cache entry.
-    static func imageOptions(for tier: CoverImageTier) -> KingfisherOptionsInfo {
+    ///
+    /// The priority only ends up on the `URLSessionTask`, it is not part of the cache key, so a
+    /// prefetched cover and a visible cell still share one entry.
+    static func imageOptions(for tier: CoverImageTier, priority: LoadPriority = .visible) -> KingfisherOptionsInfo {
         [
             .diskCacheExpiration(.days(30)),
             .backgroundDecode,
             .scaleFactor(UIScreen.main.scale),
             .processor(DownsamplingImageProcessor(size: tier.downsampleSize)),
-            .cacheOriginalImage
+            .cacheOriginalImage,
+            .downloadPriority(priority.taskPriority)
         ]
     }
 
@@ -85,6 +115,9 @@ class KingfisherCacheManager: ObservableObject {
 
     private var memoryWarningObserver: NSObjectProtocol?
 
+    /// The downloader session may only be replaced once, see `configureDownloaderSessionIfNeeded()`.
+    private var didConfigureDownloaderSession = false
+
     private init() {
         configureKingfisher()
     }
@@ -105,8 +138,10 @@ class KingfisherCacheManager: ObservableObject {
         ImageCache.default.diskStorage.config.expiration = .seconds(settings.diskCacheExpirySeconds)
 
         // Configure downloader
-        ImageDownloader.default.downloadTimeout = 30.0
-        ImageDownloader.default.sessionConfiguration.httpMaximumConnectionsPerHost = 6
+        ImageDownloader.default.downloadTimeout = Self.downloadTimeout
+
+        // updateSettings() runs this again, so the session has to stay a one-time assignment.
+        configureDownloaderSessionIfNeeded()
 
         // Configure default options for KingfisherManager
         KingfisherManager.shared.defaultOptions = [
@@ -120,6 +155,28 @@ class KingfisherCacheManager: ObservableObject {
         registerMemoryWarningObserverIfNeeded()
 
         Logger.general.info("🖼️ Kingfisher configured: Memory=\(Self.memoryCacheLimitBytes / 1024 / 1024)MB, Disk=\(settings.diskCacheLimitBytes / 1024 / 1024)MB, Expiry=\(settings.diskCacheExpirySeconds / 86400)d")
+    }
+
+    /// Raises the connection budget of Kingfisher's downloader.
+    ///
+    /// Mutating `sessionConfiguration.httpMaximumConnectionsPerHost` in place has no effect:
+    /// `URLSessionConfiguration` is a reference type, so writing through the reference never
+    /// triggers the `didSet` that rebuilds the session, and the session keeps the configuration
+    /// it was built with. Only assigning a freshly built configuration works.
+    ///
+    /// That assignment invalidates the running session and cancels every download in flight, so
+    /// it must happen exactly once even though `configureKingfisher()` runs on every settings
+    /// change.
+    private func configureDownloaderSessionIfNeeded() {
+        guard !didConfigureDownloaderSession else { return }
+        didConfigureDownloaderSession = true
+
+        // `.ephemeral` is Kingfisher's own default, the downloader must not use a persistent
+        // URL cache next to the image cache.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpMaximumConnectionsPerHost = Self.maxConnectionsPerHost
+        configuration.timeoutIntervalForRequest = Self.downloadTimeout
+        ImageDownloader.default.sessionConfiguration = configuration
     }
 
     private func registerMemoryWarningObserverIfNeeded() {
@@ -210,7 +267,7 @@ class KingfisherCacheManager: ObservableObject {
         let pendingURLs = claimPrefetchURLs(urls, tier: tier)
         guard !pendingURLs.isEmpty else { return }
 
-        var options = Self.imageOptions(for: tier)
+        var options = Self.imageOptions(for: tier, priority: .prefetch)
         if let authModifier {
             options.append(.requestModifier(authModifier))
         }

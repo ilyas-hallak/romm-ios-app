@@ -9,10 +9,12 @@ import Foundation
 
 /// Keeps the covers just below the fold warm while the user scrolls a list.
 ///
-/// A list reports the item whose cell just appeared, and the window prefetches the covers of the
-/// items that follow it, so they are decoded before they scroll into view. Deduplication against
-/// repeated requests is handled by `KingfisherCacheManager`, this type only makes sure the window
-/// is not recalculated for every single cell that appears.
+/// A list reports the item whose cell just appeared, and the window prefetches the covers around
+/// it, so they are decoded before they scroll into view. The window follows the current position
+/// instead of tracking a high-water mark, otherwise jumping backwards, for example through the
+/// letter index, would leave everything below the furthest reached row unloaded forever.
+/// Deduplication against repeated requests is handled by `KingfisherCacheManager`, this type only
+/// makes sure the window is not recalculated for every single cell that appears.
 ///
 /// Usage from a view:
 /// ```
@@ -23,26 +25,34 @@ import Foundation
 /// ```
 @MainActor
 final class CoverPrefetchWindow {
-    /// How many items ahead of the appearing one are prefetched.
+    /// How many items ahead of the appearing one are prefetched. Covers are downsampled to the
+    /// thumbnail tier and therefore roughly five times smaller than before, so a window of 48
+    /// costs about 16 MB and also covers fast scrolling through a grid.
     private let windowSize: Int
 
-    /// The window is only extended again once the appearing index comes this close to its end,
-    /// so scrolling a few rows does not rebuild the slice on every `onAppear`.
+    /// The window is only rebuilt once the appearing index moved this far away from the last
+    /// refill, so scrolling a few rows does not rebuild the slice on every `onAppear`.
     private let refillStep: Int
 
     private let tier: KingfisherCacheManager.CoverImageTier
+
+    /// Hands the collected URLs to the image pipeline, injectable so tests do not hit the network.
+    private let prefetch: ([URL], KingfisherCacheManager.CoverImageTier) -> Void
 
     /// Cover URLs in the order the list displays them, `nil` for items without a cover.
     private var coverURLs: [URL?] = []
     private var indexByItemID: [AnyHashable: Int] = [:]
 
-    /// Highest index that was already handed to the prefetcher, -1 when nothing was requested yet.
-    private var prefetchedUpTo: Int = -1
+    /// Index the last window was built around, `Int.min` when nothing was requested yet.
+    private var lastRefillIndex: Int = .min
 
-    init(windowSize: Int = 24, tier: KingfisherCacheManager.CoverImageTier = .thumbnail) {
+    init(windowSize: Int = 48,
+         tier: KingfisherCacheManager.CoverImageTier = .thumbnail,
+         prefetch: @escaping ([URL], KingfisherCacheManager.CoverImageTier) -> Void = { KingfisherCacheManager.shared.prefetch(urls: $0, tier: $1) }) {
         self.windowSize = max(1, windowSize)
         self.refillStep = max(1, windowSize / 2)
         self.tier = tier
+        self.prefetch = prefetch
     }
 
     /// Replaces the item order the window walks along, for example after a page was appended,
@@ -61,7 +71,7 @@ final class CoverPrefetchWindow {
         }
         indexByItemID = indices
 
-        prefetchedUpTo = -1
+        lastRefillIndex = .min
 
         // The cells report themselves only once they appear, and the order in which SwiftUI runs
         // the `onAppear` of a list and of its cells is not guaranteed. Priming the first window
@@ -80,27 +90,28 @@ final class CoverPrefetchWindow {
     func reset() {
         coverURLs = []
         indexByItemID = [:]
-        prefetchedUpTo = -1
+        lastRefillIndex = .min
     }
 
     private func extendWindow(from index: Int) {
+        // Refill in chunks instead of on every appearing cell, in either scroll direction.
+        // The `.min` case is spelled out because the subtraction below would overflow on it.
+        if lastRefillIndex != .min {
+            guard abs(index - lastRefillIndex) >= refillStep else { return }
+        }
+
+        lastRefillIndex = index
+
+        let lowerBound = max(0, index - refillStep)
         let upperBound = min(index + windowSize, coverURLs.count - 1)
-
-        // Scrolling backwards or standing still, everything ahead is already requested.
-        guard upperBound > prefetchedUpTo else { return }
-
-        // Refill in chunks instead of on every appearing cell.
-        guard index + refillStep >= prefetchedUpTo else { return }
-
-        let lowerBound = max(prefetchedUpTo + 1, index + 1)
         guard lowerBound <= upperBound else { return }
 
-        prefetchedUpTo = upperBound
-
+        // The small backwards margin helps after a jump and costs nothing, the cache manager
+        // already skips keys it requested before.
         let urls = coverURLs[lowerBound...upperBound].compactMap { $0 }
         guard !urls.isEmpty else { return }
 
-        KingfisherCacheManager.shared.prefetch(urls: urls, tier: tier)
+        prefetch(urls, tier)
     }
 }
 
