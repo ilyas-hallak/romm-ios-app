@@ -538,7 +538,7 @@ class MockDependencyFactory: PDependencyFactory {
         )
     }
 
-    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel {
-        ShareROMViewModel(rom: rom, getShareFilesUseCase: makeGetROMShareFilesUseCase())
+    @MainActor func makeShareROMViewModel() -> ShareROMViewModel {
+        ShareROMViewModel(getShareFilesUseCase: makeGetROMShareFilesUseCase())
     }
 }
