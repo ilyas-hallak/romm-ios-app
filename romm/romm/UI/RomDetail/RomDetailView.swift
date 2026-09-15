@@ -1539,6 +1539,9 @@ struct ParallaxHeader<Content: View, Space: Hashable>: View {
                     width: proxy.size.width,
                     height: proxy.size.height + heightModifier
                 )
+                // The frame only fixes the layout size, a cover wider than 2:3 would still
+                // paint past it and spill out sideways.
+                .clipped()
                 .offset(y: offset)
                 .onAppear {
                     // Extract dominant color from cover image

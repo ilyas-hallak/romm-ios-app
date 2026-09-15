@@ -315,7 +315,7 @@ struct PlatformHeaderView: View {
     var body: some View {
         HStack(spacing: 12) {
 
-            Image(platform.slug)
+            Image(PlatformIcon.assetName(for: platform.slug))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))

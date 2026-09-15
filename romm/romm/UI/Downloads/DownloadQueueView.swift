@@ -74,7 +74,7 @@ struct DownloadQueueView: View {
     private func row(for task: DownloadTask) -> some View {
         HStack(spacing: 12) {
             if let slug = task.platformSlug {
-                Image(slug)
+                Image(PlatformIcon.assetName(for: slug))
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 40, height: 40)

@@ -133,7 +133,7 @@ struct LocalDeviceDetailView: View {
                         } label: {
                             HStack(spacing: 12) {
                                 if let slug = roms.first?.platformSlug {
-                                    Image(slug)
+                                    Image(PlatformIcon.assetName(for: slug))
                                         .resizable()
                                         .aspectRatio(contentMode: .fit)
                                         .frame(width: 44, height: 44)
