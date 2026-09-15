@@ -52,6 +52,38 @@ private struct CachedKFImageLoader<Content: View, Placeholder: View>: View {
     /// URL of the request that is currently in flight.
     @State private var requestedURL: URL?
 
+    init(
+        url: URL?,
+        tier: KingfisherCacheManager.CoverImageTier,
+        @ViewBuilder content: @escaping (Image) -> Content,
+        @ViewBuilder placeholder: @escaping () -> Placeholder
+    ) {
+        self.url = url
+        self.tier = tier
+        self.content = content
+        self.placeholder = placeholder
+
+        // A cover that is already in memory is put in place before the first render, not in
+        // `onAppear`. Otherwise the placeholder would draw for one frame and the swap would
+        // then run the fade below, which is exactly the flicker a warm cache should prevent.
+        let cached = url.flatMap { Self.memoryCachedImage(for: $0, tier: tier) }
+        _loadedImage = State(initialValue: cached)
+        _loadedURL = State(initialValue: cached == nil ? nil : url)
+        _requestedURL = State(initialValue: cached == nil ? nil : url)
+    }
+
+    private static func memoryCachedImage(
+        for url: URL,
+        tier: KingfisherCacheManager.CoverImageTier
+    ) -> KFCrossPlatformImage? {
+        ImageCache.default.retrieveImageInMemoryCache(
+            forKey: url.cacheKey,
+            options: KingfisherParsedOptionsInfo(
+                KingfisherCacheManager.imageOptions(for: tier, priority: .visible)
+            )
+        )
+    }
+
     var body: some View {
         Group {
             if let loadedImage = loadedImage {
@@ -61,6 +93,12 @@ private struct CachedKFImageLoader<Content: View, Placeholder: View>: View {
                 placeholder()
             }
         }
+        // The fade belongs to this image and nothing else. Driving it from here instead of
+        // wrapping the state change in `withAnimation` keeps it out of the surrounding
+        // layout: a `withAnimation` opens a global transaction, so every other change
+        // SwiftUI applied in the same update, a grid cell created while scrolling or a page
+        // appended to the list, was animated too and slid into place instead of appearing.
+        .animation(.easeOut(duration: 0.2), value: loadedImage != nil)
         .onAppear {
             loadImage()
         }
@@ -81,12 +119,10 @@ private struct CachedKFImageLoader<Content: View, Placeholder: View>: View {
         // A cell that is on screen must overtake the queued prefetch downloads.
         let options = KingfisherCacheManager.imageOptions(for: tier, priority: .visible)
 
-        // Return a cached image synchronously to avoid the placeholder flashing while scrolling.
-        if let cached = ImageCache.default.retrieveImageInMemoryCache(
-            forKey: url.cacheKey,
-            options: KingfisherParsedOptionsInfo(options)
-        ) {
-            // No animation here, the image was there before the cell was drawn.
+        // Return a cached image synchronously to avoid the placeholder flashing while
+        // scrolling. On first appearance the initialiser has already done this, so what is
+        // left here is the cell that was recycled to another URL.
+        if let cached = Self.memoryCachedImage(for: url, tier: tier) {
             loadedImage = cached
             loadedURL = url
             requestedURL = url
@@ -107,9 +143,7 @@ private struct CachedKFImageLoader<Content: View, Placeholder: View>: View {
                 switch result {
                 case .success(let value):
                     loadedURL = url
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        loadedImage = value.image
-                    }
+                    loadedImage = value.image
 
                 case .failure(let error):
                     Logger.general.error("❌ Failed to load image from \(url): \(error.localizedDescription)")

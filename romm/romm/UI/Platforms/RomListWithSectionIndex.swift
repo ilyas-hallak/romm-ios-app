@@ -194,18 +194,7 @@ struct RomListWithSectionIndex: View {
     // MARK: - Computed Properties
     
     private var groupedSections: [RomSection] {
-        let grouped = Dictionary(grouping: roms) { rom in
-            let firstChar = String(rom.name.prefix(1)).uppercased()
-            if firstChar.rangeOfCharacter(from: CharacterSet.letters) != nil {
-                return firstChar
-            } else {
-                return "#"
-            }
-        }
-        
-        return grouped.map { key, value in
-            RomSection(letter: key, roms: value.sorted { $0.name < $1.name })
-        }.sorted { $0.letter < $1.letter }
+        RomSection.sections(for: roms)
     }
     
     private var sectionTitles: [String] {
@@ -270,6 +259,38 @@ struct CardButtonStyle: ButtonStyle {
 struct RomSection {
     let letter: String
     let roms: [Rom]
+
+    /// Groups ROMs into letter sections without changing the order they arrived in.
+    ///
+    /// The server already returns every page ordered by name, so a later page only ever
+    /// contains names that belong after the ones already on screen. Sorting again on the
+    /// client used Swift's ordinal comparison, which is not the collation the server sorts
+    /// with, so a ROM from page two could land between two ROMs that were already visible.
+    /// In the two column grid that pushed every following card into the other column, and
+    /// because an image that finished loading in the same update carried an animation, the
+    /// cards visibly glided to their new slot instead of staying put.
+    static func sections(for roms: [Rom]) -> [RomSection] {
+        var order: [String] = []
+        var romsByLetter: [String: [Rom]] = [:]
+
+        for rom in roms {
+            let letter = sectionLetter(for: rom)
+            if romsByLetter[letter] == nil {
+                order.append(letter)
+                romsByLetter[letter] = []
+            }
+            romsByLetter[letter]?.append(rom)
+        }
+
+        return order.map { RomSection(letter: $0, roms: romsByLetter[$0] ?? []) }
+    }
+
+    /// Anything that does not start with a letter is collected under `#`, the way the
+    /// section index offers it.
+    static func sectionLetter(for rom: Rom) -> String {
+        let firstChar = String(rom.name.prefix(1)).uppercased()
+        return firstChar.rangeOfCharacter(from: CharacterSet.letters) != nil ? firstChar : "#"
+    }
 }
 
 // MARK: - List Row Views optimized for List
