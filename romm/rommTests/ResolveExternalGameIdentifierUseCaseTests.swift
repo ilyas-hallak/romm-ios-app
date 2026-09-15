@@ -125,6 +125,31 @@ struct ResolveExternalGameIdentifierUseCaseTests {
         #expect(resolver.requestedGameType == .gba)
     }
 
+    /// Provenance addresses a game by MD5 rather than SHA-1, over the same file
+    /// it is handed. A hash of the archive would point the deep link at something
+    /// Provenance never imported.
+    @Test func provenanceGetsTheMD5OfTheResolvedFile() async throws {
+        let romURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ResolveIdentifierTests-\(UUID().uuidString).gba")
+        try Data("abc".utf8).write(to: romURL)
+        defer { try? FileManager.default.removeItem(at: romURL) }
+
+        let resolver = FakeROMFileResolver()
+        resolver.resolvedURL = romURL
+        let useCase = ResolveExternalGameIdentifierUseCase(resolver: resolver)
+
+        let handoff = try await useCase.execute(
+            rom: makeROM(),
+            baseURL: baseURL,
+            emulator: ProvenanceExternalEmulator()
+        )
+
+        #expect(handoff.gameIdentifier == "900150983cd24fb0d6963f7d28e17f72")
+        // Provenance has to receive exactly the file that was hashed.
+        #expect(handoff.unpackedROMURL == romURL)
+        #expect(resolver.requestedGameType == .gba)
+    }
+
     /// Delta only runs the systems DeltaGameType covers. Saying so beats handing
     /// the ROM over and having Delta silently refuse the deep link later.
     @Test func rejectsAPlatformTheEmulatorCannotPlay() async {

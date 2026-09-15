@@ -66,6 +66,25 @@ struct ExternalSaveLayoutTests {
         #expect(!layout.isBatterySave(fileName: "\(sha1).png", matching: sha1))
     }
 
+    // MARK: - Provenance
+
+    /// `…/Battery States/<system>/ROMNAME.srm`, with `sav` alongside because
+    /// Provenance runs both libretro cores and its own.
+    @Test func provenanceRecognisesTheSystemFolderNaming() {
+        let layout = ProvenanceExternalEmulator().saveLayout!
+        #expect(layout.naming == .romBaseName)
+        #expect(layout.isBatterySave(fileName: "Final Fantasy VII.srm", matching: "Final Fantasy VII"))
+        #expect(layout.isBatterySave(fileName: "Final Fantasy VII.sav", matching: "Final Fantasy VII"))
+    }
+
+    /// The hint stops above the per-system directory, and above `Save States`,
+    /// whose contents are not battery saves and must not be offered as one.
+    @Test func provenanceHintsAtTheBatteryFolderOnly() {
+        let layout = ProvenanceExternalEmulator().saveLayout!
+        #expect(layout.searchHints == ["Battery States"])
+        #expect(!layout.isBatterySave(fileName: "Final Fantasy VII.svs", matching: "Final Fantasy VII"))
+    }
+
     // MARK: - Shared behaviour
 
     /// Case folding differs across the file providers these folders come from,
@@ -96,6 +115,7 @@ struct ExternalSaveLayoutTests {
         #expect(RetroArchExternalEmulator().saveLayout != nil)
         #expect(DeltaExternalEmulator().saveLayout != nil)
         #expect(ManicEmuExternalEmulator().saveLayout != nil)
+        #expect(ProvenanceExternalEmulator().saveLayout != nil)
     }
 
     /// Every layout has to bound its own search: these folders can sit next to a

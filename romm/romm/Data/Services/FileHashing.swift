@@ -16,6 +16,7 @@ enum FileHashing {
         try hash(ofFileAt: url, using: Insecure.SHA1())
     }
 
+    /// Lowercase hex MD5, the identifier Provenance uses for an imported ROM.
     static func md5(ofFileAt url: URL) throws -> String {
         try hash(ofFileAt: url, using: Insecure.MD5())
     }

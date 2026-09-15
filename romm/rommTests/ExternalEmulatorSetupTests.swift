@@ -75,7 +75,7 @@ struct ExternalEmulatorHandoffExplanationTests {
 
     /// The apps that do take a document describe the share sheet instead, and
     /// must not tell the user to paste anything.
-    @Test(arguments: [ExternalEmulatorID.delta, .retroarch])
+    @Test(arguments: [ExternalEmulatorID.delta, .retroarch, .provenance])
     func shareSheetAppsDoNotMentionPasting(id: ExternalEmulatorID) {
         let text = id.emulator.handoffExplanation
         #expect(text.localizedCaseInsensitiveContains("share sheet"))

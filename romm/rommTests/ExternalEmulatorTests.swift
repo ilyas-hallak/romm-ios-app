@@ -66,6 +66,7 @@ struct ExternalEmulatorIDTests {
         // Spelled out because the case name and the key differ here, and the
         // default synthesised value would be "manicEmu".
         #expect(ExternalEmulatorID.manicEmu.rawValue == "manicemu")
+        #expect(ExternalEmulatorID.provenance.rawValue == "provenance")
     }
 
     /// Catches a `switch` branch wired to the wrong implementation.
