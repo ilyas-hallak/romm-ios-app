@@ -78,6 +78,8 @@ struct RomDetailView: View {
             summary: romDetails.summary,
             platformId: romDetails.platformId,
             urlCover: romDetails.urlCover,
+            coverURLSmall: romDetails.coverURLSmall, // Keep the covers from the own server
+            coverURLLarge: romDetails.coverURLLarge,
             releaseYear: rom.releaseYear, // Keep original release year
             isFavourite: romDetails.isFavourite,
             hasRetroAchievements: romDetails.hasRetroAchievements,
@@ -102,7 +104,7 @@ struct RomDetailView: View {
                         defaultHeight: 400
                     ) {
                         ZStack(alignment: .top) {
-                            CachedKFImage(urlString: rom.urlCover, tier: .full) { image in
+                            CachedKFImage(urlString: rom.detailCoverURL, tier: .full) { image in
                                 image
                                     .resizable()
                                     .scaledToFill()
@@ -485,7 +487,7 @@ struct RomDetailView: View {
                         break
                     }
                     appData.launchDownloadFlight(
-                        coverURL: currentSelectedRom.urlCover,
+                        coverURL: currentSelectedRom.listCoverURL,
                         from: downloadButtonFrame,
                         // No public API exposes the tab-bar's minimized state, so
                         // derive it from the live scroll offset (see onScrollGeometryChange).

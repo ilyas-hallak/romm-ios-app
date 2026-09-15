@@ -251,7 +251,7 @@ struct RomListWithSectionIndex: View {
     /// The sections are what the user actually scrolls through, so the prefetch window has to
     /// follow their order and not the order the ROMs arrived in.
     private func refreshPrefetchWindow() {
-        prefetchWindow.update(with: groupedSections.flatMap { $0.roms }) { $0.urlCover }
+        prefetchWindow.update(with: groupedSections.flatMap { $0.roms }) { $0.listCoverURL }
     }
 }
 
@@ -279,7 +279,7 @@ struct SmallRomListRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            CachedKFImage(urlString: rom.urlCover) { image in
+            CachedKFImage(urlString: rom.listCoverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -321,7 +321,7 @@ struct BigRomListRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            CachedKFImage(urlString: rom.urlCover) { image in
+            CachedKFImage(urlString: rom.listCoverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -506,7 +506,7 @@ struct RomTableView: View {
                             HStack(spacing: 0) {
                                 // Title Column
                                 HStack(spacing: 8) {
-                                    CachedKFImage(urlString: rom.urlCover) { image in
+                                    CachedKFImage(urlString: rom.listCoverURL) { image in
                                         image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
@@ -696,7 +696,7 @@ struct RomTableView: View {
                                 // Title Column
                                 HStack(spacing: 4) {
                                     // Icon
-                                    CachedKFImage(urlString: rom.urlCover) { image in
+                                    CachedKFImage(urlString: rom.listCoverURL) { image in
                                         image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
@@ -933,7 +933,7 @@ struct RomTableView: View {
     }
 
     private func refreshPrefetchWindow() {
-        prefetchWindow.update(with: sortedRoms) { $0.urlCover }
+        prefetchWindow.update(with: sortedRoms) { $0.listCoverURL }
     }
     
     private func formatFileSize(_ bytes: Int) -> String {

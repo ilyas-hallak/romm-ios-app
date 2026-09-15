@@ -38,6 +38,10 @@ struct Rom: Identifiable, Equatable {
     let summary: String?
     let platformId: Int
     let urlCover: String?
+    /// Cover on the user's own server, 240x360. Already absolute and ready for Kingfisher.
+    let coverURLSmall: String?
+    /// Cover on the user's own server, 600x900. Already absolute and ready for Kingfisher.
+    let coverURLLarge: String?
     let releaseYear: Int?
     let isFavourite: Bool
     let hasRetroAchievements: Bool
@@ -59,7 +63,27 @@ struct Rom: Identifiable, Equatable {
     let ageRatings: [String]
     
     var platform: Platform? = nil
-    
+
+    /// Cover for lists, tables, grid cards and search rows. Prefers the small variant from the
+    /// user's own server, which is roughly a tenth of the size of the third party cover.
+    var listCoverURL: String? {
+        coverURLSmall ?? coverURLLarge ?? remoteFallbackCover
+    }
+
+    /// Cover for the detail hero, where the large variant is worth the extra bytes.
+    var detailCoverURL: String? {
+        coverURLLarge ?? remoteFallbackCover ?? coverURLSmall
+    }
+
+    /// `urlCover` is only usable when it points at a real remote cover. The server also reports
+    /// values like `file://roms/mame2003/downloaded_images/88games.png`, which never load.
+    private var remoteFallbackCover: String? {
+        guard let urlCover, urlCover.hasPrefix("http://") || urlCover.hasPrefix("https://") else {
+            return nil
+        }
+        return urlCover
+    }
+
     init(
         id: Int,
         name: String,
@@ -67,6 +91,8 @@ struct Rom: Identifiable, Equatable {
         summary: String? = nil,
         platformId: Int,
         urlCover: String? = nil,
+        coverURLSmall: String? = nil,
+        coverURLLarge: String? = nil,
         releaseYear: Int? = nil,
         isFavourite: Bool = false,
         hasRetroAchievements: Bool = false,
@@ -89,6 +115,8 @@ struct Rom: Identifiable, Equatable {
         self.summary = summary
         self.platformId = platformId
         self.urlCover = urlCover
+        self.coverURLSmall = coverURLSmall
+        self.coverURLLarge = coverURLLarge
         self.releaseYear = releaseYear
         self.isFavourite = isFavourite
         self.hasRetroAchievements = hasRetroAchievements
@@ -129,6 +157,10 @@ struct RomDetails: Identifiable, Equatable {
     let fsName: String?
     let summary: String?
     let urlCover: String?
+    /// Cover on the user's own server, 240x360. Already absolute and ready for Kingfisher.
+    let coverURLSmall: String?
+    /// Cover on the user's own server, 600x900. Already absolute and ready for Kingfisher.
+    let coverURLLarge: String?
     let platformId: Int
     let isFavourite: Bool
     let hasRetroAchievements: Bool
@@ -152,7 +184,25 @@ struct RomDetails: Identifiable, Equatable {
     let averageRating: Double?
     let platformDisplayName: String
     let siblings: [SiblingRom]
-    
+
+    /// Cover for the detail hero, see `Rom.detailCoverURL`.
+    var detailCoverURL: String? {
+        coverURLLarge ?? remoteFallbackCover ?? coverURLSmall
+    }
+
+    /// Cover for list sized presentations of this ROM, see `Rom.listCoverURL`.
+    var listCoverURL: String? {
+        coverURLSmall ?? coverURLLarge ?? remoteFallbackCover
+    }
+
+    /// See `Rom.remoteFallbackCover`, `urlCover` can be a `file://` value that never loads.
+    private var remoteFallbackCover: String? {
+        guard let urlCover, urlCover.hasPrefix("http://") || urlCover.hasPrefix("https://") else {
+            return nil
+        }
+        return urlCover
+    }
+
     init(
         id: Int,
         name: String,
@@ -161,6 +211,8 @@ struct RomDetails: Identifiable, Equatable {
         fsName: String? = nil,
         summary: String? = nil,
         urlCover: String? = nil,
+        coverURLSmall: String? = nil,
+        coverURLLarge: String? = nil,
         platformId: Int,
         isFavourite: Bool = false,
         hasRetroAchievements: Bool = false,
@@ -190,6 +242,8 @@ struct RomDetails: Identifiable, Equatable {
         self.fsName = fsName
         self.summary = summary
         self.urlCover = urlCover
+        self.coverURLSmall = coverURLSmall
+        self.coverURLLarge = coverURLLarge
         self.platformId = platformId
         self.isFavourite = isFavourite
         self.hasRetroAchievements = hasRetroAchievements

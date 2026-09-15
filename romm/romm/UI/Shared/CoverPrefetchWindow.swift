@@ -18,8 +18,8 @@ import Foundation
 /// ```
 /// @State private var prefetchWindow = CoverPrefetchWindow()
 /// ...
-/// .onAppear { prefetchWindow.update(with: roms) { $0.urlCover } }
-/// .onChange(of: roms.coverPrefetchToken) { _, _ in prefetchWindow.update(with: roms) { $0.urlCover } }
+/// .onAppear { prefetchWindow.update(with: roms) { $0.listCoverURL } }
+/// .onChange(of: roms.coverPrefetchToken) { _, _ in prefetchWindow.update(with: roms) { $0.listCoverURL } }
 /// ```
 @MainActor
 final class CoverPrefetchWindow {

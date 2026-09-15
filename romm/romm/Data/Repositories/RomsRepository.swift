@@ -9,10 +9,18 @@ import Foundation
 
 class RomsRepository: PRomsRepository {
     private let apiClient: PRommAPIClient
+    private let tokenProvider: PTokenProvider
     private let logger = Logger.data
-    
-    init(apiClient: PRommAPIClient) {
+
+    /// Resolves the relative cover paths against the server. Computed on purpose, the server URL
+    /// can still change after the repository was built, for example right after the setup.
+    private var coverResolver: CoverURLResolver {
+        CoverURLResolver(serverURL: tokenProvider.getServerURL())
+    }
+
+    init(apiClient: PRommAPIClient, tokenProvider: PTokenProvider = TokenProvider()) {
         self.apiClient = apiClient
+        self.tokenProvider = tokenProvider
     }
     
     func getRoms(platformId: Int?, searchTerm: String?, limit: Int, offset: Int = 0, char: String? = nil, orderBy: String? = nil, orderDir: String? = nil, collectionId: Int? = nil) async throws -> PaginatedRomsResponse {
@@ -33,7 +41,7 @@ class RomsRepository: PRomsRepository {
                 filters: .empty // No filter parameters - keep it simple
             )
 
-            let domainRoms = romsPage.items.mapToDomain()
+            let domainRoms = romsPage.items.mapToDomain(resolver: coverResolver)
 
             let paginatedResponse = PaginatedRomsResponse(
                 roms: domainRoms,
@@ -79,7 +87,7 @@ class RomsRepository: PRomsRepository {
                 filters: filters
             )
             
-            let domainRoms = romsPage.items.mapToDomain()
+            let domainRoms = romsPage.items.mapToDomain(resolver: coverResolver)
 
             let paginatedResponse = PaginatedRomsResponse(
                 roms: domainRoms,
@@ -102,7 +110,7 @@ class RomsRepository: PRomsRepository {
         
         do {
             let apiRom = try await apiClient.get("api/roms/\(id)", responseType: DetailedRomSchema.self)
-            let domainRom = RomMapper.mapDetailsFromAPI(apiRom)
+            let domainRom = RomMapper.mapDetailsFromAPI(apiRom, resolver: coverResolver)
             
             logger.info("✅ Retrieved ROM details: \(domainRom.name)")
             return domainRom
@@ -205,7 +213,7 @@ class RomsRepository: PRomsRepository {
         do {
             // Use OpenAPI directly for search
             let response = try await apiClient.searchRomsWithOpenAPI(query: query)
-            let domainRoms = response.items.mapToDomain()
+            let domainRoms = response.items.mapToDomain(resolver: coverResolver)
             
             logger.info("✅ Direct API Search: Found \(domainRoms.count) ROMs out of \(response.total ?? 0) total matches")
             return domainRoms

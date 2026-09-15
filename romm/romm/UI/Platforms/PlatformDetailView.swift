@@ -373,7 +373,7 @@ struct SmallRomCardView: View {
     var body: some View {
         HStack(spacing: 12) {
             // ROM Cover Image
-            CachedKFImage(urlString: rom.urlCover) { image in
+            CachedKFImage(urlString: rom.listCoverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)

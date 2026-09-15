@@ -47,7 +47,7 @@ struct BigRomCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Cover Image Section
             ZStack(alignment: .topTrailing) {
-                CachedKFImage(urlString: rom.urlCover) { image in
+                CachedKFImage(urlString: rom.listCoverURL) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: coverContentMode)

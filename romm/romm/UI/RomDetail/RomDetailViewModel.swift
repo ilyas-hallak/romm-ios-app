@@ -180,6 +180,8 @@ class RomDetailViewModel {
                         fileName: romDetails.fileName,
                         summary: romDetails.summary,
                         urlCover: romDetails.urlCover,
+                        coverURLSmall: romDetails.coverURLSmall,
+                        coverURLLarge: romDetails.coverURLLarge,
                         platformId: romDetails.platformId,
                         isFavourite: newFavoriteState,
                         hasRetroAchievements: romDetails.hasRetroAchievements,
