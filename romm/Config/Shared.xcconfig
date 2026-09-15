@@ -1,0 +1,18 @@
+// Shared.xcconfig
+//
+// Base build configuration for the romm project. Checked into git and wired up
+// as the project's base configuration (Debug + Release).
+//
+// Per-developer signing values live in an optional, gitignored Signing.xcconfig
+// next to this file. Create it once from Signing.xcconfig.template to build on a
+// physical device — see the README, "Building on a device".
+//
+// Without Signing.xcconfig the defaults below apply: no development team (which
+// is all the Simulator needs) and the upstream bundle-identifier prefix.
+
+// Reverse-DNS prefix applied to every target's bundle identifier. Each target
+// appends its own suffix, e.g. $(ROMM_BUNDLE_ID_PREFIX).rommanagerplus.
+ROMM_BUNDLE_ID_PREFIX = de.ilyashallak
+
+// Pull in per-developer overrides if present. Must come last so it wins.
+#include? "Signing.xcconfig"

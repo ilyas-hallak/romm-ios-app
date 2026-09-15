@@ -23,6 +23,14 @@ end
 DELTA_FRAMEWORK = /DeltaCore/
 DELTA_ASSETS = ["*.deltaskin", "*.deltamapping"].freeze
 
+# The signing team is no longer stored in the project file, it comes from a
+# gitignored Signing.xcconfig that a release worktree does not have. So the
+# build has to be told the team explicitly. Override with IOS_DEVELOPMENT_TEAM.
+DEFAULT_DEVELOPMENT_TEAM = "8J69P655GN"
+SIGNING_TEAM_ID = ENV["IOS_DEVELOPMENT_TEAM"].to_s.strip.then do |team|
+  team.empty? ? DEFAULT_DEVELOPMENT_TEAM : team
+end
+
 # The directory holding ./build, resolved from this file rather than from the
 # current working directory, which fastlane does not guarantee.
 def project_dir
@@ -135,11 +143,12 @@ def build_and_upload(scheme:, expect_delta_cores:, skip_upload:)
   build_app(
     scheme: scheme,
     export_method: "app-store",
-    xcargs: "CURRENT_PROJECT_VERSION=#{build}",
+    # Both phases need the team: xcargs covers the archive, teamID the export.
+    xcargs: "CURRENT_PROJECT_VERSION=#{build} DEVELOPMENT_TEAM=#{SIGNING_TEAM_ID}",
     export_xcargs: prov_args,
     export_options: {
       signingStyle: "automatic",
-      teamID: "8J69P655GN"
+      teamID: SIGNING_TEAM_ID
     },
     output_directory: "./build",
     output_name: "#{scheme}-#{build}.ipa",
