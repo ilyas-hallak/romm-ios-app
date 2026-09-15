@@ -480,6 +480,7 @@ struct TableRomRowView: View {
 
 struct RomStatusIcons: View {
     let rom: Rom
+    @EnvironmentObject private var appData: AppData
     
     var body: some View {
         HStack(spacing: 4) {
@@ -490,10 +491,27 @@ struct RomStatusIcons: View {
             }
             
             if rom.hasRetroAchievements {
-                Image(systemName: "star.fill")
-                    .foregroundColor(.yellow)
-                    .font(.caption)
+                retroAchievementsStatus
             }                        
+        }
+    }
+
+    @ViewBuilder
+    private var retroAchievementsStatus: some View {
+        if let progression = appData.currentUser?.retroAchievementsProgression(for: rom.retroAchievementsGameId) {
+            let maximum = progression.maximumCount ?? 0
+            let awarded = progression.awardedCount ?? progression.earnedAchievements.count
+            let isComplete = maximum > 0 && awarded >= maximum
+
+            Image(systemName: isComplete ? "checkmark.seal.fill" : "circle.lefthalf.filled")
+                .foregroundStyle(isComplete ? .green : .orange)
+                .font(.caption)
+                .accessibilityLabel(isComplete ? "RetroAchievements complete" : "RetroAchievements in progress")
+        } else {
+            Image(systemName: "trophy.fill")
+                .foregroundStyle(.orange)
+                .font(.caption)
+                .accessibilityLabel("RetroAchievements available")
         }
     }
 }
