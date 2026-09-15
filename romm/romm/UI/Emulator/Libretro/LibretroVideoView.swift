@@ -1,5 +1,6 @@
 import UIKit
 import CoreGraphics
+import QuartzCore
 
 /// Naive Software-Blit-View: nimmt rohe libretro-Frames entgegen und rendert
 /// sie als `CGImage` in ein `CALayer.contents`. Reicht für PCSX ReARMed
@@ -100,7 +101,18 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
         ) else { return }
 
         layer.contents = image
-        mirrorLayer?.contents = image
+        if let mirrorLayer {
+            // Our own layer backs a view, which suppresses implicit animations.
+            // The external one may not, and then Core Animation cross fades every
+            // assigned frame into the previous one over a quarter of a second.
+            // `ExternalDisplayContentView` already refuses those actions, this
+            // keeps it true for any other layer handed in here.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            mirrorLayer.contents = image
+            CATransaction.commit()
+            ExternalDisplayDiagnostics.shared.externalFrameRendered()
+        }
         lastCGImage = image
     }
 

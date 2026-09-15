@@ -302,6 +302,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             // would mute itself if another app still held the audio by then.
             EmulatorAudioSession.activate()
             self.viewController.startEmulation()
+            // DeltaCore's AudioManager took the session over to `.playAndRecord`
+            // on the way up, which is the slower category to play out of.
+            EmulatorAudioSession.restorePlaybackCategory()
             self.emulatorCore?.rate = NativeEmulatorPlaybackRate.normal
             // Assigning this re-runs that volume decision, now without the
             // ring switch muting a console the user deliberately started.
