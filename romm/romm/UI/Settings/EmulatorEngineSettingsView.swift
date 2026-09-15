@@ -22,7 +22,13 @@ private enum PlayChoice: Hashable {
     /// `.auto`, and `.web` in builds without the web engine, have no row of their
     /// own, so they resolve to the one that does.
     private static func usableEngine(_ engine: EmulatorEngine) -> EmulatorEngine {
-        guard AppFeatures.webEmulatorEnabled, engine == .web else { return .native }
+        guard AppFeatures.webEmulatorEnabled, engine == .web else {
+            #if !APP_STORE
+            return .native
+            #else
+            return .auto
+            #endif
+        }
         return .web
     }
 }
@@ -140,77 +146,115 @@ struct EmulatorEngineSettingsView: View {
         }
     }
 
-    /// One list for where a game runs, built-in engines first, then the apps a
-    /// ROM can be handed to.
+    /// One menu for where a game runs: the built-in engines, the apps a ROM can
+    /// be handed to, and the way to add another one.
+    ///
+    /// Picking a target and setting one up used to be two sections, which read as
+    /// two unrelated questions even though an external app only ever becomes
+    /// selectable by going through the assistant. Both belong to the same answer,
+    /// so they share one menu.
     @ViewBuilder
     private var playWithSection: some View {
         Section(header: Text("Play with"), footer: Text(footerText)) {
-            if choices.count > 1 {
-                Picker("Play with", selection: $playChoice) {
-                    ForEach(choices, id: \.self) { choice in
-                        Text(label(for: choice)).tag(choice)
+            if choices.count > 1 || canAddEmulator {
+                Menu {
+                    Picker("Play with", selection: $playChoice) {
+                        ForEach(choices, id: \.self) { choice in
+                            Text(label(for: choice)).tag(choice)
+                        }
                     }
+
+                    if canAddEmulator {
+                        Divider()
+                        Button {
+                            isAddingEmulator = true
+                        } label: {
+                            Label("Add an emulator app", systemImage: "plus")
+                        }
+                    }
+                } label: {
+                    playWithRow(showsChevron: true)
                 }
-                .pickerStyle(.inline)
             } else {
-                // Nothing to choose between, so a picker would only look broken.
-                HStack {
-                    Text("Play with")
-                    Spacer()
-                    Text(label(for: playChoice)).foregroundStyle(.secondary)
-                }
+                // Nothing to choose between and nothing to add, so a menu would
+                // only look broken.
+                playWithRow(showsChevron: false)
             }
         }
     }
 
-    /// The apps that have been set up, each leading to its own settings, plus
-    /// the way to add another.
+    /// The row a menu picker draws: title, current value, and the chevron pair
+    /// that says it opens. Both colours are set explicitly, otherwise the menu
+    /// tints its whole label with the accent colour.
+    private func playWithRow(showsChevron: Bool) -> some View {
+        HStack {
+            Text("Play with")
+                .foregroundStyle(.primary)
+            Spacer()
+            Text(label(for: playChoice))
+                .foregroundStyle(.secondary)
+            if showsChevron {
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// False once every supported app has been through the assistant, which is
+    /// what takes the add entry back out of the menu.
+    private var canAddEmulator: Bool {
+        !ExternalEmulatorID.allCases.allSatisfy(configuredEmulators.contains)
+    }
+
+    /// The apps that have been set up, each leading to its own settings.
     ///
-    /// Adding is a row rather than a picker entry, because an app has to be set
-    /// up before it can be played to. Removal lives behind each row, which is
-    /// also what keeps the assistant reachable once every app has been added.
+    /// Nothing to configure until an app has been added, so the section stays
+    /// away entirely until then, rather than showing an empty header. Removal
+    /// lives behind each row, which is what puts the add entry back into the
+    /// menu once every app has been added.
     @ViewBuilder
     private var emulatorAppsSection: some View {
-        Section(
-            header: Text("Emulator Apps"),
-            footer: Text("Games are handed to the app you pick above. Each app's save folder is set up here.")
-        ) {
-            ForEach(configuredEmulators, id: \.self) { emulator in
-                NavigationLink {
-                    ExternalEmulatorAppSettingsView(emulator: emulator) {
-                        refreshInstalledEmulators()
-                        playChoice = PlayChoice(
-                            engine: preference.current,
-                            target: playTargetPreference.current
-                        )
-                    }
-                } label: {
-                    HStack {
-                        Text(emulator.emulator.displayName)
-                        if !installedEmulators.contains(emulator) {
-                            Spacer()
-                            Text("Not installed")
-                                .font(.caption)
-                                .foregroundStyle(Color.orange)
+        if !configuredEmulators.isEmpty {
+            Section(
+                header: Text("Emulator Apps"),
+                footer: Text("Games are handed to the app you pick above. Each app's save folder is set up here.")
+            ) {
+                ForEach(configuredEmulators, id: \.self) { emulator in
+                    NavigationLink {
+                        ExternalEmulatorAppSettingsView(emulator: emulator) {
+                            refreshInstalledEmulators()
+                            playChoice = PlayChoice(
+                                engine: preference.current,
+                                target: playTargetPreference.current
+                            )
+                        }
+                    } label: {
+                        HStack {
+                            Text(emulator.emulator.displayName)
+                            if !installedEmulators.contains(emulator) {
+                                Spacer()
+                                Text("Not installed")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.orange)
+                            }
                         }
                     }
-                }
-            }
-
-            if !ExternalEmulatorID.allCases.allSatisfy(configuredEmulators.contains) {
-                Button {
-                    isAddingEmulator = true
-                } label: {
-                    Label("Add an emulator app", systemImage: "plus")
                 }
             }
         }
     }
 
     private var choices: [PlayChoice] {
+        #if !APP_STORE
         var choices: [PlayChoice] = AppFeatures.webEmulatorEnabled
             ? [.builtIn(.web), .builtIn(.native)]
             : [.builtIn(.native)]
+        #else
+        var choices: [PlayChoice] = AppFeatures.webEmulatorEnabled
+            ? [.builtIn(.web), .builtIn(.auto)]
+            : [.builtIn(.auto)]
+        #endif
         choices += pickableEmulators.map { .external($0) }
         return choices
     }
@@ -219,7 +263,11 @@ struct EmulatorEngineSettingsView: View {
         switch choice {
         case .builtIn(let engine):
             guard AppFeatures.webEmulatorEnabled else { return "Built-in emulator" }
+            #if !APP_STORE
             return engine == .web ? "Web (EmulatorJS)" : "Native (DeltaCore, etc.)"
+            #else
+            return engine == .web ? "Web (EmulatorJS)" : "Native (libretro)"
+            #endif
         case .external(let id):
             return "External: \(id.emulator.displayName)"
         }
@@ -253,10 +301,16 @@ struct EmulatorEngineSettingsView: View {
     }
 
     /// Every app Play can hand a ROM to, for the "nothing installed yet" hint.
+    ///
+    /// The sentence around the list is English, so the joiner has to be too. The
+    /// localized formatter takes the device language and turned "RetroArch,
+    /// Delta and Manic EMU" into "... Delta und Manic EMU" on a German device.
     private var supportedEmulatorNames: String {
-        ListFormatter.localizedString(
-            byJoining: ExternalEmulatorID.allCases.map { $0.emulator.displayName }
-        )
+        let formatter = ListFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        return formatter.string(
+            from: ExternalEmulatorID.allCases.map { $0.emulator.displayName }
+        ) ?? ExternalEmulatorID.allCases.map { $0.emulator.displayName }.joined(separator: ", ")
     }
 
     private func refreshInstalledEmulators() {

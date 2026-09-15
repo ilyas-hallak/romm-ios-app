@@ -1,3 +1,4 @@
+#if !APP_STORE
 import UIKit
 import DeltaCore
 
@@ -37,3 +38,4 @@ final class DeltaCoreExternalRenderTarget: PExternalRenderTarget {
         self.screen = nil
     }
 }
+#endif

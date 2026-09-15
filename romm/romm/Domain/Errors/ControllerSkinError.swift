@@ -6,6 +6,9 @@ enum ControllerSkinError: Error, LocalizedError, Equatable {
     case notASkinFile
     case noSkinsOnPage
     case unsupportedGameType(String)
+    /// This build has no controller-skin inspector at all (no Delta cores), so
+    /// no `.deltaskin` file can be read, valid or not.
+    case unsupportedInThisBuild
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +25,8 @@ enum ControllerSkinError: Error, LocalizedError, Equatable {
             return "That page doesn't link to any .deltaskin files. Open a single skin's download link and paste that instead."
         case .unsupportedGameType(let gameType):
             return "This skin is made for a system the app can't emulate (\(gameType))."
+        case .unsupportedInThisBuild:
+            return "Controller skins aren't supported in this build."
         }
     }
 }
