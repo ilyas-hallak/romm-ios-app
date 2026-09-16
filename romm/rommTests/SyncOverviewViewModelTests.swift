@@ -296,4 +296,45 @@ struct SyncOverviewViewModelTests {
         #expect(summary.contains("1 conflicts left"))
         #expect(summary.contains("1 failed"))
     }
+
+    // MARK: - lastSyncErrors
+
+    @Test func lastSyncErrorsIsEmptyWhenTheRunHadNoFailures() async throws {
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let factory = SyncTestFactory(
+            localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: FakeSaveSyncRunner()
+        )
+        let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
+
+        await vm.syncNow()
+
+        #expect(vm.lastSyncErrors.isEmpty)
+    }
+
+    @Test func lastSyncErrorsShowsAllOfThemUpToThree() async throws {
+        let runner = FakeSaveSyncRunner()
+        runner.reportToReturn = SaveSyncReport(failed: 3, errors: ["error 1", "error 2", "error 3"])
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
+        let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
+
+        await vm.syncNow()
+
+        #expect(vm.lastSyncErrors == ["error 1", "error 2", "error 3"])
+    }
+
+    /// More than three failures would otherwise flood the screen, so the list
+    /// is capped with a trailing "and N more" line rather than shown in full.
+    @Test func lastSyncErrorsCapsAtThreeWithAnAndMoreLine() async throws {
+        let runner = FakeSaveSyncRunner()
+        let errors = (1...7).map { "error \($0)" }
+        runner.reportToReturn = SaveSyncReport(failed: 7, errors: errors)
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
+        let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
+
+        await vm.syncNow()
+
+        #expect(vm.lastSyncErrors == ["error 1", "error 2", "error 3", "and 4 more"])
+    }
 }

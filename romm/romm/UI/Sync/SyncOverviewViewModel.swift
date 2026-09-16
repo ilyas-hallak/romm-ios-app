@@ -108,6 +108,16 @@ final class SyncOverviewViewModel {
         return summary
     }
 
+    /// The last run's failure messages, capped so one bad run cannot flood the
+    /// screen. Empty when the last run had no failures, or there was no run yet.
+    var lastSyncErrors: [String] {
+        guard let report = lastSyncReport, !report.errors.isEmpty else { return [] }
+        let shown = Array(report.errors.prefix(3))
+        let remaining = report.errors.count - shown.count
+        guard remaining > 0 else { return shown }
+        return shown + [String(localized: "and \(remaining) more")]
+    }
+
     /// Runs the plan for real, then reloads it so the screen reflects the new
     /// state rather than the one it was computed against.
     func syncNow() async {

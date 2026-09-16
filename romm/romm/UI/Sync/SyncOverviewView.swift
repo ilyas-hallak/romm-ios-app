@@ -127,7 +127,14 @@ struct SyncOverviewView: View {
             .disabled(!viewModel.canSyncNow || viewModel.isSyncing)
         } footer: {
             if let summary = viewModel.lastSyncSummary {
-                Text(summary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(summary)
+                    ForEach(viewModel.lastSyncErrors, id: \.self) { error in
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }
