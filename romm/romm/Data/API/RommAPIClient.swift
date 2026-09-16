@@ -670,9 +670,16 @@ class RommAPIClient: PRommAPIClient {
     }
 
     func withQuery(_ path: String, _ params: [(String, String?)]) -> String {
+        // `.urlQueryAllowed` leaves "&", "+", "=", "?" and "#" unescaped, since
+        // those are legal *somewhere* in a query string. But a value that
+        // contains one of them (e.g. a user's search term) would then be read
+        // as extra parameters, a literal space, or the start of a new query/
+        // fragment, so they have to be escaped here regardless.
+        var allowedCharacters = CharacterSet.urlQueryAllowed
+        allowedCharacters.remove(charactersIn: "&+=?#")
         let parts = params.compactMap { key, value -> String? in
             guard let value else { return nil }
-            let encoded = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
+            let encoded = value.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? value
             return "\(key)=\(encoded)"
         }
         guard !parts.isEmpty else { return path }
