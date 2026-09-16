@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import GameController
+import Combine
 
 @MainActor
 final class LibretroSession: NSObject {
@@ -454,6 +455,8 @@ final class LibretroGameViewController: UIViewController {
     let controllerView: LibretroTouchControllerView
     var onControlsHiddenChanged: ((Bool) -> Void)?
     private var controlsHidden = false
+    /// Subscriptions to the Play on TV state that drives phone video visibility.
+    private var externalDisplayCancellables = Set<AnyCancellable>()
     private let errorLabel = UILabel()
     private var aspectConstraint: NSLayoutConstraint?
     /// Top-anchor constraint used to slide the video within the safe area when
@@ -525,6 +528,7 @@ final class LibretroGameViewController: UIViewController {
             controllerView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
         updateControlsVisibility()
+        observeExternalDisplayState()
 
         errorLabel.numberOfLines = 0
         errorLabel.textColor = .systemRed
@@ -587,6 +591,33 @@ final class LibretroGameViewController: UIViewController {
             controlsHidden = hide
             onControlsHiddenChanged?(hide)
         }
+        updatePhoneVideoVisibility()
+    }
+
+    /// Live-updates video visibility as Play on TV's phone-controller-only mode
+    /// is flipped from the in-game menu, or as the external display connects.
+    private func observeExternalDisplayState() {
+        let display = ExternalDisplayManager.shared
+        display.$isActive
+            .sink { [weak self] _ in self?.updatePhoneVideoVisibility() }
+            .store(in: &externalDisplayCancellables)
+        display.$isPhoneControllerOnlyEnabled
+            .sink { [weak self] _ in self?.updatePhoneVideoVisibility() }
+            .store(in: &externalDisplayCancellables)
+    }
+
+    /// Hides the phone's own game picture once the TV already carries it and
+    /// phone-controller-only mode is on, so the touch controls get the full
+    /// screen. Safe to hide: the external picture is painted through a separate
+    /// mirror layer (`LibretroExternalRenderTarget`), not through this view, so
+    /// `isHidden` here has no effect on the TV feed.
+    private func updatePhoneVideoVisibility() {
+        let display = ExternalDisplayManager.shared
+        videoView.isHidden = ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: display.isActive,
+            isPhoneControllerOnlyEnabled: display.isPhoneControllerOnlyEnabled,
+            areTouchControlsHidden: controlsHidden
+        )
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }

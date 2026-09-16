@@ -8,6 +8,11 @@ struct NativeEmulatorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Observed only to react to Phone as Controller's inputs (display
+    /// connection, the preference toggle); `.playOnTV` below owns the rest of
+    /// the external-display wiring.
+    @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
+
     private let resumeSlot: Int?
 
     init(rom: Rom, gameType: DeltaGameType, resumeSlot: Int? = nil, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
@@ -66,6 +71,8 @@ struct NativeEmulatorView: View {
                 viewModel.session?.resume()
             }
         }
+        .onChange(of: externalDisplay.isActive) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }
+        .onChange(of: externalDisplay.isPhoneControllerOnlyEnabled) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }
         .sheet(isPresented: $showMenu) {
             EmulatorMenuSheet(
                 session: viewModel.session,

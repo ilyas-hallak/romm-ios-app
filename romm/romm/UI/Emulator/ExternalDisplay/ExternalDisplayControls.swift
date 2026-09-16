@@ -15,6 +15,7 @@ struct ExternalDisplayControls: View {
     @ObservedObject private var display = ExternalDisplayManager.shared
 
     @SwiftUI.State private var playOnTV: Bool = ExternalDisplayManager.shared.isPlayOnTVEnabled
+    @SwiftUI.State private var controllerOnly: Bool = ExternalDisplayManager.shared.isPhoneControllerOnlyEnabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -40,6 +41,19 @@ struct ExternalDisplayControls: View {
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.5))
                 .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Label("Phone as Controller", systemImage: "gamecontroller")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(playOnTV ? 0.7 : 0.3))
+                Spacer()
+                Toggle("", isOn: $controllerOnly)
+                    .labelsHidden()
+                    .disabled(!playOnTV)
+                    .onChange(of: controllerOnly) { _, newValue in
+                        display.setPhoneControllerOnlyEnabled(newValue)
+                    }
+            }
 
             // Only worth offering once the TV really shows the game and the
             // player has a controller, otherwise it just hides the game.

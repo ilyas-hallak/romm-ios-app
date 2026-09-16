@@ -3,6 +3,7 @@ import Foundation
 final class UserDefaultsExternalDisplayPreferenceStore: PExternalDisplayPreference {
     private let playOnTVKey = "externalDisplay.enabled"
     private let autoDimKey = "externalDisplay.autoDimPhone"
+    private let phoneControllerOnlyKey = "externalDisplay.phoneControllerOnly"
     private let blankedBrightnessKey = "phoneScreenBlanker.savedBrightness"
     private let userDefaults: UserDefaults
 
@@ -18,6 +19,11 @@ final class UserDefaultsExternalDisplayPreferenceStore: PExternalDisplayPreferen
     var isAutoDimPhoneEnabled: Bool {
         get { boolOrTrue(autoDimKey) }
         set { userDefaults.set(newValue, forKey: autoDimKey) }
+    }
+
+    var isPhoneControllerOnlyEnabled: Bool {
+        get { boolOrTrue(phoneControllerOnlyKey) }
+        set { userDefaults.set(newValue, forKey: phoneControllerOnlyKey) }
     }
 
     var blankedPhoneBrightness: Double? {

@@ -32,11 +32,17 @@ private struct PlayOnTVModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay {
+                if isPhoneVideoHidden {
+                    playingOnTVBadge
+                }
+            }
+            .overlay {
                 if screenBlanker.isBlanked {
                     blankingOverlay
                 }
             }
             .animation(.easeOut(duration: 0.2), value: screenBlanker.isBlanked)
+            .animation(.easeOut(duration: 0.2), value: isPhoneVideoHidden)
             .onAppear {
                 // Only take over an external display while a game is on screen.
                 // Anchored in the SwiftUI view rather than a view controller
@@ -76,6 +82,30 @@ private struct PlayOnTVModifier: ViewModifier {
                     .padding(.bottom, 40)
             }
             .transition(.opacity)
+    }
+
+    /// The engines hide their own picture themselves, but they leave the space it
+    /// used behind. Without a word in it that gap reads as a broken screen.
+    private var isPhoneVideoHidden: Bool {
+        ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: display.isActive,
+            isPhoneControllerOnlyEnabled: display.isPhoneControllerOnlyEnabled,
+            areTouchControlsHidden: areTouchControlsHidden
+        )
+    }
+
+    /// Sits in the middle, where neither layout puts a control, and never takes
+    /// a touch away from the pad.
+    private var playingOnTVBadge: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "tv")
+                .font(.system(size: 32, weight: .light))
+            Text("Playing on TV")
+                .font(.footnote)
+        }
+        .foregroundStyle(.white.opacity(0.22))
+        .allowsHitTesting(false)
+        .transition(.opacity)
     }
 
     private func updateAutoDim() {

@@ -45,6 +45,11 @@ final class ExternalDisplayManager: ObservableObject {
     /// the only concrete thing we can show.
     @Published private(set) var displayResolution: String?
 
+    /// Mirrors the preference, unlike the plain forwarders below: the running
+    /// emulator view observes this directly, so flipping it from the in-game
+    /// menu has to take effect without a relaunch.
+    @Published private(set) var isPhoneControllerOnlyEnabled: Bool
+
     private let preference: PExternalDisplayPreference
 
     /// Fills the display whenever we own it. Exists independently of whether one
@@ -64,6 +69,7 @@ final class ExternalDisplayManager: ObservableObject {
 
     init(preference: PExternalDisplayPreference) {
         self.preference = preference
+        self.isPhoneControllerOnlyEnabled = preference.isPhoneControllerOnlyEnabled
     }
 
     // MARK: - Scene lifecycle (called from ExternalDisplaySceneDelegate)
@@ -124,6 +130,14 @@ final class ExternalDisplayManager: ObservableObject {
 
     func setAutoDimPhoneEnabled(_ enabled: Bool) {
         preference.isAutoDimPhoneEnabled = enabled
+    }
+
+    /// Lets the player turn the phone into a pure controller while the game
+    /// plays on the TV. The engine views watch `isPhoneControllerOnlyEnabled`
+    /// themselves to decide what that means for their own video layer.
+    func setPhoneControllerOnlyEnabled(_ enabled: Bool) {
+        preference.isPhoneControllerOnlyEnabled = enabled
+        isPhoneControllerOnlyEnabled = enabled
     }
 
     // MARK: - Window plumbing
