@@ -125,7 +125,7 @@ protocol PDependencyFactory {
     var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
     @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
-    @MainActor func makeSaveSyncRunner() -> SaveSyncRunner
+    @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
 
     // Emulator Engine
@@ -550,7 +550,7 @@ class DefaultDependencyFactory: PDependencyFactory {
         )
     }
 
-    @MainActor func makeSaveSyncRunner() -> SaveSyncRunner {
+    @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner {
         SaveSyncRunner(
             saveStore: saveStore,
             uploadSaveUseCase: makeUploadSaveUseCase(),

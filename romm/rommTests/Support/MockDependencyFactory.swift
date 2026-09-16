@@ -81,6 +81,13 @@ class MockDependencyFactory: PDependencyFactory {
         _injectedFileValidationService ?? { fatalError("PFileValidationService was not stubbed") }()
     }
 
+    // Unlike the side-effecting dependencies above, `makeSaveSyncRunner()` has
+    // a safe real default (built from fakes against the shared `apiClient`),
+    // so a test only needs to inject a double when it wants to control the
+    // runner itself, e.g. to observe `SyncOverviewViewModel`'s guard against a
+    // second concurrent `syncNow()`.
+    private let _injectedSaveSyncRunner: PSaveSyncRunner?
+
     // Emulator engine
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = InMemoryLibretroAspectRatioPreference()
@@ -139,7 +146,8 @@ class MockDependencyFactory: PDependencyFactory {
         apiClient: PRommAPIClient? = nil,
         fileValidationService: PFileValidationService? = nil,
         transferHistoryRepository: PTransferHistoryRepository? = nil,
-        localROMRepository: PLocalROMRepository? = nil
+        localROMRepository: PLocalROMRepository? = nil,
+        saveSyncRunner: PSaveSyncRunner? = nil
     ) {
         // Resolve the API client first so every server-only repository shares it.
         // Defaults to a harmless fake, never the production client.
@@ -168,6 +176,7 @@ class MockDependencyFactory: PDependencyFactory {
         _injectedSFTPConnectionManager = sftpConnectionManager
         _injectedTransferHistoryRepository = transferHistoryRepository
         _injectedLocalROMRepository = localROMRepository
+        _injectedSaveSyncRunner = saveSyncRunner
     }
     
     func makeLogoutUseCase() -> LogoutUseCase {
@@ -545,8 +554,8 @@ class MockDependencyFactory: PDependencyFactory {
         ShareROMViewModel(getShareFilesUseCase: makeGetROMShareFilesUseCase())
     }
 
-    @MainActor func makeSaveSyncRunner() -> SaveSyncRunner {
-        SaveSyncRunner(
+    @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner {
+        _injectedSaveSyncRunner ?? SaveSyncRunner(
             saveStore: saveStore,
             uploadSaveUseCase: makeUploadSaveUseCase(),
             downloadSaveUseCase: makeDownloadSaveUseCase(),

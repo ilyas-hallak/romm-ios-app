@@ -51,113 +51,39 @@ private actor Gate {
     }
 }
 
-/// Session completion runs last in `SaveSyncRunner.run` (see its doc
-/// comment), so gating it here is a suspension point that sits squarely
-/// inside "the run is still in flight".
-private final class GatedCompleteSyncSessionUseCase: PCompleteSyncSessionUseCase, @unchecked Sendable {
-    private let gate: Gate
+/// Fake for `PSaveSyncRunner`, the one thing `SyncOverviewViewModel` needs
+/// beyond what `MockDependencyFactory` already stubs. Lets a test script the
+/// report a run produces and, via an optional `Gate`, hold a run open long
+/// enough to observe `isSyncing` mid-flight, or to check that a second
+/// `syncNow()` never starts a second run while the first is still going.
+@MainActor
+private final class FakeSaveSyncRunner: PSaveSyncRunner {
+    var reportToReturn = SaveSyncReport()
+    var gate: Gate?
     private(set) var callCount = 0
-    init(gate: Gate) { self.gate = gate }
-    func execute(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {
+
+    func run(preview: SyncPreview, externalScans: [ExternalEmulatorID: ExternalSaveScan]) async -> SaveSyncReport {
         callCount += 1
-        await gate.wait()
+        await gate?.wait()
+        return reportToReturn
     }
 }
 
-private final class NoopCompleteSyncSessionUseCase: PCompleteSyncSessionUseCase, @unchecked Sendable {
-    func execute(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
-}
-
-/// Lets a test throw for `listServerStatesUseCase` on demand, to reach
-/// `runStatesSync`'s failure path.
-private final class ControllableListServerStatesUseCase: PListServerStatesUseCase, @unchecked Sendable {
-    var error: Error?
-    func execute(romId: Int) async throws -> [StateSchema] { if let error { throw error }; return [] }
-}
-
-private final class SucceedingUploadSaveUseCase: PUploadSaveUseCase, @unchecked Sendable {
-    private var nextId = 9000
-    func execute(
-        romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?,
-        autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?
-    ) async throws -> SaveSchema {
-        nextId += 1
-        return SaveSchema(
-            id: nextId, romId: romId, userId: 1, fileName: fileName, fileNameNoTags: fileName,
-            fileNameNoExt: fileName, fileExtension: "sav", filePath: "", fileSizeBytes: 0,
-            fullPath: "", downloadPath: "", missingFromFs: false, createdAt: Date(),
-            updatedAt: Date(), emulator: nil, screenshot: nil, slot: slot, contentHash: nil
-        )
-    }
-}
-
-// None of these tests exercise these paths given the plans and stores they
-// build; trapping on a call would fail the test loudly rather than silently
-// accepting an unplanned operation.
-private final class UnusedUploadSaveUseCase: PUploadSaveUseCase, @unchecked Sendable {
-    func execute(
-        romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?,
-        autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?
-    ) async throws -> SaveSchema {
-        fatalError("not used in these tests")
-    }
-}
-private final class UnusedDownloadSaveUseCase: PDownloadSaveUseCase, @unchecked Sendable {
-    func execute(id: Int, deviceId: String?, sessionId: String?) async throws -> Data {
-        fatalError("not used in these tests")
-    }
-}
-private final class UnusedConfirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase, @unchecked Sendable {
-    func execute(id: Int, deviceId: String) async throws -> SaveSchema {
-        fatalError("not used in these tests")
-    }
-}
-private final class UnusedListServerSavesUseCase: PListServerSavesUseCase, @unchecked Sendable {
-    func execute(romId: Int) async throws -> [SaveSchema] {
-        fatalError("not used in these tests")
-    }
-}
-private final class UnusedUploadStateUseCase: PUploadStateUseCase, @unchecked Sendable {
-    func execute(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema {
-        fatalError("not used in these tests")
-    }
-}
-private final class UnusedUpdateStateUseCase: PUpdateStateUseCase, @unchecked Sendable {
-    func execute(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema {
-        fatalError("not used in these tests")
-    }
-}
-private final class UnusedDownloadStateUseCase: PDownloadStateUseCase, @unchecked Sendable {
-    func execute(id: Int) async throws -> Data {
-        fatalError("not used in these tests")
-    }
-}
-private final class NoopExternalSaveFolderStore: PExternalSaveFolderStore, @unchecked Sendable {
-    func remember(folderURL: URL, for emulator: ExternalEmulatorID) throws {}
-    func grantedFolder(for emulator: ExternalEmulatorID) -> ExternalSaveFolderGrant? { nil }
-    func forget(_ emulator: ExternalEmulatorID) {}
-    func grantedEmulators() -> [ExternalEmulatorID] { [] }
-}
-
-/// Overrides just the two factory methods `SyncOverviewViewModel` needs
-/// beyond what the base `MockDependencyFactory` already stubs: the runner is
-/// a concrete `final class`, so it is built for real here from fakes this
-/// file controls, rather than faked itself.
+/// Overrides the one factory method `SyncOverviewViewModel` needs beyond what
+/// `MockDependencyFactory` already supports via injection: `makeSyncPreviewUseCase`
+/// has no injection parameter of its own, since the base factory builds it for
+/// real from other dependencies rather than taking it in through `init`.
 private final class SyncTestFactory: MockDependencyFactory {
     private let previewResult: Result<SyncPreview, Error>
-    private let runner: SaveSyncRunner
 
-    init(localROMRepository: PLocalROMRepository, previewResult: Result<SyncPreview, Error>, runner: SaveSyncRunner) {
+    init(localROMRepository: PLocalROMRepository, previewResult: Result<SyncPreview, Error>, saveSyncRunner: PSaveSyncRunner) {
         self.previewResult = previewResult
-        self.runner = runner
-        super.init(apiClient: FakeAPIClient(), localROMRepository: localROMRepository)
+        super.init(apiClient: FakeAPIClient(), localROMRepository: localROMRepository, saveSyncRunner: saveSyncRunner)
     }
 
     override func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
         FakeSyncPreviewUseCase(result: previewResult)
     }
-
-    @MainActor override func makeSaveSyncRunner() -> SaveSyncRunner { runner }
 }
 
 @MainActor
@@ -167,34 +93,6 @@ struct SyncOverviewViewModelTests {
         SyncOverviewViewModel(
             showing: state,
             factory: MockDependencyFactory(apiClient: FakeAPIClient(), localROMRepository: FakeLocalROMs())
-        )
-    }
-
-    private func makeSyncStore() -> LocalSaveStoreRepository {
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SyncOverviewViewModelTests-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-        return LocalSaveStoreRepository(rootDirectory: tmp)
-    }
-
-    private func makeRunner(
-        store: PSaveStore,
-        uploadSave: PUploadSaveUseCase = UnusedUploadSaveUseCase(),
-        listStates: PListServerStatesUseCase = ControllableListServerStatesUseCase(),
-        completeSession: PCompleteSyncSessionUseCase = NoopCompleteSyncSessionUseCase()
-    ) -> SaveSyncRunner {
-        SaveSyncRunner(
-            saveStore: store,
-            uploadSaveUseCase: uploadSave,
-            downloadSaveUseCase: UnusedDownloadSaveUseCase(),
-            confirmSaveDownloadUseCase: UnusedConfirmSaveDownloadUseCase(),
-            listServerSavesUseCase: UnusedListServerSavesUseCase(),
-            listServerStatesUseCase: listStates,
-            uploadStateUseCase: UnusedUploadStateUseCase(),
-            updateStateUseCase: UnusedUpdateStateUseCase(),
-            downloadStateUseCase: UnusedDownloadStateUseCase(),
-            completeSyncSessionUseCase: completeSession,
-            externalSaveFolderStore: NoopExternalSaveFolderStore()
         )
     }
 
@@ -224,18 +122,17 @@ struct SyncOverviewViewModelTests {
     /// `canSyncNow` must reflect the run while it is actually in flight, not
     /// just before it starts and after it ends.
     @Test func syncNowRunsTheRunnerAndTogglesIsSyncingWhileItRuns() async throws {
-        let store = makeSyncStore()
         let gate = Gate()
-        let completeSession = GatedCompleteSyncSessionUseCase(gate: gate)
-        let runner = makeRunner(store: store, completeSession: completeSession)
+        let runner = FakeSaveSyncRunner()
+        runner.gate = gate
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [], sessionId: "session-1")
-        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), runner: runner)
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
         let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
 
         #expect(vm.canSyncNow)
 
         let task = Task { await vm.syncNow() }
-        while completeSession.callCount == 0 { await Task.yield() }
+        while runner.callCount == 0 { await Task.yield() }
 
         #expect(vm.isSyncing)
         #expect(vm.canSyncNow == false)
@@ -251,19 +148,41 @@ struct SyncOverviewViewModelTests {
         }
     }
 
+    /// A second `syncNow()` call while the first is still running must not
+    /// start the runner a second time (see the `isSyncing` guard in
+    /// `syncNow()`). Only honestly testable now that the runner itself is a
+    /// fake this file controls, rather than a concrete type reachable only
+    /// through a gate buried in one of its internal use cases.
+    @Test func syncNowIgnoresASecondCallWhileTheFirstIsStillRunning() async throws {
+        let gate = Gate()
+        let runner = FakeSaveSyncRunner()
+        runner.gate = gate
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
+        let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
+
+        let firstRun = Task { await vm.syncNow() }
+        while runner.callCount == 0 { await Task.yield() }
+
+        await vm.syncNow()
+        #expect(runner.callCount == 1)
+
+        await gate.open()
+        await firstRun.value
+
+        #expect(runner.callCount == 1)
+    }
+
     /// `SaveSyncRunner.run` never literally throws (see its signature); a
     /// backend hiccup instead shows up as a failure inside the returned
     /// report. That failure must still land visibly on the screen, and the
     /// run must leave the view model in a normal, still-usable state
     /// afterwards rather than getting stuck mid-sync.
     @Test func syncNowSurfacesARunFailureAndStillLeavesTheScreenUsable() async throws {
-        let store = makeSyncStore()
-        try store.writeState(romId: 5, slot: 0, data: Data([0x01]))
-        let listStates = ControllableListServerStatesUseCase()
-        listStates.error = URLError(.notConnectedToInternet)
-        let runner = makeRunner(store: store, listStates: listStates)
+        let runner = FakeSaveSyncRunner()
+        runner.reportToReturn = SaveSyncReport(failed: 1, errors: ["ROM 5 slot 0: state download failed"])
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), runner: runner)
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
         let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
 
         await vm.syncNow()
@@ -281,7 +200,7 @@ struct SyncOverviewViewModelTests {
     @Test func loadSucceedsAndPopulatesStateFromThePreview() async throws {
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
         let factory = SyncTestFactory(
-            localROMRepository: FakeLocalROMs(), previewResult: .success(preview), runner: makeRunner(store: makeSyncStore())
+            localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: FakeSaveSyncRunner()
         )
         let vm = SyncOverviewViewModel(showing: .idle, factory: factory)
 
@@ -301,7 +220,7 @@ struct SyncOverviewViewModelTests {
         let factory = SyncTestFactory(
             localROMRepository: FakeLocalROMs(),
             previewResult: .failure(SyncPreviewError.serverTooOld(version: "4.9.0")),
-            runner: makeRunner(store: makeSyncStore())
+            saveSyncRunner: FakeSaveSyncRunner()
         )
         let vm = SyncOverviewViewModel(showing: .idle, factory: factory)
 
@@ -322,7 +241,7 @@ struct SyncOverviewViewModelTests {
             var errorDescription: String? { "boom" }
         }
         let factory = SyncTestFactory(
-            localROMRepository: FakeLocalROMs(), previewResult: .failure(SomeError()), runner: makeRunner(store: makeSyncStore())
+            localROMRepository: FakeLocalROMs(), previewResult: .failure(SomeError()), saveSyncRunner: FakeSaveSyncRunner()
         )
         let vm = SyncOverviewViewModel(showing: .idle, factory: factory)
 
@@ -340,7 +259,7 @@ struct SyncOverviewViewModelTests {
     @Test func lastSyncSummarySaysNothingToSyncWhenAllCountersAreZero() async throws {
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
         let factory = SyncTestFactory(
-            localROMRepository: FakeLocalROMs(), previewResult: .success(preview), runner: makeRunner(store: makeSyncStore())
+            localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: FakeSaveSyncRunner()
         )
         let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
 
@@ -353,13 +272,8 @@ struct SyncOverviewViewModelTests {
     /// conflict left for the user, and a failure into one report, and checks
     /// that the summary mentions all three rather than only the first match.
     @Test func lastSyncSummaryDescribesAMixOfOutcomes() async throws {
-        let store = makeSyncStore()
-        try store.writeBattery(romId: 1, data: Data([0xCA]))
-        try store.writeState(romId: 5, slot: 0, data: Data([0x01]))
-        let listStates = ControllableListServerStatesUseCase()
-        listStates.error = URLError(.notConnectedToInternet)
-        let runner = makeRunner(store: store, uploadSave: SucceedingUploadSaveUseCase(), listStates: listStates)
-
+        let runner = FakeSaveSyncRunner()
+        runner.reportToReturn = SaveSyncReport(uploaded: 1, skippedConflicts: 1, failed: 1, errors: ["boom"])
         let preview = SyncPreview(
             deviceId: "d1", reportedSaveCount: 1,
             operations: [
@@ -367,7 +281,7 @@ struct SyncOverviewViewModelTests {
                 SyncPreviewOperation(romId: 9, direction: .conflict, serverFileName: nil, slot: nil, emulator: nil, reason: "Both sides changed", serverUpdatedAt: nil)
             ]
         )
-        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), runner: runner)
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
         let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
 
         await vm.syncNow()

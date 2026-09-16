@@ -29,7 +29,7 @@ final class SyncOverviewViewModel {
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let scanExternalSaves: PScanExternalSavesUseCase
     private let setupStore: PExternalEmulatorSetupStore
-    private let syncRunner: SaveSyncRunner
+    private let syncRunner: PSaveSyncRunner
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
