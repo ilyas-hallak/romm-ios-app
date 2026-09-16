@@ -26,11 +26,12 @@ final class CloudSaveSyncService {
     private let uploadSaveUseCase: PUploadSaveUseCase
     private let updateSaveUseCase: PUpdateSaveUseCase
     private let downloadSaveUseCase: PDownloadSaveUseCase
+    private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
     private let listStatesUseCase: PListServerStatesUseCase
     private let uploadStateUseCase: PUploadStateUseCase
     private let updateStateUseCase: PUpdateStateUseCase
     private let downloadStateUseCase: PDownloadStateUseCase
-    private let settings: CloudSaveSyncSettings
+    private let settings: PCloudSaveSyncSettings
     private let recordSyncUseCase: PRecordSyncUseCase
     private let apiClient: PRommAPIClient
     private let syncDevice: PSyncDeviceRepository
@@ -45,11 +46,12 @@ final class CloudSaveSyncService {
         uploadSaveUseCase: PUploadSaveUseCase,
         updateSaveUseCase: PUpdateSaveUseCase,
         downloadSaveUseCase: PDownloadSaveUseCase,
+        confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase,
         listStatesUseCase: PListServerStatesUseCase,
         uploadStateUseCase: PUploadStateUseCase,
         updateStateUseCase: PUpdateStateUseCase,
         downloadStateUseCase: PDownloadStateUseCase,
-        settings: CloudSaveSyncSettings = .shared,
+        settings: PCloudSaveSyncSettings = CloudSaveSyncSettings.shared,
         recordSyncUseCase: PRecordSyncUseCase? = nil,
         apiClient: PRommAPIClient,
         syncDevice: PSyncDeviceRepository
@@ -60,12 +62,13 @@ final class CloudSaveSyncService {
         self.uploadSaveUseCase = uploadSaveUseCase
         self.updateSaveUseCase = updateSaveUseCase
         self.downloadSaveUseCase = downloadSaveUseCase
+        self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.listStatesUseCase = listStatesUseCase
         self.uploadStateUseCase = uploadStateUseCase
         self.updateStateUseCase = updateStateUseCase
         self.downloadStateUseCase = downloadStateUseCase
         self.settings = settings
-        self.recordSyncUseCase = recordSyncUseCase ?? RecordSyncUseCase(store: settings)
+        self.recordSyncUseCase = recordSyncUseCase ?? RecordSyncUseCase(store: CloudSaveSyncSettings.shared)
         self.apiClient = apiClient
         self.syncDevice = syncDevice
     }
@@ -119,6 +122,17 @@ final class CloudSaveSyncService {
                 }
                 logger.debug("  op \(op.action.rawValue) file=\(op.fileName ?? "?") slot=\(op.slot ?? "-") reason=\(op.reason ?? "-")\(hashNote)")
             }
+            // `saveId` is filled on every action, not just `download` (a
+            // `noOp` or `upload` verdict still names the row the server
+            // already holds), so learn it here regardless of action.
+            // Otherwise the next pushBattery() has no id to update and POSTs
+            // a brand-new row instead of PUTting in place. State ops share
+            // the same response and are excluded by their `.state` filename.
+            for op in response.operations where op.romId == config.romId {
+                if let fileName = op.fileName, !fileName.hasSuffix(".state"), let saveId = op.saveId {
+                    serverBatteryId = saveId
+                }
+            }
             for op in response.operations where op.action == .download && op.romId == config.romId {
                 await applyDownload(op)
             }
@@ -138,7 +152,7 @@ final class CloudSaveSyncService {
             result.append(ClientSaveState(
                 romId: config.romId,
                 fileName: config.batteryFileName,
-                slot: nil,
+                slot: SaveSlot.battery,
                 emulator: config.emulator,
                 contentHash: Self.contentHash(battery),
                 updatedAt: saveStore.batteryModifiedAt(romId: config.romId) ?? Date(timeIntervalSince1970: 0),
@@ -178,13 +192,15 @@ final class CloudSaveSyncService {
             guard let serverDate = op.serverUpdatedAt, serverDate > localMTime else { return }
         }
         do {
-            let data = try await downloadSaveUseCase.execute(id: saveId)
+            let deviceId = await syncDevice.deviceId()
+            let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
             try saveStore.writeBattery(romId: config.romId, data: data)
             if let serverDate = op.serverUpdatedAt {
                 try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
             }
             serverBatteryId = saveId
             logger.info("Negotiate down: battery (\(data.count) bytes)")
+            await confirmDownload(saveId: saveId, deviceId: deviceId)
         } catch {
             logger.error("Negotiate battery download failed (id=\(saveId)): \(error.localizedDescription)")
         }
@@ -200,14 +216,28 @@ final class CloudSaveSyncService {
             let localMTime = saveStore.batteryModifiedAt(romId: config.romId)
             if let localMTime, localMTime >= match.updatedAt { return }
 
-            let data = try await downloadSaveUseCase.execute(id: match.id)
+            let deviceId = await syncDevice.deviceId()
+            let data = try await downloadSaveUseCase.execute(id: match.id, deviceId: deviceId, sessionId: nil)
             try saveStore.writeBattery(romId: config.romId, data: data)
             // Preserve server mtime so subsequent local-vs-server compares are
             // not skewed by device clock drift after the write-to-disk timestamp.
             try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
             logger.info("Battery pulled (\(data.count) bytes)")
+            await confirmDownload(saveId: match.id, deviceId: deviceId)
         } catch {
             logger.error("Battery pull failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Tells the server this device now has the save's content, so the next
+    /// `negotiate` stops replanning the same download. Best effort: a failure
+    /// here only means the next sync re-downloads something we already have.
+    private func confirmDownload(saveId: Int, deviceId: String?) async {
+        guard let deviceId else { return }
+        do {
+            _ = try await confirmSaveDownloadUseCase.execute(id: saveId, deviceId: deviceId)
+        } catch {
+            logger.warning("Download confirmation failed (id=\(saveId)): \(error.localizedDescription)")
         }
     }
 
@@ -272,69 +302,87 @@ final class CloudSaveSyncService {
 
     func pushBattery(data: Data) {
         guard isEnabled else { return }
+        Task { await self.pushBatteryAsync(data: data) }
+    }
+
+    /// Does the actual battery upload/update `pushBattery` fires and forgets.
+    /// Split out, and awaitable, so it can be driven directly (e.g. by tests)
+    /// instead of only observed indirectly through its side effects.
+    func pushBatteryAsync(data: Data) async {
         let cfg = config
         let serverId = serverBatteryId
-        Task { [uploadSaveUseCase, updateSaveUseCase] in
-            do {
-                let result: SaveSchema
-                if let serverId {
-                    result = try await updateSaveUseCase.execute(
-                        id: serverId,
-                        emulator: cfg.emulator,
-                        fileName: cfg.batteryFileName,
-                        fileData: data,
-                        screenshotData: nil
-                    )
-                } else {
-                    result = try await uploadSaveUseCase.execute(
-                        romId: cfg.romId,
-                        emulator: cfg.emulator,
-                        slot: nil,
-                        fileName: cfg.batteryFileName,
-                        fileData: data,
-                        screenshotData: nil
-                    )
-                }
-                await self.recordBatteryId(result.id)
-                await self.recordAutoSync()
-                self.logger.info("Battery pushed id=\(result.id)")
-            } catch {
-                self.logger.error("Battery push failed: \(error.localizedDescription)")
+        do {
+            let result: SaveSchema
+            if let serverId {
+                result = try await updateSaveUseCase.execute(
+                    id: serverId,
+                    emulator: cfg.emulator,
+                    fileName: cfg.batteryFileName,
+                    fileData: data,
+                    screenshotData: nil
+                )
+            } else {
+                let deviceId = await syncDevice.deviceId()
+                result = try await uploadSaveUseCase.execute(
+                    romId: cfg.romId,
+                    emulator: cfg.emulator,
+                    slot: SaveSlot.battery,
+                    deviceId: deviceId,
+                    sessionId: nil,
+                    autocleanup: true,
+                    fileName: cfg.batteryFileName,
+                    fileData: data,
+                    screenshotData: nil
+                )
             }
+            recordBatteryId(result.id)
+            recordAutoSync()
+            logger.info("Battery pushed id=\(result.id)")
+        } catch APIClientError.conflict {
+            // The slot moved since our last sync. Nothing to recover here,
+            // the next negotiate/pull will pick up the current state.
+            logger.warning("Battery push skipped: slot moved on the server (conflict)")
+        } catch {
+            logger.error("Battery push failed: \(error.localizedDescription)")
         }
     }
 
     func pushState(slot: Int, data: Data, thumbnail: Data?) {
         guard isEnabled else { return }
+        Task { await self.pushStateAsync(slot: slot, data: data, thumbnail: thumbnail) }
+    }
+
+    /// Does the actual state upload/update `pushState` fires and forgets.
+    /// Split out, and awaitable, so it can be driven directly (e.g. by tests)
+    /// instead of only observed indirectly through its side effects.
+    func pushStateAsync(slot: Int, data: Data, thumbnail: Data?) async {
         let cfg = config
         let fileName = Self.stateFileName(slot: slot)
         let serverId = serverStateIdBySlot[slot]
-        Task { [uploadStateUseCase, updateStateUseCase] in
-            do {
-                let result: StateSchema
-                if let serverId {
-                    result = try await updateStateUseCase.execute(
-                        id: serverId,
-                        emulator: cfg.emulator,
-                        fileName: fileName,
-                        fileData: data,
-                        screenshotData: thumbnail
-                    )
-                } else {
-                    result = try await uploadStateUseCase.execute(
-                        romId: cfg.romId,
-                        emulator: cfg.emulator,
-                        fileName: fileName,
-                        fileData: data,
-                        screenshotData: thumbnail
-                    )
-                }
-                await self.recordStateId(slot: slot, id: result.id)
-                await self.recordAutoSync()
-                self.logger.info("State slot \(slot) pushed id=\(result.id)")
-            } catch {
-                self.logger.error("State slot \(slot) push failed: \(error.localizedDescription)")
+        do {
+            let result: StateSchema
+            if let serverId {
+                result = try await updateStateUseCase.execute(
+                    id: serverId,
+                    emulator: cfg.emulator,
+                    fileName: fileName,
+                    fileData: data,
+                    screenshotData: thumbnail
+                )
+            } else {
+                result = try await uploadStateUseCase.execute(
+                    romId: cfg.romId,
+                    emulator: cfg.emulator,
+                    fileName: fileName,
+                    fileData: data,
+                    screenshotData: thumbnail
+                )
             }
+            recordStateId(slot: slot, id: result.id)
+            recordAutoSync()
+            logger.info("State slot \(slot) pushed id=\(result.id)")
+        } catch {
+            logger.error("State slot \(slot) push failed: \(error.localizedDescription)")
         }
     }
 

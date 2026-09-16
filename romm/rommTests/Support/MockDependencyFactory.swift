@@ -480,6 +480,7 @@ class MockDependencyFactory: PDependencyFactory {
             uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
             updateSaveUseCase: UpdateSaveUseCase(repository: savesRepository),
             downloadSaveUseCase: DownloadSaveUseCase(repository: savesRepository),
+            confirmSaveDownloadUseCase: ConfirmSaveDownloadUseCase(repository: savesRepository),
             listStatesUseCase: ListServerStatesUseCase(repository: statesRepository),
             uploadStateUseCase: UploadStateUseCase(repository: statesRepository),
             updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
@@ -510,10 +511,12 @@ class MockDependencyFactory: PDependencyFactory {
     func makeListServerStatesUseCase() -> PListServerStatesUseCase { ListServerStatesUseCase(repository: statesRepository) }
     func makeDownloadSaveUseCase() -> PDownloadSaveUseCase { DownloadSaveUseCase(repository: savesRepository) }
     func makeDownloadStateUseCase() -> PDownloadStateUseCase { DownloadStateUseCase(repository: statesRepository) }
+    func makeConfirmSaveDownloadUseCase() -> PConfirmSaveDownloadUseCase { ConfirmSaveDownloadUseCase(repository: savesRepository) }
     func makeUploadSaveUseCase() -> PUploadSaveUseCase { UploadSaveUseCase(repository: savesRepository) }
     func makeUpdateSaveUseCase() -> PUpdateSaveUseCase { UpdateSaveUseCase(repository: savesRepository) }
     func makeUploadStateUseCase() -> PUploadStateUseCase { UploadStateUseCase(repository: statesRepository) }
     func makeUpdateStateUseCase() -> PUpdateStateUseCase { UpdateStateUseCase(repository: statesRepository) }
+    func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase { CompleteSyncSessionUseCase(repository: syncDeviceRepository) }
     func makeRecordSyncUseCase() -> PRecordSyncUseCase { RecordSyncUseCase(store: cloudSaveSyncStore) }
     func makeGetLastSyncUseCase() -> PGetLastSyncUseCase { GetLastSyncUseCase(store: cloudSaveSyncStore) }
 
@@ -540,5 +543,21 @@ class MockDependencyFactory: PDependencyFactory {
 
     @MainActor func makeShareROMViewModel() -> ShareROMViewModel {
         ShareROMViewModel(getShareFilesUseCase: makeGetROMShareFilesUseCase())
+    }
+
+    @MainActor func makeSaveSyncRunner() -> SaveSyncRunner {
+        SaveSyncRunner(
+            saveStore: saveStore,
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
+            listServerSavesUseCase: makeListServerSavesUseCase(),
+            listServerStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase(),
+            completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
+            externalSaveFolderStore: externalSaveFolderStore
+        )
     }
 }

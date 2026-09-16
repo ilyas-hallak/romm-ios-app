@@ -66,15 +66,15 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
         return SyncPreview(
             deviceId: deviceId,
             reportedSaveCount: localSaves.count,
-            operations: response.operations.compactMap(Self.previewOperation)
+            operations: response.operations.compactMap(Self.previewOperation),
+            sessionId: response.sessionId
         )
     }
 
     // MARK: - Private
 
     /// Every battery save on this device, reported under the battery slot,
-    /// without which the server pairs nothing. Uploads still send no slot, so
-    /// this shows what a sync *would* do once they do.
+    /// without which the server pairs nothing.
     private func collectBatterySaves() -> [ClientSaveState] {
         let romIds = (try? saveStore.listRomIds()) ?? []
         return romIds.compactMap { romId in
@@ -117,7 +117,9 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
             slot: op.slot,
             emulator: op.emulator,
             reason: op.reason,
-            serverUpdatedAt: op.serverUpdatedAt
+            serverUpdatedAt: op.serverUpdatedAt,
+            saveId: op.saveId,
+            serverContentHash: op.serverContentHash
         )
     }
 

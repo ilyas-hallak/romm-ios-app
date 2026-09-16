@@ -84,6 +84,14 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
         return result
     }
 
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {
+        try await apiClient.completeSyncSession(
+            sessionId: sessionId,
+            operationsCompleted: operationsCompleted,
+            operationsFailed: operationsFailed
+        )
+    }
+
     // MARK: - Version compare
 
     /// Minimal semantic-version compare, kept here so this repository stays

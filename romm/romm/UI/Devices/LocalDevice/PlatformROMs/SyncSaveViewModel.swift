@@ -125,7 +125,7 @@ final class SyncSaveViewModel {
         Task {
             defer { downloadingSaveIds.remove(save.id) }
             do {
-                let data = try await downloadSaveUseCase.execute(id: save.id)
+                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: nil, sessionId: nil)
                 guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
                 try saveStore.writeBattery(romId: rom.id, data: data)
                 hasLocalBattery = true
@@ -191,7 +191,7 @@ final class SyncSaveViewModel {
                         let updated = try await updateSaveUseCase.execute(id: existingId, emulator: nil, fileName: fileName, fileData: data, screenshotData: nil)
                         if let idx = serverSaves.firstIndex(where: { $0.id == updated.id }) { serverSaves[idx] = updated }
                     } else {
-                        let uploaded = try await uploadSaveUseCase.execute(romId: rom.id, emulator: nil, slot: nil, fileName: fileName, fileData: data, screenshotData: nil)
+                        let uploaded = try await uploadSaveUseCase.execute(romId: rom.id, emulator: nil, slot: nil, deviceId: nil, sessionId: nil, autocleanup: nil, fileName: fileName, fileData: data, screenshotData: nil)
                         serverSaves.append(uploaded)
                     }
                     recordManualSync()
@@ -225,7 +225,7 @@ final class SyncSaveViewModel {
         Task {
             defer { exportingServerSaveIds.remove(save.id) }
             do {
-                let data = try await downloadSaveUseCase.execute(id: save.id)
+                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: nil, sessionId: nil)
                 guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
                 presentExport(data: data, baseName: save.fileNameNoExt)
             } catch {

@@ -46,6 +46,7 @@ private final class FakeSyncDevice: PSyncDeviceRepository, @unchecked Sendable {
     var idToReturn: String? = "device-1"
     func syncAPIAvailability() async -> SyncAPIAvailability { availability }
     func deviceId() async -> String? { idToReturn }
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
 }
 
 private final class FakeTokenProvider: PTokenProvider, @unchecked Sendable {

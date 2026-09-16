@@ -21,16 +21,22 @@ final class SyncOverviewViewModel {
     /// `state`, since a granted folder is readable whether the server answers.
     private(set) var externalScans: [ExternalEmulatorID: ExternalSaveScan] = [:]
 
+    /// Set once a run finishes, cleared again the next time one starts.
+    private(set) var lastSyncReport: SaveSyncReport?
+    private(set) var isSyncing = false
+
     private let previewUseCase: PSyncPreviewUseCase
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let scanExternalSaves: PScanExternalSavesUseCase
     private let setupStore: PExternalEmulatorSetupStore
+    private let syncRunner: SaveSyncRunner
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
         self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
         self.setupStore = factory.externalEmulatorSetupStore
+        self.syncRunner = factory.makeSaveSyncRunner()
     }
 
     /// Starts in a given state, for previews: every state this screen shows
@@ -45,6 +51,7 @@ final class SyncOverviewViewModel {
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
         self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
         self.setupStore = factory.externalEmulatorSetupStore
+        self.syncRunner = factory.makeSaveSyncRunner()
         self.state = state
         self.romNames = romNames
         self.externalScans = externalScans
@@ -64,6 +71,52 @@ final class SyncOverviewViewModel {
     var preview: SyncPreview? {
         if case .loaded(let preview) = state { return preview }
         return nil
+    }
+
+    /// Whether "Sync Now" has anything to try. A loaded plan is enough on its
+    /// own: `SaveSyncRunner.run` always syncs save states for every ROM this
+    /// device holds anything for regardless of the plan (states are never
+    /// part of it, see `SyncPreviewUseCase`), so a battery-only plan that is
+    /// already up to date with no matching external file can still turn up
+    /// state work. A run that truly finds nothing to do is harmless, the
+    /// report just says so.
+    var canSyncNow: Bool {
+        preview != nil && !isSyncing
+    }
+
+    /// One line describing what the last run did, or nil before any run.
+    var lastSyncSummary: String? {
+        guard let report = lastSyncReport else { return nil }
+        if report.uploaded == 0, report.downloaded == 0, report.skippedConflicts == 0,
+           report.skipped == 0, report.failed == 0 {
+            return String(localized: "Nothing to sync, everything is up to date.")
+        }
+        var parts = [
+            String(localized: "\(report.uploaded) uploaded"),
+            String(localized: "\(report.downloaded) downloaded")
+        ]
+        if report.skippedConflicts > 0 {
+            parts.append(String(localized: "\(report.skippedConflicts) conflicts left"))
+        }
+        if report.skipped > 0 {
+            parts.append(String(localized: "\(report.skipped) skipped"))
+        }
+        var summary = parts.joined(separator: ", ")
+        if report.failed > 0 {
+            summary += " " + String(localized: "(\(report.failed) failed)")
+        }
+        return summary
+    }
+
+    /// Runs the plan for real, then reloads it so the screen reflects the new
+    /// state rather than the one it was computed against.
+    func syncNow() async {
+        guard let preview, !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+
+        lastSyncReport = await syncRunner.run(preview: preview, externalScans: externalScans)
+        await load()
     }
 
     func load() async {

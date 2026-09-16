@@ -13,15 +13,22 @@ extension RommAPIClient {
         emulator: String?,
         slot: String?,
         deviceId: String?,
+        sessionId: String?,
+        autocleanup: Bool?,
         fileName: String,
         fileData: Data,
         screenshotData: Data?
     ) async throws -> SaveSchema {
+        // `overwrite` is deliberately never sent, its default (false) is exactly
+        // the conflict guard we want. `autocleanup_limit` is left at the server
+        // default (10) too, nothing here needs a different cap.
         let path = withQuery("api/saves", [
             ("rom_id", String(romId)),
             ("emulator", emulator),
             ("slot", slot),
-            ("device_id", deviceId)
+            ("device_id", deviceId),
+            ("session_id", sessionId),
+            ("autocleanup", autocleanup.map { $0 ? "true" : "false" })
         ])
         let boundary = "RommSavesBoundary\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         var formData = Data()
@@ -99,9 +106,10 @@ extension RommAPIClient {
         }
     }
 
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data {
+    func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data {
         let path = withQuery("api/saves/\(id)/content", [
-            ("device_id", deviceId)
+            ("device_id", deviceId),
+            ("session_id", sessionId)
         ])
         return try await getBinary(path)
     }
@@ -109,6 +117,16 @@ extension RommAPIClient {
     func deleteSaves(ids: [Int]) async throws {
         struct Body: Codable { let saves: [Int] }
         _ = try await post("api/saves/delete", body: Body(saves: ids), responseType: BulkDeleteAck.self)
+    }
+
+    /// Tells the server this device has the save's current content, so the next
+    /// `negotiate` stops replanning the same download. Without this call the
+    /// plan never advances past "download this save" for that device.
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema {
+        struct Body: Codable { let deviceId: String
+            enum CodingKeys: String, CodingKey { case deviceId = "device_id" }
+        }
+        return try await post("api/saves/\(id)/downloaded", body: Body(deviceId: deviceId), responseType: SaveSchema.self)
     }
 }
 

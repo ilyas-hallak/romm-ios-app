@@ -133,16 +133,18 @@ final class FakeAPIClient: PRommAPIClient {
     func getStats() async throws -> StatsReturn { fatalError("not used in these tests") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("not used in these tests") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("not used in these tests") }
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
     func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data { fatalError("not used in these tests") }
+    func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data { fatalError("not used in these tests") }
     func deleteSaves(ids: [Int]) async throws {}
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema { fatalError("not used in these tests") }
     func uploadState(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("not used in these tests") }
     func updateState(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("not used in these tests") }
     func downloadState(id: Int) async throws -> Data { fatalError("not used in these tests") }
     func deleteStates(ids: [Int]) async throws {}
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("not used in these tests") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("not used in these tests") }
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
 }
 
 // MARK: - Fixtures
