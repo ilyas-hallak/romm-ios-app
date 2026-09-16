@@ -191,7 +191,7 @@ final class SyncSaveViewModel {
                         let updated = try await updateSaveUseCase.execute(id: existingId, emulator: nil, fileName: fileName, fileData: data, screenshotData: nil)
                         if let idx = serverSaves.firstIndex(where: { $0.id == updated.id }) { serverSaves[idx] = updated }
                     } else {
-                        let uploaded = try await uploadSaveUseCase.execute(romId: rom.id, emulator: nil, slot: nil, deviceId: nil, sessionId: nil, autocleanup: nil, fileName: fileName, fileData: data, screenshotData: nil)
+                        let uploaded = try await uploadSaveUseCase.execute(romId: rom.id, emulator: nil, slot: nil, deviceId: nil, sessionId: nil, autocleanup: nil, overwrite: nil, fileName: fileName, fileData: data, screenshotData: nil)
                         serverSaves.append(uploaded)
                     }
                     recordManualSync()

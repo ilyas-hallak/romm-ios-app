@@ -6,12 +6,12 @@ import Foundation
 
 private final class FakeUploadSaveUseCase: PUploadSaveUseCase, @unchecked Sendable {
     var errorForRomId: [Int: Error] = [:]
-    private(set) var calls: [(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data)] = []
+    private(set) var calls: [(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data)] = []
     private var nextId = 1000
 
-    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
         if let error = errorForRomId[romId] { throw error }
-        calls.append((romId, emulator, slot, deviceId, sessionId, autocleanup, fileName, fileData))
+        calls.append((romId, emulator, slot, deviceId, sessionId, autocleanup, overwrite, fileName, fileData))
         nextId += 1
         return Self.makeSchema(id: nextId, romId: romId, fileName: fileName)
     }
@@ -262,6 +262,22 @@ struct SaveSyncRunnerTests {
         #expect(fakes.uploadSave.calls.first?.deviceId == "device-42")
         #expect(fakes.uploadSave.calls.first?.sessionId == "session-9")
         #expect(fakes.uploadSave.calls.first?.autocleanup == true)
+    }
+
+    /// Without `overwrite` the server refuses its own plan with 409 whenever
+    /// the slot already holds a row this device never synced ("Slot has a
+    /// newer save since your last sync"), which negotiate answers by planning
+    /// the very same upload again: the save would never go up.
+    @Test func uploadOverridesTheServersConflictGuardBecauseThePlanDecidedAlready() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0xCA, 0xFE]))
+        let fakes = Fakes()
+
+        let preview = SyncPreview(deviceId: "device-42", reportedSaveCount: 1, operations: [uploadOp(romId: 1)], sessionId: nil)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.uploaded == 1)
+        #expect(fakes.uploadSave.calls.first?.overwrite == true)
     }
 
     /// HTTP 409 means the slot moved on the server since this device's last

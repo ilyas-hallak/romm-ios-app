@@ -15,20 +15,25 @@ extension RommAPIClient {
         deviceId: String?,
         sessionId: String?,
         autocleanup: Bool?,
+        overwrite: Bool?,
         fileName: String,
         fileData: Data,
         screenshotData: Data?
     ) async throws -> SaveSchema {
-        // `overwrite` is deliberately never sent, its default (false) is exactly
-        // the conflict guard we want. `autocleanup_limit` is left at the server
-        // default (10) too, nothing here needs a different cap.
+        // `overwrite` defaults to false server-side, which is a conflict guard,
+        // not a replace switch: it refuses the upload when the slot already holds
+        // a row this device has no sync history for. Only a caller that has
+        // already established it wins sends true (see `SaveSyncRunner`).
+        // `autocleanup_limit` is left at the server default (10), nothing here
+        // needs a different cap.
         let path = withQuery("api/saves", [
             ("rom_id", String(romId)),
             ("emulator", emulator),
             ("slot", slot),
             ("device_id", deviceId),
             ("session_id", sessionId),
-            ("autocleanup", autocleanup.map { $0 ? "true" : "false" })
+            ("autocleanup", autocleanup.map { $0 ? "true" : "false" }),
+            ("overwrite", overwrite.map { $0 ? "true" : "false" })
         ])
         let boundary = "RommSavesBoundary\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         var formData = Data()

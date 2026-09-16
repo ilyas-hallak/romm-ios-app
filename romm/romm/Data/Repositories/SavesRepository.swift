@@ -12,7 +12,7 @@ final class SavesRepository: PSavesRepository {
         try await apiClient.getSaves(romId: romId)
     }
 
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
         logger.info("☁️ Uploading save romId=\(romId) emulator=\(emulator ?? "-") slot=\(slot ?? "-") device=\(deviceId ?? "-") size=\(fileData.count)")
         return try await apiClient.uploadSave(
             romId: romId,
@@ -21,6 +21,7 @@ final class SavesRepository: PSavesRepository {
             deviceId: deviceId,
             sessionId: sessionId,
             autocleanup: autocleanup,
+            overwrite: overwrite,
             fileName: fileName,
             fileData: fileData,
             screenshotData: screenshotData

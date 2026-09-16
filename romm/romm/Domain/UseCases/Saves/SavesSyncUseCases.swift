@@ -5,7 +5,7 @@ protocol PListServerSavesUseCase {
 }
 
 protocol PUploadSaveUseCase {
-    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
 }
 
 protocol PUpdateSaveUseCase {
@@ -32,7 +32,7 @@ final class ListServerSavesUseCase: PListServerSavesUseCase {
 final class UploadSaveUseCase: PUploadSaveUseCase {
     private let repository: PSavesRepository
     init(repository: PSavesRepository) { self.repository = repository }
-    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
         guard romId > 0 else { throw RomError.invalidRomId }
         return try await repository.uploadSave(
             romId: romId,
@@ -41,6 +41,7 @@ final class UploadSaveUseCase: PUploadSaveUseCase {
             deviceId: deviceId,
             sessionId: sessionId,
             autocleanup: autocleanup,
+            overwrite: overwrite,
             fileName: fileName,
             fileData: fileData,
             screenshotData: screenshotData

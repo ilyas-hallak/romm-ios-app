@@ -41,6 +41,7 @@ struct RommAPIClientStatusCodeTests {
             deviceId: "device-abc",
             sessionId: nil,
             autocleanup: nil,
+            overwrite: nil,
             fileName: "game.srm",
             fileData: Data([0x01]),
             screenshotData: nil

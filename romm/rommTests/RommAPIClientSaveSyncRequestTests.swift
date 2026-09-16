@@ -51,6 +51,7 @@ struct RommAPIClientSaveSyncRequestTests {
             deviceId: "device-abc",
             sessionId: "session-xyz",
             autocleanup: true,
+            overwrite: nil,
             fileName: "game.srm",
             fileData: Data([0x01, 0x02]),
             screenshotData: nil
@@ -79,6 +80,7 @@ struct RommAPIClientSaveSyncRequestTests {
             deviceId: "device-abc",
             sessionId: nil,
             autocleanup: true,
+            overwrite: nil,
             fileName: "game.srm",
             fileData: Data([0x01]),
             screenshotData: nil
@@ -103,6 +105,7 @@ struct RommAPIClientSaveSyncRequestTests {
             deviceId: nil,
             sessionId: nil,
             autocleanup: false,
+            overwrite: nil,
             fileName: "game.srm",
             fileData: Data([0x01]),
             screenshotData: nil
@@ -110,6 +113,57 @@ struct RommAPIClientSaveSyncRequestTests {
 
         let recorded = try #require(URLProtocolStubRegistry.shared.recordedRequest(forHost: host))
         #expect(recorded.queryItems.contains(URLQueryItem(name: "autocleanup", value: "false")))
+    }
+
+    @Test func uploadSaveSerializesOverwriteTrue() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 200, body: Self.minimalSaveResponse),
+            forHost: host
+        )
+
+        _ = try await client.uploadSave(
+            romId: 1,
+            emulator: nil,
+            slot: "battery",
+            deviceId: "device-abc",
+            sessionId: nil,
+            autocleanup: true,
+            overwrite: true,
+            fileName: "battery.sav",
+            fileData: Data([0x01]),
+            screenshotData: nil
+        )
+
+        let recorded = try #require(URLProtocolStubRegistry.shared.recordedRequest(forHost: host))
+        #expect(recorded.queryItems.contains(URLQueryItem(name: "overwrite", value: "true")))
+    }
+
+    /// Left off entirely rather than sent as false, so the server's own
+    /// default stays the conflict guard for every caller that has not
+    /// established that it wins.
+    @Test func uploadSaveOmitsOverwriteWhenNil() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 200, body: Self.minimalSaveResponse),
+            forHost: host
+        )
+
+        _ = try await client.uploadSave(
+            romId: 1,
+            emulator: nil,
+            slot: "battery",
+            deviceId: "device-abc",
+            sessionId: nil,
+            autocleanup: true,
+            overwrite: nil,
+            fileName: "battery.sav",
+            fileData: Data([0x01]),
+            screenshotData: nil
+        )
+
+        let recorded = try #require(URLProtocolStubRegistry.shared.recordedRequest(forHost: host))
+        #expect(!recorded.queryItems.contains { $0.name == "overwrite" })
     }
 
     // MARK: - confirmSaveDownloaded

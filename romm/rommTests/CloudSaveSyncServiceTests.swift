@@ -90,12 +90,12 @@ private final class FakeListServerSavesUseCase: PListServerSavesUseCase, @unchec
 
 private final class FakeUploadSaveUseCase: PUploadSaveUseCase, @unchecked Sendable {
     var error: Error?
-    private(set) var calls: [(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data)] = []
+    private(set) var calls: [(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data)] = []
     private var nextId = 500
 
-    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
         if let error { throw error }
-        calls.append((romId, emulator, slot, deviceId, sessionId, autocleanup, fileName, fileData))
+        calls.append((romId, emulator, slot, deviceId, sessionId, autocleanup, overwrite, fileName, fileData))
         nextId += 1
         return FakeListServerSavesUseCase.makeSchema(id: nextId, romId: romId, fileName: fileName)
     }

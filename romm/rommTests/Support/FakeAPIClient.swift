@@ -133,7 +133,7 @@ final class FakeAPIClient: PRommAPIClient {
     func getStats() async throws -> StatsReturn { fatalError("not used in these tests") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("not used in these tests") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("not used in these tests") }
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
     func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
     func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data { fatalError("not used in these tests") }
     func deleteSaves(ids: [Int]) async throws {}

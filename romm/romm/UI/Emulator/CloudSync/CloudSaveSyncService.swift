@@ -318,6 +318,10 @@ final class CloudSaveSyncService {
                     deviceId: deviceId,
                     sessionId: nil,
                     autocleanup: true,
+                    // No `overwrite`: nothing here established that this device
+                    // wins, so the server's guard is the only thing stopping a
+                    // blind clobber of a row another device just wrote.
+                    overwrite: nil,
                     fileName: cfg.batteryFileName,
                     fileData: data,
                     screenshotData: nil

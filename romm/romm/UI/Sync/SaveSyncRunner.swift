@@ -182,14 +182,20 @@ final class SaveSyncRunner: PSaveSyncRunner {
                 deviceId: deviceId,
                 sessionId: sessionId,
                 autocleanup: true,
+                // The server planned this upload itself, so it has already
+                // decided this device's save wins. Without `overwrite` it would
+                // then refuse its own plan with 409 whenever the slot holds a
+                // row this device never synced, and since negotiate keeps
+                // planning the same upload, the save could never go up at all.
+                overwrite: true,
                 fileName: "battery.sav",
                 fileData: data,
                 screenshotData: nil
             )
         } catch APIClientError.conflict {
-            // The slot moved on the server since this device's last sync
-            // (see the `overwrite` guard in the sync API spec). Not a
-            // failure: the next negotiate will plan around the new state.
+            // Only reachable now if the slot moved between this run's negotiate
+            // and the upload, since `overwrite` above covers the plan's own
+            // view. Not a failure: the next negotiate plans around the new state.
             return .conflict
         } catch {
             return .failed("ROM \(op.romId): battery upload failed (\(error.localizedDescription))")
@@ -427,6 +433,10 @@ final class SaveSyncRunner: PSaveSyncRunner {
                 deviceId: deviceId,
                 sessionId: nil,
                 autocleanup: true,
+                // Only reached when this file is newer than every row the
+                // server holds for the ROM (see the check above), so the same
+                // reasoning as the battery upload applies.
+                overwrite: true,
                 fileName: file.fileName,
                 fileData: data,
                 screenshotData: nil
