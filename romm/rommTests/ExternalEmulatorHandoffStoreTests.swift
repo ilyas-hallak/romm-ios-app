@@ -134,6 +134,16 @@ struct PlayTargetPreferenceTests {
         #expect(UserDefaultsPlayTargetPreferenceStore(userDefaults: defaults).current == .builtIn)
     }
 
+    /// Every app is stored under its own raw value, so a target written by one
+    /// build has to read back as the same app in the next one.
+    @Test(arguments: ExternalEmulatorID.allCases)
+    func everyEmulatorSurvivesARelaunch(id: ExternalEmulatorID) {
+        let defaults = makeDefaults()
+        let preference = UserDefaultsPlayTargetPreferenceStore(userDefaults: defaults)
+        preference.current = .external(id)
+        #expect(UserDefaultsPlayTargetPreferenceStore(userDefaults: defaults).current == .external(id))
+    }
+
     /// An emulator dropped in a later app version must not leave Play pointing at
     /// something that no longer exists.
     @Test func unknownEmulatorFallsBackToBuiltIn() {

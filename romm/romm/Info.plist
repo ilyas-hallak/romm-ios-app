@@ -25,6 +25,7 @@
 		<string>retroarch</string>
 		<string>delta</string>
 		<string>manicemu</string>
+		<string>provenance</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

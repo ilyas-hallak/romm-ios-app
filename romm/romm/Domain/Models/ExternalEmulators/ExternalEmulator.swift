@@ -41,6 +41,10 @@ protocol PExternalEmulator: Sendable {
     /// bundle identifier `UIDocumentInteractionController` reports is the only
     /// reliable signal that the handoff happened.
     func matches(bundleIdentifier: String) -> Bool
+    /// What the user has to do the first time a ROM goes to this app, for the
+    /// setup assistant. Defaulted per delivery route, overridden by an app whose
+    /// import needs more said about it.
+    var handoffExplanation: String { get }
     /// Deep link that boots a ROM the target app has already imported.
     func launchURL(gameIdentifier: String) -> URL?
 }
@@ -91,6 +95,7 @@ enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
     case retroarch
     case delta
     case manicEmu = "manicemu"
+    case provenance
 
     /// The behaviour behind this identity. A `switch` rather than a registry,
     /// so an unwired case fails to compile instead of resolving to nil.
@@ -99,6 +104,7 @@ enum ExternalEmulatorID: String, CaseIterable, Codable, Sendable {
         case .retroarch: return RetroArchExternalEmulator()
         case .delta: return DeltaExternalEmulator()
         case .manicEmu: return ManicEmuExternalEmulator()
+        case .provenance: return ProvenanceExternalEmulator()
         }
     }
 }
@@ -124,4 +130,6 @@ enum ExternalGameIdentifierKind: String, CaseIterable, Sendable {
     case sha1OfROMData
     /// Manic EMU's shortened content hash, see `FileHashing.manicGameID`.
     case manicGameID
+    /// Lowercase hex MD5 over the whole ROM file.
+    case md5OfROMData
 }
