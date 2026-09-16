@@ -75,6 +75,12 @@ enum OrientationLock {
         UIViewController.attemptRotationToDeviceOrientation()
     }
 
+    /// How the phone is held right now, so a caller can skip forcing a side the
+    /// device is already on.
+    static var currentOrientation: UIInterfaceOrientation? {
+        activeWindowScene?.interfaceOrientation
+    }
+
     private static var activeWindowScene: UIWindowScene? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }

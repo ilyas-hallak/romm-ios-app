@@ -53,6 +53,10 @@ private struct PlayOnTVModifier: ViewModifier {
                 // auto lock would otherwise background the app and stop emulation.
                 UIApplication.shared.isIdleTimerDisabled = true
                 updateAutoDim()
+                // The engine views also set an orientation mask in their own
+                // `.onAppear`, and SwiftUI does not guarantee which runs first.
+                // Deferring by a runloop turn guarantees this one applies last.
+                DispatchQueue.main.async { applyOrientationLock() }
             }
             .onDisappear {
                 display.endSession()
@@ -62,6 +66,7 @@ private struct PlayOnTVModifier: ViewModifier {
             .onChange(of: display.isActive) { _, _ in updateAutoDim() }
             .onChange(of: areTouchControlsHidden) { _, _ in updateAutoDim() }
             .onChange(of: isMenuOpen) { _, _ in updateAutoDim() }
+            .onChange(of: isPhoneVideoHidden) { _, _ in applyOrientationLock() }
             .onChange(of: scenePhase) { _, phase in
                 // Leaving the app must never strand the user with a dark panel.
                 if phase != .active { screenBlanker.restore() }
@@ -116,6 +121,25 @@ private struct PlayOnTVModifier: ViewModifier {
                 isMenuOpen: isMenuOpen,
                 isAutoDimPhoneEnabled: display.isAutoDimPhoneEnabled
             )
+        )
+    }
+
+    /// While the phone is a pure controller the touch layout only reads as a
+    /// gamepad in landscape, so portrait is locked out for that stretch.
+    private func applyOrientationLock() {
+        guard isPhoneVideoHidden else {
+            OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
+            return
+        }
+        // A two-way mask alone does not reliably rotate a device sitting in
+        // portrait, the same reason RomDetailView forces `rotateTo: .portrait`
+        // rather than trusting a mask change on its own. A phone already held
+        // sideways keeps the side it is on, forcing one would flip it out of the
+        // player's hands.
+        let isHeldSideways = OrientationLock.currentOrientation?.isLandscape ?? false
+        OrientationLock.set(
+            [.landscapeLeft, .landscapeRight],
+            rotateTo: isHeldSideways ? nil : .landscapeRight
         )
     }
 }
