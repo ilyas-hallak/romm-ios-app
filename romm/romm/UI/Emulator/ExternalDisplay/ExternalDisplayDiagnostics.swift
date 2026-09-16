@@ -49,8 +49,6 @@ struct ExternalDisplayMetrics: Equatable {
 @MainActor
 final class ExternalDisplayDiagnostics: PExternalDisplayDiagnostics {
 
-    static let shared = ExternalDisplayDiagnostics()
-
     private var frameRate = ExternalFrameRateCounter()
     private var routeObserver: NSObjectProtocol?
 

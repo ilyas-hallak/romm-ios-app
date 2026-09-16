@@ -133,6 +133,7 @@ protocol PDependencyFactory {
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
     var rumblePreference: PRumblePreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
+    var externalDisplayDiagnostics: PExternalDisplayDiagnostics { get }
     var screenBrightness: PScreenBrightness { get }
 
     func makePlatformEngineSupport() -> PPlatformEngineSupport
@@ -433,6 +434,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
+    lazy var externalDisplayDiagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 
     // MARK: - External Emulator Apps

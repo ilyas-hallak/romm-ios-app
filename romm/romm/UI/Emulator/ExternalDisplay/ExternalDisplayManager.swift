@@ -24,13 +24,15 @@ import Combine
 ///
 /// A singleton because UIKit instantiates `ExternalDisplaySceneDelegate` itself
 /// and hands it a scene, so there is no call site to inject into. The same reason
-/// `LibretroFrontend` is one. Its collaborators are injected, so it can be built
-/// and driven in a test without a display.
+/// `LibretroFrontend` is one. Its collaborators come through the initialiser, but
+/// the window path still needs a live `UIWindowScene`, which cannot be built in a
+/// test, so nothing here is driven by one yet.
 @MainActor
 final class ExternalDisplayManager: ObservableObject {
 
     static let shared = ExternalDisplayManager(
-        preference: DefaultDependencyFactory.shared.externalDisplayPreference
+        preference: DefaultDependencyFactory.shared.externalDisplayPreference,
+        diagnostics: DefaultDependencyFactory.shared.externalDisplayDiagnostics
     )
 
     /// True while iOS has handed us an external display scene.
@@ -68,7 +70,7 @@ final class ExternalDisplayManager: ObservableObject {
 
     init(
         preference: PExternalDisplayPreference,
-        diagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics.shared
+        diagnostics: PExternalDisplayDiagnostics
     ) {
         self.preference = preference
         self.diagnostics = diagnostics

@@ -89,6 +89,7 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = InMemoryExternalDisplayPreference()
+    lazy var externalDisplayDiagnostics: PExternalDisplayDiagnostics = DiagnosticsSpy()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
 
     // External emulator apps

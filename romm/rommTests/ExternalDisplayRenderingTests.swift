@@ -131,12 +131,11 @@ struct LibretroVideoViewMirroringTests {
     /// The frame rate is only as good as the seam it is counted in, so every
     /// frame that reaches the mirror has to be reported.
     @Test func everyMirroredFrameIsReported() {
-        let view = LibretroVideoView(frame: .zero)
         let diagnostics = DiagnosticsSpy()
+        let view = LibretroVideoView(frame: .zero, diagnostics: diagnostics)
         // Held here on purpose: the view keeps the mirror weakly, so a layer
         // nobody else owns is gone before the first frame arrives.
         let mirror = CALayer()
-        view.diagnostics = diagnostics
         view.mirrorLayer = mirror
         sendFrame(to: view)
         sendFrame(to: view)
@@ -148,9 +147,8 @@ struct LibretroVideoViewMirroringTests {
     /// Nothing of ours is on a display, so counting would report a rate for a
     /// picture nobody is watching.
     @Test func framesAreNotReportedWithoutAMirrorLayer() {
-        let view = LibretroVideoView(frame: .zero)
         let diagnostics = DiagnosticsSpy()
-        view.diagnostics = diagnostics
+        let view = LibretroVideoView(frame: .zero, diagnostics: diagnostics)
         sendFrame(to: view)
         #expect(diagnostics.frameCount == 0)
     }

@@ -17,9 +17,16 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
 
     /// Told about every frame that reaches the mirror layer. Injected so a test
     /// can watch that without an external display.
-    var diagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics.shared
+    private let diagnostics: PExternalDisplayDiagnostics
 
-    override init(frame: CGRect) {
+    /// The path UIKit takes, `UIView()` included, so the default has to live here
+    /// rather than on the designated initialiser below.
+    override convenience init(frame: CGRect) {
+        self.init(frame: frame, diagnostics: DefaultDependencyFactory.shared.externalDisplayDiagnostics)
+    }
+
+    init(frame: CGRect, diagnostics: PExternalDisplayDiagnostics) {
+        self.diagnostics = diagnostics
         super.init(frame: frame)
         backgroundColor = .black
         layer.magnificationFilter = .nearest
