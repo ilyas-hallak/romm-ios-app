@@ -28,12 +28,14 @@ struct ExternalDisplayContentViewTests {
         #expect(view.videoLayer.delegate == nil)
     }
 
-    /// A frame assigned outside an animation block must appear at once, which is
-    /// only true while no animation was added for it.
-    @Test func assigningContentsAddsNoAnimation() {
+    /// A frame assigned outside an animation block must appear at once. Asked
+    /// through `action(forKey:)` because that is what Core Animation itself
+    /// consults; `animationKeys()` stays nil in a test either way and would
+    /// pass with the suppression removed.
+    @Test func assigningContentsFindsNoActionToRun() {
         let view = ExternalDisplayContentView()
         view.videoLayer.contents = UIImage(systemName: "tv")?.cgImage
-        #expect(view.videoLayer.animationKeys()?.isEmpty ?? true)
+        #expect(view.videoLayer.action(forKey: "contents") == nil)
     }
 
     /// A standalone layer starts at scale 1 and inherits nothing, so the screen
@@ -52,7 +54,7 @@ struct ExternalDisplayContentViewTests {
         view.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
         view.layoutIfNeeded()
         #expect(view.videoLayer.frame == view.bounds)
-        #expect(view.videoLayer.animationKeys()?.isEmpty ?? true)
+        #expect(view.videoLayer.action(forKey: "bounds") == nil)
     }
 }
 
@@ -107,7 +109,6 @@ struct LibretroVideoViewMirroringTests {
         sendFrame(to: view)
         sendFrame(to: view)
         #expect(spy.runCount == 0)
-        #expect(mirror.animationKeys()?.isEmpty ?? true)
     }
 
     /// Guards the test above from passing for the wrong reason: the same layer
@@ -126,6 +127,49 @@ struct LibretroVideoViewMirroringTests {
         #expect(view.layer.contents != nil)
         #expect(view.snapshot() != nil)
     }
+
+    /// The frame rate is only as good as the seam it is counted in, so every
+    /// frame that reaches the mirror has to be reported.
+    @Test func everyMirroredFrameIsReported() {
+        let view = LibretroVideoView(frame: .zero)
+        let diagnostics = DiagnosticsSpy()
+        // Held here on purpose: the view keeps the mirror weakly, so a layer
+        // nobody else owns is gone before the first frame arrives.
+        let mirror = CALayer()
+        view.diagnostics = diagnostics
+        view.mirrorLayer = mirror
+        sendFrame(to: view)
+        sendFrame(to: view)
+        sendFrame(to: view)
+        #expect(diagnostics.frameCount == 3)
+        #expect(mirror.contents != nil)
+    }
+
+    /// Nothing of ours is on a display, so counting would report a rate for a
+    /// picture nobody is watching.
+    @Test func framesAreNotReportedWithoutAMirrorLayer() {
+        let view = LibretroVideoView(frame: .zero)
+        let diagnostics = DiagnosticsSpy()
+        view.diagnostics = diagnostics
+        sendFrame(to: view)
+        #expect(diagnostics.frameCount == 0)
+    }
+}
+
+@MainActor
+final class DiagnosticsSpy: PExternalDisplayDiagnostics {
+    private(set) var frameCount = 0
+    private(set) var renderingStarts: [Bool] = []
+
+    func sessionDidBegin() {}
+    func sessionDidEnd() {}
+    func displayDidConnect(_ display: ExternalDisplayMetrics) {}
+    func displayDidDisconnect() {}
+    func renderingDidStart(on display: ExternalDisplayMetrics, countingFrames: Bool) {
+        renderingStarts.append(countingFrames)
+    }
+    func renderingDidStop() {}
+    func externalFrameRendered() { frameCount += 1 }
 }
 
 struct ExternalFrameRateCounterTests {
@@ -190,6 +234,16 @@ struct ExternalFrameRateCounterTests {
         _ = counter.record(at: 0.5)
         #expect(counter.record(at: 30) == nil)
         #expect(counter.record(at: 30.5) == nil)
+    }
+
+    /// A picture limping along at one frame a second is exactly the collapse
+    /// this is meant to catch, so the pause threshold must not swallow it.
+    @Test func aSlowButSteadyRateIsStillReported() throws {
+        var counter = ExternalFrameRateCounter()
+        _ = counter.record(at: 0)
+        let reported = counter.record(at: 1)
+        let rate = try #require(reported)
+        #expect(abs(rate - 1) < 0.001)
     }
 
     /// A late frame is not a pause: the window it lands in still has to close.

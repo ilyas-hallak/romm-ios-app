@@ -15,6 +15,10 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
     /// `contents` costs next to nothing.
     weak var mirrorLayer: CALayer?
 
+    /// Told about every frame that reaches the mirror layer. Injected so a test
+    /// can watch that without an external display.
+    var diagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics.shared
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black
@@ -111,7 +115,7 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
             CATransaction.setDisableActions(true)
             mirrorLayer.contents = image
             CATransaction.commit()
-            ExternalDisplayDiagnostics.shared.externalFrameRendered()
+            diagnostics.externalFrameRendered()
         }
         lastCGImage = image
     }

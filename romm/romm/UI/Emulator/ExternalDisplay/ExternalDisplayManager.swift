@@ -49,7 +49,7 @@ final class ExternalDisplayManager: ObservableObject {
 
     /// Every state change here is also a measurement point for the AirPlay
     /// latency question, see `ExternalDisplayDiagnostics`.
-    private let diagnostics = ExternalDisplayDiagnostics.shared
+    private let diagnostics: PExternalDisplayDiagnostics
 
     /// Fills the display whenever we own it. Exists independently of whether one
     /// is attached, so a render target can be handed it and forget about
@@ -66,14 +66,18 @@ final class ExternalDisplayManager: ObservableObject {
     /// Weak: the running session owns its render target and outlives no session.
     private weak var renderTarget: PExternalRenderTarget?
 
-    init(preference: PExternalDisplayPreference) {
+    init(
+        preference: PExternalDisplayPreference,
+        diagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics.shared
+    ) {
         self.preference = preference
+        self.diagnostics = diagnostics
     }
 
     // MARK: - Scene lifecycle (called from ExternalDisplaySceneDelegate)
 
     func sceneDidConnect(_ scene: UIWindowScene) {
-        diagnostics.displayDidConnect(scene)
+        diagnostics.displayDidConnect(ExternalDisplayMetrics(screen: scene.screen))
         self.scene = scene
         isConnected = true
         let px = scene.screen.nativeBounds.size
@@ -157,6 +161,15 @@ final class ExternalDisplayManager: ObservableObject {
         guard let renderTarget else { return }
         if isActive {
             renderTarget.startRendering(into: contentView)
+            // Reported from here rather than from `setupWindow()`: a game
+            // launched with a display already attached registers its target
+            // afterwards, and only the target knows whether frames are counted.
+            if let scene {
+                diagnostics.renderingDidStart(
+                    on: ExternalDisplayMetrics(screen: scene.screen),
+                    countingFrames: renderTarget.reportsFrameRate
+                )
+            }
         } else {
             renderTarget.stopRendering()
         }
@@ -169,7 +182,6 @@ final class ExternalDisplayManager: ObservableObject {
         window.rootViewController = controller
         window.isHidden = false
         self.window = window
-        diagnostics.renderingDidStart(on: scene, countingFrames: renderTarget?.reportsFrameRate ?? false)
     }
 
     private func teardownWindow() {

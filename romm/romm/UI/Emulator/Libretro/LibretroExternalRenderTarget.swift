@@ -22,6 +22,6 @@ final class LibretroExternalRenderTarget: PExternalRenderTarget {
         videoView?.mirrorLayer = nil
     }
 
-    /// The mirror assignment in `LibretroVideoView.display()` is the seam.
+    /// The mirror assignment in `LibretroVideoView.libretroDidProduceFrame` is the seam.
     var reportsFrameRate: Bool { true }
 }
