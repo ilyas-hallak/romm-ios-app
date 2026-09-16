@@ -59,11 +59,13 @@ private func makeNegotiateResponse(operations: [[String: Any]]) -> SyncNegotiate
 }
 
 private func negotiateOperationJSON(
-    action: SyncAction, romId: Int, fileName: String, saveId: Int? = nil, slot: String? = nil
+    action: SyncAction, romId: Int, fileName: String, saveId: Int? = nil, slot: String? = nil,
+    serverUpdatedAt: Date? = nil
 ) -> [String: Any] {
     var json: [String: Any] = ["action": action.rawValue, "rom_id": romId, "file_name": fileName]
     if let saveId { json["save_id"] = saveId }
     if let slot { json["slot"] = slot }
+    if let serverUpdatedAt { json["server_updated_at"] = ISO8601DateFormatter().string(from: serverUpdatedAt) }
     return json
 }
 
@@ -438,6 +440,44 @@ struct CloudSaveSyncServiceTests {
         let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
         await service.pullBeforeLaunch()
 
+        await service.pushBatteryAsync(data: Data([0xBB]))
+        #expect(fakes.uploadSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.isEmpty)
+    }
+
+    // MARK: - applyDownload only ever touches this device's own battery slot
+
+    /// A `download` operation for a row parked under a different slot (e.g.
+    /// another client's save under `slot=1`) is not this device's battery at
+    /// all. It must not be written into the local battery file, and its id
+    /// must not be adopted as `serverBatteryId` either, or every later push
+    /// would overwrite that foreign row instead of this device's own.
+    @Test func applyDownloadIgnoresARowWithADifferentSlot() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0xAA]))
+        let oldLocalTime = Date(timeIntervalSince1970: 1_600_000_000)
+        try store.setBatteryModifiedAt(romId: 1, date: oldLocalTime)
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let newerServerTime = oldLocalTime.addingTimeInterval(3600)
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "other-device.sav", saveId: 999, slot: "1",
+                serverUpdatedAt: newerServerTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+        fakes.downloadSave.dataForId[999] = Data([0xFF])
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(fakes.downloadSave.calls.isEmpty)
+        #expect(try store.readBattery(romId: 1) == Data([0xAA]))
+
+        // serverBatteryId must not have been adopted from the foreign-slot
+        // row either, so the next push creates its own row rather than
+        // updating the other device's.
         await service.pushBatteryAsync(data: Data([0xBB]))
         #expect(fakes.uploadSave.calls.count == 1)
         #expect(fakes.updateSave.calls.isEmpty)

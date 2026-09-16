@@ -93,11 +93,14 @@ private final class FakeUploadStateUseCase: PUploadStateUseCase, @unchecked Send
     }
 }
 
-/// Not exercised by any scenario here. Trapping on a call would fail the test
-/// loudly rather than silently accepting an unplanned state sync.
-private final class UnusedUpdateStateUseCase: PUpdateStateUseCase, @unchecked Sendable {
+private final class FakeUpdateStateUseCase: PUpdateStateUseCase, @unchecked Sendable {
+    var errorForId: [Int: Error] = [:]
+    private(set) var calls: [(id: Int, fileName: String, fileData: Data)] = []
+
     func execute(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema {
-        fatalError("not used in these tests")
+        if let error = errorForId[id] { throw error }
+        calls.append((id, fileName, fileData))
+        return FakeListServerStatesUseCase.makeSchema(id: id, romId: 0, fileName: fileName, updatedAt: Date())
     }
 }
 
@@ -161,11 +164,11 @@ struct SaveSyncRunnerTests {
 
     private func downloadOp(
         romId: Int, serverFileName: String? = nil, serverUpdatedAt: Date?,
-        saveId: Int?, serverContentHash: String? = nil
+        saveId: Int?, serverContentHash: String? = nil, slot: String? = SaveSlot.battery
     ) -> SyncPreviewOperation {
         SyncPreviewOperation(
             romId: romId, direction: .download, serverFileName: serverFileName,
-            slot: SaveSlot.battery, emulator: nil, reason: nil, serverUpdatedAt: serverUpdatedAt,
+            slot: slot, emulator: nil, reason: nil, serverUpdatedAt: serverUpdatedAt,
             saveId: saveId, serverContentHash: serverContentHash
         )
     }
@@ -184,6 +187,7 @@ struct SaveSyncRunnerTests {
         let listSaves = FakeListServerSavesUseCase()
         let listStates = FakeListServerStatesUseCase()
         let uploadState = FakeUploadStateUseCase()
+        let updateState = FakeUpdateStateUseCase()
         let downloadState = FakeDownloadStateUseCase()
         let completeSession = FakeCompleteSyncSessionUseCase()
         let folderStore = FakeExternalSaveFolderStore()
@@ -198,7 +202,7 @@ struct SaveSyncRunnerTests {
             listServerSavesUseCase: fakes.listSaves,
             listServerStatesUseCase: fakes.listStates,
             uploadStateUseCase: fakes.uploadState,
-            updateStateUseCase: UnusedUpdateStateUseCase(),
+            updateStateUseCase: fakes.updateState,
             downloadStateUseCase: fakes.downloadState,
             completeSyncSessionUseCase: fakes.completeSession,
             externalSaveFolderStore: fakes.folderStore
@@ -277,25 +281,26 @@ struct SaveSyncRunnerTests {
         #expect(report.uploaded == 0)
     }
 
-    // MARK: - Battery upload uses the server's existing file name
+    // MARK: - Battery upload always uses the fixed file name
 
-    /// There is no unique constraint on (rom_id, slot) server-side, so
-    /// uploading under a hardcoded name would create a second row for a ROM
-    /// the server already has one for. The upload must hit the existing row
-    /// by reusing its name.
-    @Test func uploadUsesTheServersExistingFileNameWhenKnown() async throws {
+    /// The server stamps its own timestamp onto every slot upload's file
+    /// name, so a slot upload never matches an existing row by name anyway.
+    /// Reusing the server's already-stamped name would just grow a second
+    /// timestamp onto it every run, so the upload always goes out under the
+    /// same fixed name regardless of what the plan reports for this row.
+    @Test func uploadAlwaysUsesTheFixedFileNameEvenWhenTheServerReportsOne() async throws {
         let store = makeStore()
         try store.writeBattery(romId: 1, data: Data([0xCA, 0xFE]))
         let fakes = Fakes()
 
         let preview = SyncPreview(
             deviceId: "d1", reportedSaveCount: 1,
-            operations: [uploadOp(romId: 1, serverFileName: "Zelda.srm")]
+            operations: [uploadOp(romId: 1, serverFileName: "Zelda [2026-09-15 10:00:00].srm")]
         )
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
 
         #expect(report.uploaded == 1)
-        #expect(fakes.uploadSave.calls.first?.fileName == "Zelda.srm")
+        #expect(fakes.uploadSave.calls.first?.fileName == "battery.sav")
     }
 
     /// No server row exists yet for this ROM (the plan carries no server file
@@ -446,6 +451,76 @@ struct SaveSyncRunnerTests {
         #expect(fakes.downloadSave.calls.isEmpty)
     }
 
+    // MARK: - A download for a foreign slot must never touch the battery file
+
+    /// The server plans per (rom_id, slot). A device that only reports its
+    /// battery slot can still get back a download for this ROM's "autosave"
+    /// or "default" row from another client. Writing that into the battery
+    /// file would silently overwrite it with a save state or an unrelated
+    /// save, which is why this is checked directly against the file rather
+    /// than only against the report's counters.
+    @Test func downloadForAForeignSlotNeverWritesTheBatteryFile() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 2, data: Data([0xAA]))
+        let fakes = Fakes()
+        fakes.downloadSave.dataForId[9] = Data([0x01, 0x02, 0x03])
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 0,
+            operations: [downloadOp(romId: 2, serverUpdatedAt: Date(), saveId: 9, slot: "autosave")]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.skipped == 1)
+        #expect(fakes.downloadSave.calls.isEmpty)
+        #expect(try store.readBattery(romId: 2) == Data([0xAA]))
+    }
+
+    /// A row with no slot at all predates slots and is still treated as a
+    /// battery save, matching the negotiate-side filter.
+    @Test func downloadWithNoSlotIsStillTreatedAsBattery() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.downloadSave.dataForId[9] = Data([0x01])
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 0,
+            operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9, slot: nil)]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.downloaded == 1)
+        #expect(try store.readBattery(romId: 2) == Data([0x01]))
+    }
+
+    /// Reproduces a real server response: one ROM getting a battery upload
+    /// alongside download operations for its "default" and "autosave" rows
+    /// from another client. Only the battery row may be touched; the two
+    /// foreign-slot downloads must be skipped without ever calling download.
+    @Test func realWorldMultiSlotResponseOnlyTouchesTheBatteryRow() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 159, data: Data([0xAA]))
+        let fakes = Fakes()
+        fakes.downloadSave.dataForId[6] = Data([0xDE, 0xAD])
+        fakes.downloadSave.dataForId[109] = Data([0xBE, 0xEF])
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 1,
+            operations: [
+                uploadOp(romId: 159),
+                downloadOp(romId: 159, serverUpdatedAt: Date(), saveId: 6, slot: "default"),
+                downloadOp(romId: 159, serverUpdatedAt: Date(), saveId: 109, slot: "autosave")
+            ]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.downloaded == 0)
+        #expect(report.skipped == 2)
+        #expect(fakes.downloadSave.calls.isEmpty)
+        #expect(try store.readBattery(romId: 159) == Data([0xAA]))
+    }
+
     // MARK: - Download confirmation
 
     /// A successful download is followed by a confirmation to the server,
@@ -564,6 +639,155 @@ struct SaveSyncRunnerTests {
         #expect(report.downloaded == 1)
         #expect(fakes.downloadState.requestedIds == [30])
         #expect(try store.readState(romId: 6, slot: 0) == Data([0x20, 0x21]))
+    }
+
+    // MARK: - Save states, both sides already exist
+
+    /// The device's copy is newer than the server's for the same slot, and
+    /// the server row actually carries that slot's own name (`slot0.state`),
+    /// so overwriting it by id is safe: the plan updates the exact row it
+    /// means to, not a state that only happens to sit in that slot this run.
+    @Test func stateSyncUploadsToTheKnownServerIdWhenLocalIsNewerAndTheServerNameMatchesTheSlot() async throws {
+        let store = makeStore()
+        try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
+        let localTime = Date(timeIntervalSince1970: 1_700_003_600)
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: localTime)
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: serverTime)
+        ]
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.uploaded == 1)
+        #expect(fakes.updateState.calls.count == 1)
+        #expect(fakes.updateState.calls.first?.id == 30)
+        #expect(fakes.updateState.calls.first?.fileData == Data([0xAA]))
+        #expect(fakes.uploadState.calls.isEmpty)
+    }
+
+    /// The server's copy is newer, so it replaces the local state, regardless
+    /// of naming: downloading never risks overwriting the wrong server row,
+    /// only local disk.
+    @Test func stateSyncDownloadsAndOverwritesTheLocalStateWhenServerIsNewer() async throws {
+        let store = makeStore()
+        try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
+        let localTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: localTime)
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_003_600)
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: serverTime)
+        ]
+        fakes.downloadState.dataForId[30] = Data([0xBB])
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.downloaded == 1)
+        #expect(try store.readState(romId: 5, slot: 0) == Data([0xBB]))
+        #expect(fakes.updateState.calls.isEmpty)
+    }
+
+    /// Identical timestamps on both sides mean nothing changed since the last
+    /// sync: no upload, no download, nothing in the report.
+    @Test func stateSyncTakesNoActionWhenBothSidesShareTheSameTimestamp() async throws {
+        let store = makeStore()
+        try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
+        let sharedTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: sharedTime)
+        let fakes = Fakes()
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: sharedTime)
+        ]
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.uploaded == 0)
+        #expect(report.downloaded == 0)
+        #expect(report.skipped == 0)
+        #expect(report.failed == 0)
+        #expect(fakes.updateState.calls.isEmpty)
+        #expect(fakes.downloadState.requestedIds.isEmpty)
+    }
+
+    /// The update call itself can fail (network, server-side conflict, ...);
+    /// that must surface honestly as a failure in the report, not be silently
+    /// dropped or miscounted as a success.
+    @Test func stateSyncReportsAFailureWhenTheServerUpdateCallFails() async throws {
+        let store = makeStore()
+        try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
+        let localTime = Date(timeIntervalSince1970: 1_700_003_600)
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: localTime)
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: serverTime)
+        ]
+        fakes.updateState.errorForId[30] = URLError(.timedOut)
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.failed == 1)
+        #expect(report.uploaded == 0)
+        #expect(report.errors.count == 1)
+    }
+
+    /// A server state with no recognisable `slotN.state` name (e.g. uploaded
+    /// from the RomM web UI) only ever lands in a slot by a synthetic,
+    /// order-dependent assignment. Even though this device's copy is newer,
+    /// overwriting that row by id is unsafe: the same slot can name a
+    /// different server state on the next run. The runner must leave it
+    /// alone rather than PUT over it.
+    @Test func stateSyncNeverOverwritesAnUnnamedServerStateEvenWhenLocalIsNewer() async throws {
+        let store = makeStore()
+        try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
+        let localTime = Date(timeIntervalSince1970: 1_700_003_600)
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: localTime)
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(
+                id: 30, romId: 5, fileName: "Chrono Trigger [2026-05-06].state", updatedAt: serverTime
+            )
+        ]
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(fakes.updateState.calls.isEmpty)
+        #expect(fakes.uploadState.calls.isEmpty)
+        #expect(fakes.downloadState.requestedIds.isEmpty)
+        #expect(report.uploaded == 0)
+        #expect(report.downloaded == 0)
+        #expect(report.failed == 0)
+    }
+
+    /// The naming guard only blocks the *overwrite* direction. A newer,
+    /// unnamed server state is still downloaded normally.
+    @Test func stateSyncStillDownloadsAnUnnamedServerStateWhenItIsNewer() async throws {
+        let store = makeStore()
+        try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
+        let localTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: localTime)
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_003_600)
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(
+                id: 30, romId: 5, fileName: "Chrono Trigger [2026-05-06].state", updatedAt: serverTime
+            )
+        ]
+        fakes.downloadState.dataForId[30] = Data([0xCC])
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.downloaded == 1)
+        #expect(try store.readState(romId: 5, slot: 0) == Data([0xCC]))
     }
 
     // MARK: - External emulator apps

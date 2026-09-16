@@ -169,11 +169,12 @@ final class SaveSyncRunner: PSaveSyncRunner {
         }
 
         do {
-            // Upload under the server's own name for this row when there is
-            // one, so this hits the existing row instead of creating a second
-            // one for the same ROM (there is no unique constraint on
-            // (rom_id, slot) server-side). Only a ROM the server has no
-            // battery row for yet falls back to the default name.
+            // The server stamps its own timestamp onto every slot upload's
+            // file name, so the name is pure decoration and never lets a
+            // slot upload match an existing row by name. Reusing
+            // `op.serverFileName` (itself already stamped) would only grow a
+            // second timestamp onto it on every run, so this always uploads
+            // under the same fixed name.
             _ = try await uploadSaveUseCase.execute(
                 romId: op.romId,
                 emulator: nil,
@@ -181,7 +182,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
                 deviceId: deviceId,
                 sessionId: sessionId,
                 autocleanup: true,
-                fileName: op.serverFileName ?? "battery.sav",
+                fileName: "battery.sav",
                 fileData: data,
                 screenshotData: nil
             )
@@ -202,6 +203,14 @@ final class SaveSyncRunner: PSaveSyncRunner {
     /// is the only thing that unambiguously names one row.
     private func runBatteryDownload(_ op: SyncPreviewOperation, deviceId: String) async -> StepOutcome {
         guard let saveId = op.saveId else {
+            return .skipped
+        }
+
+        // Defense in depth: the preview already drops non-battery slots, but
+        // this runs off whatever preview it is handed, and a foreign-slot
+        // download (e.g. this ROM's "autosave" or "default" row from another
+        // client) written here would silently clobber the local battery file.
+        if let slot = op.slot, slot != SaveSlot.battery {
             return .skipped
         }
 
@@ -271,9 +280,12 @@ final class SaveSyncRunner: PSaveSyncRunner {
             return [.failed("ROM \(romId): could not list server states (\(error.localizedDescription))")]
         }
 
-        let (slotByStateId, _) = StateSlots.assign(serverStates.map {
+        let (slotByStateId, overflow) = StateSlots.assign(serverStates.map {
             StateSlots.Candidate(id: $0.id, fileName: $0.fileName, updatedAt: $0.updatedAt)
         })
+        if overflow > 0 {
+            logger.warning("\(overflow) server state(s) skipped: no free slot (max 21)")
+        }
         var serverStateBySlot: [Int: StateSchema] = [:]
         for state in serverStates {
             guard let slot = slotByStateId[state.id] else { continue }
@@ -290,7 +302,20 @@ final class SaveSyncRunner: PSaveSyncRunner {
                 outcomes.append(await uploadState(romId: romId, slot: slot, existingServerId: nil))
             case (let local?, let server?):
                 if local > server.updatedAt {
-                    outcomes.append(await uploadState(romId: romId, slot: slot, existingServerId: server.id))
+                    // `StateSlots.assign` can park a server state with no
+                    // recognisable name (e.g. uploaded from the RomM web UI)
+                    // under a synthetic slot, ordered by timestamp/id. That
+                    // ordering shifts whenever another unnamed state appears
+                    // or disappears, so a slot that "wins" this run may name
+                    // a different server state next run. Only overwrite a
+                    // server state whose own file name actually names this
+                    // slot; anything else is left alone rather than risk
+                    // PUTting this device's content over an unrelated save.
+                    if StateSlots.slot(fromFileName: server.fileName) == slot {
+                        outcomes.append(await uploadState(romId: romId, slot: slot, existingServerId: server.id))
+                    } else {
+                        outcomes.append(.skipped)
+                    }
                 } else if server.updatedAt > local {
                     outcomes.append(await downloadState(romId: romId, slot: slot, server: server))
                 }

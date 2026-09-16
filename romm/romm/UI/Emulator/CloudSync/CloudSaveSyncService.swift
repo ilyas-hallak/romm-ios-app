@@ -135,11 +135,7 @@ final class CloudSaveSyncService {
             // of letting whichever operation happens to sort last in the
             // response silently win and get overwritten by the next push.
             let batteryCandidates = response.operations.filter { op in
-                guard let fileName = op.fileName else { return false }
-                return op.romId == config.romId
-                    && op.saveId != nil
-                    && !fileName.hasSuffix(".state")
-                    && (op.slot == nil || op.slot == SaveSlot.battery)
+                op.romId == config.romId && op.saveId != nil && isBatteryOperation(op)
             }
             if let match = batteryCandidates.first(where: { $0.fileName == config.batteryFileName }) ?? batteryCandidates.first {
                 serverBatteryId = match.saveId
@@ -188,13 +184,23 @@ final class CloudSaveSyncService {
         return result
     }
 
+    /// A negotiate operation is a battery operation when its file is not a
+    /// `.state` and its slot is either unset (pre-slot server rows) or the
+    /// battery slot itself. Shared by the `serverBatteryId` pick above and by
+    /// `applyDownload` below so the two can never drift apart: a mismatch
+    /// there would let a foreign-slot download get written into, and later
+    /// pushed over, this device's own battery file.
+    private func isBatteryOperation(_ op: SyncOperationSchema) -> Bool {
+        guard let fileName = op.fileName else { return false }
+        return !fileName.hasSuffix(".state") && (op.slot == nil || op.slot == SaveSlot.battery)
+    }
+
     /// Applies a single `download` operation. States are intentionally left to
     /// `pullStates()` (its slot mapping is proven and the save/state id
     /// namespaces are ambiguous over negotiate), so only battery/save downloads
     /// are handled here.
     private func applyDownload(_ op: SyncOperationSchema) async {
-        guard let saveId = op.saveId, let fileName = op.fileName else { return }
-        guard !fileName.hasSuffix(".state") else { return }
+        guard let saveId = op.saveId, isBatteryOperation(op) else { return }
         // Null-slot battery saves are never paired server-side (per the sync
         // API), so a `download` can point at the server's own battery. Only
         // overwrite a local battery when the server copy is provably newer,

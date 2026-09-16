@@ -224,6 +224,24 @@ struct SyncPreviewUseCaseTests {
         #expect(preview.downloads.map(\.romId) == [2])
     }
 
+    /// The server plans per (rom_id, slot), so a ROM with rows under other
+    /// slots (another client's autosave or default save) still comes back
+    /// with an operation for each of them, even though this device only ever
+    /// reports its battery slot. Those are not battery saves.
+    @Test func dropsOperationsForAForeignSlot() async throws {
+        let client = FakeNegotiateClient()
+        client.operations = [
+            operation(.download, romId: 1, slot: "autosave"),
+            operation(.download, romId: 2, slot: "default"),
+            operation(.download, romId: 3, slot: SaveSlot.battery),
+            operation(.download, romId: 4, slot: nil)
+        ]
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+
+        #expect(preview.downloads.map(\.romId).sorted() == [3, 4])
+    }
+
     /// A newer server can plan something this build has no name for. Showing it
     /// as one of the four known directions would misdescribe a change the user
     /// is being asked to approve.

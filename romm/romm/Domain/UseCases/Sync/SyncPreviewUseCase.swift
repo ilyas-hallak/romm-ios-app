@@ -98,6 +98,14 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
         guard let romId = op.romId else { return nil }
         if op.fileName?.hasSuffix(".state") == true { return nil }
 
+        // The server plans per (rom_id, slot). This device only ever reports
+        // its battery slot, but a ROM with rows under other slots (e.g.
+        // "autosave", "default" from another client) still gets an operation
+        // back for each of them. Those are not battery saves and must not be
+        // shown, let alone applied, here. `slot == nil` is kept: those are
+        // rows from before slots existed.
+        if let slot = op.slot, slot != SaveSlot.battery { return nil }
+
         let direction: SyncPreviewOperation.Direction
         switch op.action {
         case .upload: direction = .upload
