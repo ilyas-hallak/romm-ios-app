@@ -288,8 +288,8 @@ class SetupRepository: PSetupRepository {
         // OAuth2 form parameters
         let formParameters = [
             "grant_type=password",
-            "username=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")",
-            "password=\(password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")",
+            "username=\(username.addingURLFormValueEncoding())",
+            "password=\(password.addingURLFormValueEncoding())",
             "scope="
         ]
         let formData = formParameters.joined(separator: "&")
