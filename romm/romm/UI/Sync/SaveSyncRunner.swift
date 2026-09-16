@@ -21,14 +21,26 @@ struct SaveSyncReport: Equatable {
     var errors: [String] = []
 }
 
+@MainActor
+protocol PSaveSyncRunner {
+    /// Runs `preview` (battery uploads/downloads for this device, conflicts
+    /// left untouched) and, separately, uploads whatever the external apps'
+    /// scans matched. One failure never stops the rest of the run.
+    func run(
+        preview: SyncPreview,
+        externalScans: [ExternalEmulatorID: ExternalSaveScan]
+    ) async -> SaveSyncReport
+}
+
 /// Executes an already-negotiated `SyncPreview`, plus the external emulator
 /// apps' matched saves the preview never covered.
 ///
-/// Lives beside `CloudSaveSyncService` rather than as a UseCase: it composes
-/// several of the Save/State UseCases, and a UseCase may not call another one.
-/// Composition belongs here, in a Session-layer service the ViewModel drives.
+/// Lives beside the automatic sync service rather than as a UseCase: it
+/// composes several of the Save/State UseCases, and a UseCase may not call
+/// another one. Composition belongs here, in a Session-layer service the
+/// ViewModel drives.
 @MainActor
-final class SaveSyncRunner {
+final class SaveSyncRunner: PSaveSyncRunner {
 
     private let logger = Logger.sync
 
@@ -73,9 +85,6 @@ final class SaveSyncRunner {
         self.externalSaveFolderStore = externalSaveFolderStore
     }
 
-    /// Runs `preview` (battery uploads/downloads for this device, conflicts
-    /// left untouched) and, separately, uploads whatever the external apps'
-    /// scans matched. One failure never stops the rest of the run.
     func run(
         preview: SyncPreview,
         externalScans: [ExternalEmulatorID: ExternalSaveScan]
@@ -203,7 +212,7 @@ final class SaveSyncRunner {
         // this never has to refetch the save just to compare it.
         if let serverContentHash = op.serverContentHash,
            let localData = try? saveStore.readBattery(romId: op.romId),
-           CloudSaveSyncService.contentHash(localData) == serverContentHash {
+           SaveContentHash.of(localData) == serverContentHash {
             return .skipped
         }
 
@@ -248,8 +257,8 @@ final class SaveSyncRunner {
     /// on their own: one ROM at a time, comparing what is on this device
     /// against what the server has, slot by slot. The slot assignment
     /// (including the synthetic slots for a server state that arrived with no
-    /// `slotN.state` name) mirrors `CloudSaveSyncService.pullStates` exactly,
-    /// so the same server state always lands in the same slot.
+    /// `slotN.state` name) goes through `StateSlots`, so the same server
+    /// state always lands in the same slot.
     private func runStatesSync(romId: Int) async -> [StepOutcome] {
         let localEntries = (try? saveStore.listStates(romId: romId)) ?? []
         let localBySlot = Dictionary(uniqueKeysWithValues: localEntries.map { ($0.slot, $0.modifiedAt) })
@@ -262,7 +271,14 @@ final class SaveSyncRunner {
             return [.failed("ROM \(romId): could not list server states (\(error.localizedDescription))")]
         }
 
-        let serverStateBySlot = Self.assignSlots(to: serverStates)
+        let (slotByStateId, _) = StateSlots.assign(serverStates.map {
+            StateSlots.Candidate(id: $0.id, fileName: $0.fileName, updatedAt: $0.updatedAt)
+        })
+        var serverStateBySlot: [Int: StateSchema] = [:]
+        for state in serverStates {
+            guard let slot = slotByStateId[state.id] else { continue }
+            serverStateBySlot[slot] = state
+        }
         let slots = Set(localBySlot.keys).union(serverStateBySlot.keys)
 
         var outcomes: [StepOutcome] = []
@@ -285,48 +301,12 @@ final class SaveSyncRunner {
         return outcomes
     }
 
-    /// Maps server states to slots exactly as `CloudSaveSyncService.pullStates`
-    /// does: a recognisable `slotN.state` name gives its real slot, anything
-    /// else gets the next free slot in a deterministic order so the same
-    /// server state keeps landing in the same slot across runs.
-    private static func assignSlots(to states: [StateSchema]) -> [Int: StateSchema] {
-        var realSlots = Set<Int>()
-        var unnamed: [StateSchema] = []
-        for s in states {
-            if let slot = CloudSaveSyncService.slotFromFileName(s.fileName) {
-                realSlots.insert(slot)
-            } else {
-                unnamed.append(s)
-            }
-        }
-
-        let ordered = unnamed.sorted {
-            $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt < $1.updatedAt
-        }
-        let maxSlot = 20
-        var syntheticSlotByStateId: [Int: Int] = [:]
-        var nextSlot = 0
-        for s in ordered {
-            while realSlots.contains(nextSlot) { nextSlot += 1 }
-            guard nextSlot <= maxSlot else { continue }
-            syntheticSlotByStateId[s.id] = nextSlot
-            realSlots.insert(nextSlot)
-        }
-
-        var bySlot: [Int: StateSchema] = [:]
-        for s in states {
-            guard let slot = CloudSaveSyncService.slotFromFileName(s.fileName) ?? syntheticSlotByStateId[s.id] else { continue }
-            bySlot[slot] = s
-        }
-        return bySlot
-    }
-
     private func uploadState(romId: Int, slot: Int, existingServerId: Int?) async -> StepOutcome {
         guard let data = try? saveStore.readState(romId: romId, slot: slot), !data.isEmpty else {
             return .failed("ROM \(romId) slot \(slot): no local state to upload")
         }
         let thumbnail = try? saveStore.readThumbnail(romId: romId, slot: slot)
-        let fileName = CloudSaveSyncService.stateFileName(slot: slot)
+        let fileName = StateSlots.fileName(slot: slot)
 
         do {
             if let existingServerId {

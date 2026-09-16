@@ -367,7 +367,7 @@ struct SaveSyncRunnerTests {
         try store.setBatteryModifiedAt(romId: 2, date: oldLocalTime)
         let fakes = Fakes()
         let newerServerTime = oldLocalTime.addingTimeInterval(3600)
-        let matchingHash = CloudSaveSyncService.contentHash(data)
+        let matchingHash = SaveContentHash.of(data)
 
         let preview = SyncPreview(
             deviceId: "d1", reportedSaveCount: 0,

@@ -105,7 +105,7 @@ final class SyncSaveViewModel {
             do {
                 let data = try await downloadStateUseCase.execute(id: state.id)
                 guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
-                let slot = slotFromFileName(state.fileName) ?? 0
+                let slot = StateSlots.slot(fromFileName: state.fileName) ?? 0
                 try saveStore.writeState(romId: rom.id, slot: slot, data: data)
                 localStates = (try? saveStore.listStates(romId: rom.id)) ?? []
                 recordManualSync()
@@ -139,7 +139,7 @@ final class SyncSaveViewModel {
     // MARK: - Upload
 
     func uploadLocalState(entry: SaveStateEntry) {
-        let existingId = serverStates.first { slotFromFileName($0.fileName) == entry.slot }?.id
+        let existingId = serverStates.first { StateSlots.slot(fromFileName: $0.fileName) == entry.slot }?.id
         let pending = PendingUpload.state(slot: entry.slot, existingId: existingId)
         existingId != nil ? (pendingUpload = pending) : executeUpload(pending, update: false)
     }
@@ -260,13 +260,6 @@ final class SyncSaveViewModel {
         }
     }
 
-    // MARK: - Helpers
-
-    func slotFromFileName(_ name: String) -> Int? {
-        let stem = (name as NSString).deletingPathExtension
-        guard stem.hasPrefix("slot") else { return nil }
-        return Int(stem.dropFirst("slot".count))
-    }
 }
 
 // MARK: - Export model

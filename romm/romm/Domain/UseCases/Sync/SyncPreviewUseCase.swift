@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 protocol PSyncPreviewUseCase {
@@ -86,7 +85,7 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
                 // Attribution only, and which engine wrote a save is not
                 // recorded per ROM, so an invented value is worse than none.
                 emulator: nil,
-                contentHash: Self.contentHash(data),
+                contentHash: SaveContentHash.of(data),
                 updatedAt: saveStore.batteryModifiedAt(romId: romId) ?? Date(timeIntervalSince1970: 0),
                 fileSizeBytes: data.count
             )
@@ -121,11 +120,5 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
             saveId: op.saveId,
             serverContentHash: op.serverContentHash
         )
-    }
-
-    /// Matches the hash the rest of the sync path sends, so the server compares
-    /// like with like.
-    private static func contentHash(_ data: Data) -> String {
-        Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
