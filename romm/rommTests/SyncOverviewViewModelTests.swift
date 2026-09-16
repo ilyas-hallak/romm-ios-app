@@ -297,6 +297,40 @@ struct SyncOverviewViewModelTests {
         #expect(summary.contains("1 failed"))
     }
 
+    // MARK: - External app rows
+
+    /// An emulator app's row has nothing else to go on: nothing is ever
+    /// written into its folder, so the folder itself looks the same before
+    /// and after a run.
+    @Test func lastSyncDetailSaysWhatARunDidWithEachExternalApp() async throws {
+        let runner = FakeSaveSyncRunner()
+        runner.reportToReturn = SaveSyncReport(uploaded: 1, failed: 1, externalApps: [
+            .retroarch: SaveSyncReport.ExternalAppOutcome(uploaded: 1),
+            .delta: SaveSyncReport.ExternalAppOutcome(),
+            .provenance: SaveSyncReport.ExternalAppOutcome(failed: 1)
+        ])
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
+        let vm = SyncOverviewViewModel(showing: .loaded(preview), factory: factory)
+
+        await vm.syncNow()
+
+        #expect(vm.lastSyncDetail(for: .retroarch) == "1 uploaded")
+        #expect(vm.lastSyncDetail(for: .delta) == "Up to date")
+        #expect(vm.lastSyncDetail(for: .provenance) == "1 failed")
+        #expect(vm.lastSyncFailed(for: .provenance))
+        #expect(vm.lastSyncFailed(for: .retroarch) == false)
+        // Never looked at by this run, so there is nothing to claim about it.
+        #expect(vm.lastSyncDetail(for: .manicEmu).isEmpty)
+    }
+
+    @Test func lastSyncDetailIsEmptyBeforeAnyRun() {
+        let vm = makeViewModel(showing: .loaded(SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])))
+
+        #expect(vm.lastSyncDetail(for: .retroarch).isEmpty)
+        #expect(vm.lastSyncFailed(for: .retroarch) == false)
+    }
+
     // MARK: - lastSyncErrors
 
     @Test func lastSyncErrorsIsEmptyWhenTheRunHadNoFailures() async throws {

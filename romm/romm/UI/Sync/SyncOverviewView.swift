@@ -102,7 +102,8 @@ struct SyncOverviewView: View {
         } footer: {
             Text("Read from the folder set up for each app in Settings › Emulator. "
                 + "Nothing is ever written to them; \"Sync Now\" below only uploads "
-                + "a matched save when it is newer than what the server already has.")
+                + "a matched save when it is newer than what the server already has. "
+                + "Each app says what the last run did with its saves.")
         }
     }
 
@@ -143,15 +144,19 @@ struct SyncOverviewView: View {
     private func externalAppRow(_ emulator: ExternalEmulatorID) -> some View {
         let title = emulator.emulator.displayName
         if let scan = viewModel.externalScans[emulator] {
+            // With saves to act on, what the last run did with them is the
+            // news and the folder's own inventory moves below the name. With
+            // none, that inventory is all there is to say.
+            let hasSaves = !scan.matched.isEmpty
             NavigationLink {
                 ExternalScanDetailView(scan: scan, romName: viewModel.displayName(forRom:))
             } label: {
                 sourceRow(
                     icon: "gamecontroller",
                     title: title,
-                    subtitle: nil,
-                    detail: scan.statusSummary,
-                    isWarning: scan.matched.isEmpty
+                    subtitle: hasSaves ? scan.statusSummary : nil,
+                    detail: hasSaves ? viewModel.lastSyncDetail(for: emulator) : scan.statusSummary,
+                    isWarning: !hasSaves || viewModel.lastSyncFailed(for: emulator)
                 )
             }
             .disabled(scan.isEmpty)

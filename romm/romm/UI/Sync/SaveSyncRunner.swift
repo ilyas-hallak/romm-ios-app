@@ -19,6 +19,16 @@ struct SaveSyncReport: Equatable {
     var skipped = 0
     var failed = 0
     var errors: [String] = []
+    /// What the run did with each external app's matched saves. Kept apart
+    /// from the totals because nothing is ever written back into those
+    /// folders, so their rows have no other way to say what happened.
+    var externalApps: [ExternalEmulatorID: ExternalAppOutcome] = [:]
+
+    /// One external app's share of a run.
+    struct ExternalAppOutcome: Equatable {
+        var uploaded = 0
+        var failed = 0
+    }
 }
 
 @MainActor
@@ -120,8 +130,17 @@ final class SaveSyncRunner: PSaveSyncRunner {
             }
         }
 
-        for outcome in await runExternalUploads(scans: externalScans, deviceId: preview.deviceId) {
-            apply(outcome, to: &report)
+        for (emulator, outcomes) in await runExternalUploads(scans: externalScans, deviceId: preview.deviceId) {
+            var perApp = SaveSyncReport.ExternalAppOutcome()
+            for outcome in outcomes {
+                apply(outcome, to: &report)
+                switch outcome {
+                case .uploaded: perApp.uploaded += 1
+                case .failed: perApp.failed += 1
+                case .downloaded, .skipped, .conflict: break
+                }
+            }
+            report.externalApps[emulator] = perApp
         }
 
         logger.info("Manual sync finished: uploaded=\(report.uploaded) "
@@ -379,14 +398,18 @@ final class SaveSyncRunner: PSaveSyncRunner {
     private func runExternalUploads(
         scans: [ExternalEmulatorID: ExternalSaveScan],
         deviceId: String
-    ) async -> [StepOutcome] {
-        var outcomes: [StepOutcome] = []
+    ) async -> [ExternalEmulatorID: [StepOutcome]] {
+        var outcomes: [ExternalEmulatorID: [StepOutcome]] = [:]
         // Several matched files (even across different external apps) can
         // point at the same ROM; fetch that ROM's server saves once per run
         // instead of once per file.
         var serverSavesByRomId: [Int: [SaveSchema]] = [:]
         for (emulator, scan) in scans {
             guard !scan.matched.isEmpty, let grant = externalSaveFolderStore.grantedFolder(for: emulator) else { continue }
+            // An entry even when nothing had to be uploaded, so the overview
+            // can tell "everything already up there" apart from an app this
+            // run never looked at.
+            var appOutcomes: [StepOutcome] = []
             for file in scan.matched {
                 let existing: [SaveSchema]
                 if let cached = serverSavesByRomId[file.romId] {
@@ -396,9 +419,10 @@ final class SaveSyncRunner: PSaveSyncRunner {
                     serverSavesByRomId[file.romId] = existing
                 }
                 if let outcome = await runExternalUpload(file: file, emulator: emulator, grant: grant, existing: existing, deviceId: deviceId) {
-                    outcomes.append(outcome)
+                    appOutcomes.append(outcome)
                 }
             }
+            outcomes[emulator] = appOutcomes
         }
         return outcomes
     }

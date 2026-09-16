@@ -108,6 +108,24 @@ final class SyncOverviewViewModel {
         return summary
     }
 
+    /// What the last run did with one app's saves, for its row. Empty until a
+    /// run actually had that app's files in hand: whether a file is newer than
+    /// the server's copy is only known once the run has listed them.
+    func lastSyncDetail(for emulator: ExternalEmulatorID) -> String {
+        guard let outcome = lastSyncReport?.externalApps[emulator] else { return "" }
+        if outcome.failed > 0 {
+            return String(localized: "\(outcome.failed) failed")
+        }
+        if outcome.uploaded > 0 {
+            return String(localized: "\(outcome.uploaded) uploaded")
+        }
+        return String(localized: "Up to date")
+    }
+
+    func lastSyncFailed(for emulator: ExternalEmulatorID) -> Bool {
+        (lastSyncReport?.externalApps[emulator]?.failed ?? 0) > 0
+    }
+
     /// The last run's failure messages, capped so one bad run cannot flood the
     /// screen. Empty when the last run had no failures, or there was no run yet.
     var lastSyncErrors: [String] {

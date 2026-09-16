@@ -862,6 +862,47 @@ struct SaveSyncRunnerTests {
         #expect(fakes.uploadSave.calls.first?.emulator == ExternalEmulatorID.retroarch.rawValue)
         #expect(fakes.uploadSave.calls.first?.deviceId == "device-3")
         #expect(fakes.uploadSave.calls.first?.autocleanup == true)
+        // The overview's row for this app reads its share of the run from here.
+        #expect(report.externalApps[.retroarch] == SaveSyncReport.ExternalAppOutcome(uploaded: 1))
+    }
+
+    /// An app whose files are all already on the server still gets an entry,
+    /// otherwise its row could not tell "nothing to do" apart from an app the
+    /// run never looked at.
+    @Test func anExternalAppWithNothingToUploadStillGetsAnEntry() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ExternalFolder-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        fakes.folderStore.grantsByEmulator[.retroarch] = folder
+
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listSaves.savesByRomId[40] = [FakeUploadSaveUseCase.makeSchema(id: 1, romId: 40, fileName: "a.srm", updatedAt: serverTime)]
+
+        let file = folder.appendingPathComponent("a.srm")
+        try Data([0x01]).write(to: file)
+
+        let scans: [ExternalEmulatorID: ExternalSaveScan] = [
+            .retroarch: ExternalSaveScan(
+                emulator: .retroarch,
+                matched: [ExternalSaveFile(
+                    candidate: ExternalSaveCandidate(
+                        url: file, fileName: "a.srm", sizeBytes: 1,
+                        modifiedAt: serverTime.addingTimeInterval(-3600)
+                    ),
+                    romId: 40
+                )],
+                unmatchedFileNames: [],
+                isStale: false
+            )
+        ]
+
+        let preview = SyncPreview(deviceId: "device-4", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+
+        #expect(fakes.uploadSave.calls.isEmpty)
+        #expect(report.externalApps[.retroarch] == SaveSyncReport.ExternalAppOutcome())
     }
 
     /// External saves were never part of the negotiated plan, so unlike a
