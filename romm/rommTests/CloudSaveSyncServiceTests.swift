@@ -59,10 +59,11 @@ private func makeNegotiateResponse(operations: [[String: Any]]) -> SyncNegotiate
 }
 
 private func negotiateOperationJSON(
-    action: SyncAction, romId: Int, fileName: String, saveId: Int? = nil
+    action: SyncAction, romId: Int, fileName: String, saveId: Int? = nil, slot: String? = nil
 ) -> [String: Any] {
     var json: [String: Any] = ["action": action.rawValue, "rom_id": romId, "file_name": fileName]
     if let saveId { json["save_id"] = saveId }
+    if let slot { json["slot"] = slot }
     return json
 }
 
@@ -368,5 +369,77 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.updateSave.calls.count == 1)
         #expect(fakes.updateSave.calls.first?.id == 77)
         #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    // MARK: - serverBatteryId learned deterministically among several rows
+
+    /// There is no unique constraint on (rom_id, slot) server-side, so
+    /// negotiate can return more than one non-state row for this ROM. The
+    /// row whose name matches this device's own battery file name must win,
+    /// no matter where it sits in the response, so the next push updates
+    /// that row instead of a stray one belonging to a different save.
+    ///
+    /// Without the deterministic pick this fails: the old "last one wins"
+    /// loop instead learns "other.sav" (id 200), the last matching entry in
+    /// the response, and `pushBatteryAsync` would update the wrong row.
+    @Test func serverBatteryIdPrefersTheRowMatchingThisDevicesFileNameOverTheLastOne() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 100),
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "other.sav", saveId: 200)
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(batteryFileName: "battery.sav"), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        await service.pushBatteryAsync(data: Data([0xBB]))
+        #expect(fakes.updateSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.first?.id == 100)
+    }
+
+    /// When none of the candidates' names match this device's own file name,
+    /// the pick still has to be deterministic: the first candidate, not
+    /// whichever the response happens to list last.
+    @Test func serverBatteryIdPicksTheFirstCandidateWhenNoneMatchesTheFileName() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "a.sav", saveId: 100),
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "b.sav", saveId: 200)
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(batteryFileName: "battery.sav"), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        await service.pushBatteryAsync(data: Data([0xBB]))
+        #expect(fakes.updateSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.first?.id == 100)
+    }
+
+    /// A row with a slot set to something other than the battery slot is not
+    /// a battery row at all and must not be learned as one, even though its
+    /// file name does not end in ".state". A `nil` slot (old server rows)
+    /// still counts, since the server sends `null` for pre-existing battery
+    /// saves.
+    @Test func serverBatteryIdIgnoresARowWithADifferentSlot() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "slotted.sav", saveId: 999, slot: "3")
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        await service.pushBatteryAsync(data: Data([0xBB]))
+        #expect(fakes.uploadSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.isEmpty)
     }
 }

@@ -152,9 +152,9 @@ struct SaveSyncRunnerTests {
         return LocalSaveStoreRepository(rootDirectory: tmp)
     }
 
-    private func uploadOp(romId: Int, serverUpdatedAt: Date? = nil) -> SyncPreviewOperation {
+    private func uploadOp(romId: Int, serverUpdatedAt: Date? = nil, serverFileName: String? = nil) -> SyncPreviewOperation {
         SyncPreviewOperation(
-            romId: romId, direction: .upload, serverFileName: nil,
+            romId: romId, direction: .upload, serverFileName: serverFileName,
             slot: nil, emulator: nil, reason: nil, serverUpdatedAt: serverUpdatedAt
         )
     }
@@ -275,6 +275,44 @@ struct SaveSyncRunnerTests {
         #expect(report.skippedConflicts == 1)
         #expect(report.failed == 0)
         #expect(report.uploaded == 0)
+    }
+
+    // MARK: - Battery upload uses the server's existing file name
+
+    /// There is no unique constraint on (rom_id, slot) server-side, so
+    /// uploading under a hardcoded name would create a second row for a ROM
+    /// the server already has one for. The upload must hit the existing row
+    /// by reusing its name.
+    @Test func uploadUsesTheServersExistingFileNameWhenKnown() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0xCA, 0xFE]))
+        let fakes = Fakes()
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 1,
+            operations: [uploadOp(romId: 1, serverFileName: "Zelda.srm")]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.uploaded == 1)
+        #expect(fakes.uploadSave.calls.first?.fileName == "Zelda.srm")
+    }
+
+    /// No server row exists yet for this ROM (the plan carries no server file
+    /// name), so there is nothing to match: fall back to the default name.
+    @Test func uploadFallsBackToDefaultFileNameWhenServerHasNoRowYet() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0xCA, 0xFE]))
+        let fakes = Fakes()
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 1,
+            operations: [uploadOp(romId: 1, serverFileName: nil)]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.uploaded == 1)
+        #expect(fakes.uploadSave.calls.first?.fileName == "battery.sav")
     }
 
     // MARK: - Battery download is resolved by save id

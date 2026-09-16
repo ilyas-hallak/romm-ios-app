@@ -160,6 +160,11 @@ final class SaveSyncRunner {
         }
 
         do {
+            // Upload under the server's own name for this row when there is
+            // one, so this hits the existing row instead of creating a second
+            // one for the same ROM (there is no unique constraint on
+            // (rom_id, slot) server-side). Only a ROM the server has no
+            // battery row for yet falls back to the default name.
             _ = try await uploadSaveUseCase.execute(
                 romId: op.romId,
                 emulator: nil,
@@ -167,7 +172,7 @@ final class SaveSyncRunner {
                 deviceId: deviceId,
                 sessionId: sessionId,
                 autocleanup: true,
-                fileName: "battery.sav",
+                fileName: op.serverFileName ?? "battery.sav",
                 fileData: data,
                 screenshotData: nil
             )

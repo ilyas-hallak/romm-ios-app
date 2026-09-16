@@ -128,10 +128,22 @@ final class CloudSaveSyncService {
             // Otherwise the next pushBattery() has no id to update and POSTs
             // a brand-new row instead of PUTting in place. State ops share
             // the same response and are excluded by their `.state` filename.
-            for op in response.operations where op.romId == config.romId {
-                if let fileName = op.fileName, !fileName.hasSuffix(".state"), let saveId = op.saveId {
-                    serverBatteryId = saveId
-                }
+            //
+            // There is no unique constraint on (rom_id, slot) server-side, so
+            // more than one candidate row can come back for this ROM. Picking
+            // deterministically (exact filename match, else the first
+            // candidate) mirrors pullBattery()'s own tie-break below, instead
+            // of letting whichever operation happens to sort last in the
+            // response silently win and get overwritten by the next push.
+            let batteryCandidates = response.operations.filter { op in
+                guard let fileName = op.fileName else { return false }
+                return op.romId == config.romId
+                    && op.saveId != nil
+                    && !fileName.hasSuffix(".state")
+                    && (op.slot == nil || op.slot == SaveSlot.battery)
+            }
+            if let match = batteryCandidates.first(where: { $0.fileName == config.batteryFileName }) ?? batteryCandidates.first {
+                serverBatteryId = match.saveId
             }
             for op in response.operations where op.action == .download && op.romId == config.romId {
                 await applyDownload(op)
