@@ -18,11 +18,8 @@ struct ProvenanceExternalEmulator: PExternalEmulator {
     /// Battery saves land under `Battery States/<ROM name>/<ROM name>.srm`, so
     /// the hint stops above the per-game directory, which is not one value. `sav`
     /// alongside `srm` because Provenance runs both libretro cores, which write
-    /// the libretro extension, and its own, which do not.
-    ///
-    /// Save states are left out: they sit in a sibling `Save States` folder as
-    /// `.svs` plus a JSON side-car, which is not a battery save and not
-    /// something `ExternalSaveLayout` describes.
+    /// the libretro extension, and its own, which do not. Save states (`.svs`
+    /// plus a JSON side-car in a sibling folder) are out of scope, as elsewhere.
     var saveLayout: ExternalSaveLayout? {
         ExternalSaveLayout(
             naming: .romBaseName,
@@ -35,7 +32,7 @@ struct ProvenanceExternalEmulator: PExternalEmulator {
     /// watcher picks it up. Nothing reports when that finished and the game is
     /// not started, which the setup assistant has to say out loud.
     var handoffExplanation: String {
-        String(localized: "The first time you play a game, pick \(displayName) from the share sheet that appears. \(displayName) imports it in the background without starting it, so open that one game from its library yourself. After that it opens there straight away.")
+        String(localized: "The first time you play a game, pick \(displayName) from the share sheet that appears. \(displayName) imports it in the background without starting it, so open it from your \(displayName) library yourself. After that it opens there straight away.")
     }
 
     /// Nightly and sideloaded builds append to the bundle id, so match the prefix.
