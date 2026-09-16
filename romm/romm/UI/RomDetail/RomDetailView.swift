@@ -80,6 +80,8 @@ struct RomDetailView: View {
             summary: romDetails.summary,
             platformId: romDetails.platformId,
             urlCover: romDetails.urlCover,
+            coverURLSmall: romDetails.coverURLSmall, // Keep the covers from the own server
+            coverURLLarge: romDetails.coverURLLarge,
             releaseYear: rom.releaseYear, // Keep original release year
             isFavourite: romDetails.isFavourite,
             hasRetroAchievements: romDetails.hasRetroAchievements,
@@ -104,7 +106,7 @@ struct RomDetailView: View {
                         defaultHeight: 400
                     ) {
                         ZStack(alignment: .top) {
-                            CachedKFImage(urlString: rom.urlCover) { image in
+                            CachedKFImage(urlString: rom.detailCoverURL, tier: .full) { image in
                                 image
                                     .resizable()
                                     .scaledToFill()
@@ -490,7 +492,7 @@ struct RomDetailView: View {
                         break
                     }
                     appData.launchDownloadFlight(
-                        coverURL: currentSelectedRom.urlCover,
+                        coverURL: currentSelectedRom.listCoverURL,
                         from: downloadButtonFrame,
                         // No public API exposes the tab-bar's minimized state, so
                         // derive it from the live scroll offset (see onScrollGeometryChange).
@@ -1555,6 +1557,9 @@ struct ParallaxHeader<Content: View, Space: Hashable>: View {
                     width: proxy.size.width,
                     height: proxy.size.height + heightModifier
                 )
+                // The frame only fixes the layout size, a cover wider than 2:3 would still
+                // paint past it and spill out sideways.
+                .clipped()
                 .offset(y: offset)
                 .onAppear {
                     // Extract dominant color from cover image
@@ -1644,7 +1649,7 @@ struct GameDataCard: View {
             // Screenshot/Preview Area
             ZStack {
                 if let screenshot = screenshot {
-                    CachedKFImage(urlString: screenshot.downloadPath) { image in
+                    CachedKFImage(urlString: screenshot.downloadPath, tier: .full) { image in
                         image
                             .resizable()
                             .scaledToFill()

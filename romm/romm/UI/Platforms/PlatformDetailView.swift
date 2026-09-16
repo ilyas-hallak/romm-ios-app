@@ -315,7 +315,7 @@ struct PlatformHeaderView: View {
     var body: some View {
         HStack(spacing: 12) {
 
-            Image(platform.slug)
+            Image(PlatformIcon.assetName(for: platform.slug))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -373,7 +373,7 @@ struct SmallRomCardView: View {
     var body: some View {
         HStack(spacing: 12) {
             // ROM Cover Image
-            CachedKFImage(urlString: rom.urlCover) { image in
+            CachedKFImage(urlString: rom.listCoverURL) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)

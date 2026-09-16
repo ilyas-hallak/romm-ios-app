@@ -195,7 +195,7 @@ private struct HomePlatformCard: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(platform.slug)
+            Image(PlatformIcon.assetName(for: platform.slug))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 100, height: 100)

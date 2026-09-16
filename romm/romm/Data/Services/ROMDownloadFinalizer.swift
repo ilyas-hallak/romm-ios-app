@@ -225,7 +225,7 @@ class ROMDownloadFinalizer: PROMDownloadFinalizer {
             totalSizeBytes: validatedFiles.reduce(0) { $0 + $1.fileSizeBytes },
             localDirectory: destination.relativePath,
             files: validatedFiles,
-            urlCover: rom.urlCover
+            urlCover: rom.listCoverURL
         )
 
         do {

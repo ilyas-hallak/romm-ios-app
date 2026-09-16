@@ -8,7 +8,10 @@
 import Foundation
 
 struct RomMapper {
-    static func mapFromAPI(_ apiRom: SimpleRomSchema) -> Rom {
+    static func mapFromAPI(
+        _ apiRom: SimpleRomSchema,
+        resolver: CoverURLResolver = CoverURLResolver(serverURL: nil)
+    ) -> Rom {
         // Extract release year from metadata if available
         let releaseYear: Int? = {
             var timestamp: Int? =
@@ -58,6 +61,8 @@ struct RomMapper {
             summary: apiRom.summary,
             platformId: apiRom.platformId,
             urlCover: apiRom.urlCover,
+            coverURLSmall: resolver.absoluteURLString(for: apiRom.pathCoverSmall),
+            coverURLLarge: resolver.absoluteURLString(for: apiRom.pathCoverLarge),
             releaseYear: releaseYear,
             isFavourite: false, // Resolved separately via the Favourites collection
             hasRetroAchievements: apiRom.raId != nil,
@@ -77,7 +82,10 @@ struct RomMapper {
         )
     }
     
-    static func mapDetailsFromAPI(_ apiRom: DetailedRomSchema) -> RomDetails {
+    static func mapDetailsFromAPI(
+        _ apiRom: DetailedRomSchema,
+        resolver: CoverURLResolver = CoverURLResolver(serverURL: nil)
+    ) -> RomDetails {
         // Aggregate release date from all available sources
         let releaseDate: Date? = {
             // Priority: metadatum -> igdbMetadata -> ssMetadata
@@ -150,6 +158,8 @@ struct RomMapper {
             fsName: apiRom.fsName,
             summary: apiRom.summary,
             urlCover: apiRom.urlCover,
+            coverURLSmall: resolver.absoluteURLString(for: apiRom.pathCoverSmall),
+            coverURLLarge: resolver.absoluteURLString(for: apiRom.pathCoverLarge),
             platformId: apiRom.platformId,
             isFavourite: false, // Will be loaded separately via user properties
             hasRetroAchievements: apiRom.raId != nil,
@@ -248,7 +258,7 @@ struct RomMapper {
 }
 
 extension Array where Element == SimpleRomSchema {
-    func mapToDomain() -> [Rom] {
-        return self.map { RomMapper.mapFromAPI($0) }
+    func mapToDomain(resolver: CoverURLResolver = CoverURLResolver(serverURL: nil)) -> [Rom] {
+        return self.map { RomMapper.mapFromAPI($0, resolver: resolver) }
     }
 }

@@ -164,7 +164,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     // MARK: - Repositories (Singletons)
     
     lazy var authRepository: PAuthRepository = AuthRepository(apiClient: apiClient)
-    lazy var romsRepository: PRomsRepository = RomsRepository(apiClient: apiClient)
+    lazy var romsRepository: PRomsRepository = RomsRepository(apiClient: apiClient, tokenProvider: tokenProvider)
     lazy var platformsRepository: PPlatformsRepository = PlatformsRepository(apiClient: apiClient)
     lazy var collectionsRepository: PCollectionsRepository = CollectionsRepository(apiClient: apiClient)
     lazy var setupRepository: PSetupRepository = SetupRepository()
