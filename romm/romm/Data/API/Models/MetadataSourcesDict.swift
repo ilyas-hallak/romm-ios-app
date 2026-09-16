@@ -19,6 +19,13 @@ public struct MetadataSourcesDict: Codable, JSONEncodable, Hashable {
     public var PLAYMATCH_API_ENABLED: Bool
     public var HASHEOUS_API_ENABLED: Bool
     public var TGDB_API_ENABLED: Bool
+    public var FLASHPOINT_API_ENABLED: Bool
+    public var HLTB_API_ENABLED: Bool
+    public var LIBRETRO_API_ENABLED: Bool
+    public var DEMOZOO_API_ENABLED: Bool
+    public var POUET_API_ENABLED: Bool
+    public var CSDB_API_ENABLED: Bool
+    public var STEAM_API_ENABLED: Bool
 
     public init(
         ANY_SOURCE_ENABLED: Bool = false,
@@ -30,7 +37,14 @@ public struct MetadataSourcesDict: Codable, JSONEncodable, Hashable {
         LAUNCHBOX_API_ENABLED: Bool = false,
         PLAYMATCH_API_ENABLED: Bool = false,
         HASHEOUS_API_ENABLED: Bool = false,
-        TGDB_API_ENABLED: Bool = false
+        TGDB_API_ENABLED: Bool = false,
+        FLASHPOINT_API_ENABLED: Bool = false,
+        HLTB_API_ENABLED: Bool = false,
+        LIBRETRO_API_ENABLED: Bool = false,
+        DEMOZOO_API_ENABLED: Bool = false,
+        POUET_API_ENABLED: Bool = false,
+        CSDB_API_ENABLED: Bool = false,
+        STEAM_API_ENABLED: Bool = false
     ) {
         self.ANY_SOURCE_ENABLED = ANY_SOURCE_ENABLED
         self.IGDB_API_ENABLED = IGDB_API_ENABLED
@@ -42,6 +56,13 @@ public struct MetadataSourcesDict: Codable, JSONEncodable, Hashable {
         self.PLAYMATCH_API_ENABLED = PLAYMATCH_API_ENABLED
         self.HASHEOUS_API_ENABLED = HASHEOUS_API_ENABLED
         self.TGDB_API_ENABLED = TGDB_API_ENABLED
+        self.FLASHPOINT_API_ENABLED = FLASHPOINT_API_ENABLED
+        self.HLTB_API_ENABLED = HLTB_API_ENABLED
+        self.LIBRETRO_API_ENABLED = LIBRETRO_API_ENABLED
+        self.DEMOZOO_API_ENABLED = DEMOZOO_API_ENABLED
+        self.POUET_API_ENABLED = POUET_API_ENABLED
+        self.CSDB_API_ENABLED = CSDB_API_ENABLED
+        self.STEAM_API_ENABLED = STEAM_API_ENABLED
     }
 
     public init(from decoder: Decoder) throws {
@@ -56,6 +77,13 @@ public struct MetadataSourcesDict: Codable, JSONEncodable, Hashable {
         PLAYMATCH_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .PLAYMATCH_API_ENABLED) ?? false
         HASHEOUS_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .HASHEOUS_API_ENABLED) ?? false
         TGDB_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .TGDB_API_ENABLED) ?? false
+        FLASHPOINT_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .FLASHPOINT_API_ENABLED) ?? false
+        HLTB_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .HLTB_API_ENABLED) ?? false
+        LIBRETRO_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .LIBRETRO_API_ENABLED) ?? false
+        DEMOZOO_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .DEMOZOO_API_ENABLED) ?? false
+        POUET_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .POUET_API_ENABLED) ?? false
+        CSDB_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .CSDB_API_ENABLED) ?? false
+        STEAM_API_ENABLED = try container.decodeIfPresent(Bool.self, forKey: .STEAM_API_ENABLED) ?? false
     }
 
     public enum CodingKeys: String, CodingKey, CaseIterable {
@@ -69,6 +97,13 @@ public struct MetadataSourcesDict: Codable, JSONEncodable, Hashable {
         case PLAYMATCH_API_ENABLED
         case HASHEOUS_API_ENABLED
         case TGDB_API_ENABLED
+        case FLASHPOINT_API_ENABLED
+        case HLTB_API_ENABLED
+        case LIBRETRO_API_ENABLED
+        case DEMOZOO_API_ENABLED
+        case POUET_API_ENABLED
+        case CSDB_API_ENABLED
+        case STEAM_API_ENABLED
     }
 
     // Encodable protocol methods
@@ -85,6 +120,13 @@ public struct MetadataSourcesDict: Codable, JSONEncodable, Hashable {
         try container.encode(PLAYMATCH_API_ENABLED, forKey: .PLAYMATCH_API_ENABLED)
         try container.encode(HASHEOUS_API_ENABLED, forKey: .HASHEOUS_API_ENABLED)
         try container.encode(TGDB_API_ENABLED, forKey: .TGDB_API_ENABLED)
+        try container.encode(FLASHPOINT_API_ENABLED, forKey: .FLASHPOINT_API_ENABLED)
+        try container.encode(HLTB_API_ENABLED, forKey: .HLTB_API_ENABLED)
+        try container.encode(LIBRETRO_API_ENABLED, forKey: .LIBRETRO_API_ENABLED)
+        try container.encode(DEMOZOO_API_ENABLED, forKey: .DEMOZOO_API_ENABLED)
+        try container.encode(POUET_API_ENABLED, forKey: .POUET_API_ENABLED)
+        try container.encode(CSDB_API_ENABLED, forKey: .CSDB_API_ENABLED)
+        try container.encode(STEAM_API_ENABLED, forKey: .STEAM_API_ENABLED)
     }
 }
 

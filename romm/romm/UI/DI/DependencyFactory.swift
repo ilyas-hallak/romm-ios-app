@@ -20,6 +20,9 @@ protocol PDependencyFactory {
     var localROMRepository: PLocalROMRepository { get }
     var statsRepository: PStatsRepository { get }
     var heartbeatRepository: PHeartbeatRepository { get }
+    var tasksRepository: PTasksRepository { get }
+    var scanRepository: PScanRepository { get }
+    var scanCredentialsPrompt: ScanCredentialsPromptPresenter { get }
 
     // Services
     var sftpKeychainService: PSFTPKeychainService { get }
@@ -46,6 +49,9 @@ protocol PDependencyFactory {
     func makeGetPlatformsUseCase() -> GetPlatformsUseCase
     func makeAddPlatformUseCase() -> AddPlatformUseCase
     func makeGetStatsUseCase() -> GetStatsUseCase
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase
+    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase
     func makeCheckServerVersionUseCase() -> CheckServerVersionUseCase
     func makeClearServerVersionUseCase() -> ClearServerVersionUseCase
@@ -173,6 +179,12 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var localROMRepository: PLocalROMRepository = LocalROMRepository()
     lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
+    lazy var tasksRepository: PTasksRepository = TasksRepository(apiClient: apiClient)
+    lazy var scanRepository: PScanRepository = ScanRepository(
+        apiClient: apiClient,
+        tokenProvider: tokenProvider,
+        sessionProvider: scanSessionProvider
+    )
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
     
     // MARK: - Services (Singletons)
@@ -191,6 +203,12 @@ class DefaultDependencyFactory: PDependencyFactory {
     }()
     lazy var apiClient: PRommAPIClient = RommAPIClient.shared
     lazy var tokenProvider: PTokenProvider = TokenProvider()
+    lazy var scanCredentialsPrompt = ScanCredentialsPromptPresenter()
+    lazy var scanSessionProvider: PScanSessionProvider = ScanSessionProvider(
+        apiClient: apiClient,
+        tokenProvider: tokenProvider,
+        credentialsPrompt: scanCredentialsPrompt
+    )
 
     private init() {}
     
@@ -260,6 +278,18 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeGetStatsUseCase() -> GetStatsUseCase {
         GetStatsUseCase(statsRepository: statsRepository)
+    }
+
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase {
+        GetLatestLibraryScanUseCase(tasksRepository: tasksRepository)
+    }
+
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase {
+        StartLibraryScanUseCase(scanRepository: scanRepository)
+    }
+
+    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase {
+        StopLibraryScanUseCase(scanRepository: scanRepository)
     }
 
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase {
