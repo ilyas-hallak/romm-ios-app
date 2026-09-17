@@ -51,6 +51,44 @@ final class RommGameViewController: GameViewController {
         set { screenPanRecognizer.isEnabled = newValue }
     }
 
+    /// Whether the phone's own game picture should be invisible right now (Phone
+    /// as Controller: the TV already shows the game, so the phone only needs its
+    /// touch controls). The core keeps rendering into these views regardless,
+    /// only their on-screen presentation is suppressed.
+    var isPhoneVideoHidden = false {
+        didSet { applyPhoneVideoHiddenState() }
+    }
+
+    /// Re-applies `isPhoneVideoHidden` to the current `gameViews`. DeltaCore's
+    /// `updateGameViews()` rebuilds that array on every skin or trait change and
+    /// always starts a rebuilt view unhidden, so this has to run again after
+    /// every rebuild, not just when the flag itself changes.
+    ///
+    /// A touch screen stays visible throughout: on the DS the lower screen is
+    /// what the player taps on, hiding it would mean tapping blind.
+    func applyPhoneVideoHiddenState() {
+        for (gameView, isTouchScreen) in zip(gameViews, touchScreenFlags) {
+            gameView.isHidden = isPhoneVideoHidden && !isTouchScreen
+        }
+    }
+
+    /// One flag per entry in `gameViews`, in the same order: DeltaCore builds
+    /// the views from the skin's screens in exactly that order.
+    private var touchScreenFlags: [Bool] {
+        guard let traits = controllerView?.controllerSkinTraits,
+              let screens = controllerView?.controllerSkin?.screens(for: traits)
+        else { return [Bool](repeating: false, count: gameViews.count) }
+
+        guard screens.count == gameViews.count else {
+            // DeltaCore collapses the screens into one in a few cases the raw
+            // skin does not report, so the order no longer maps. Rather than
+            // guess, keep every view of a system that has a touch screen at all.
+            let hasTouchScreen = screens.contains(where: \.isTouchScreen)
+            return [Bool](repeating: hasTouchScreen, count: gameViews.count)
+        }
+        return screens.map(\.isTouchScreen)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.addGestureRecognizer(screenPanRecognizer)
@@ -213,6 +251,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     func gameViewController(_ gameViewController: GameViewController, handleMenuInputFrom gameController: GameController) {
         onMenuRequested?()
+    }
+
+    /// DeltaCore calls this after every gameViews rebuild, so re-apply the hidden state.
+    func gameViewController(_ gameViewController: GameViewController, didUpdateGameViews gameViews: [GameView]) {
+        (viewController as? RommGameViewController)?.applyPhoneVideoHiddenState()
     }
 
     private var emulatorCore: EmulatorCore? {
@@ -576,12 +619,19 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         // Drag-to-move is only available when the touch skin is out of the way.
         (viewController as? RommGameViewController)?.isScreenDragEnabled = hide
         onControlsHiddenChanged?(hide)
+        updatePhoneVideoVisibility()
     }
 
     /// Hide the on-screen buttons when a physical controller is connected — a
     /// standalone menu button takes over and the game becomes draggable.
     private var shouldHideOnScreenControls: Bool {
         EmulatorControllerState.isConnected
+    }
+
+    /// Recomputes whether the phone's picture should be hidden, so the in-game toggle applies live.
+    func updatePhoneVideoVisibility() {
+        let hidden = ExternalDisplayManager.shared.isPhoneVideoHidden(areTouchControlsHidden: shouldHideOnScreenControls)
+        (viewController as? RommGameViewController)?.isPhoneVideoHidden = hidden
     }
 
     // MARK: - Save / Load

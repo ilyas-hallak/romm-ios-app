@@ -35,4 +35,19 @@ enum ExternalDisplayPolicy {
     ) -> Bool {
         isAutoDimPhoneEnabled && isRenderingExternally && areTouchControlsHidden && !isMenuOpen
     }
+
+    /// Whether the phone should hide its own game picture and show just the
+    /// touch controls.
+    ///
+    /// Only makes sense once the TV already carries the game and the touch
+    /// controls are actually on screen. When they are hidden instead, a
+    /// physical controller is in use and `shouldAutoDimPhone` already owns
+    /// blanking the phone, so there is nothing left here for this to hide.
+    static func shouldHidePhoneVideo(
+        isRenderingExternally: Bool,
+        isPhoneControllerOnlyEnabled: Bool,
+        areTouchControlsHidden: Bool
+    ) -> Bool {
+        isRenderingExternally && isPhoneControllerOnlyEnabled && !areTouchControlsHidden
+    }
 }

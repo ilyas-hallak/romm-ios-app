@@ -3,6 +3,7 @@ import Foundation
 final class UserDefaultsExternalDisplayPreferenceStore: PExternalDisplayPreference {
     private let playOnTVKey = "externalDisplay.enabled"
     private let autoDimKey = "externalDisplay.autoDimPhone"
+    private let phoneControllerOnlyKey = "externalDisplay.phoneControllerOnly"
     private let blankedBrightnessKey = "phoneScreenBlanker.savedBrightness"
     private let userDefaults: UserDefaults
 
@@ -18,6 +19,13 @@ final class UserDefaultsExternalDisplayPreferenceStore: PExternalDisplayPreferen
     var isAutoDimPhoneEnabled: Bool {
         get { boolOrTrue(autoDimKey) }
         set { userDefaults.set(newValue, forKey: autoDimKey) }
+    }
+
+    /// Off by default, unlike the two switches above: it takes the picture off a
+    /// phone that used to show one, so it has to be the player's choice.
+    var isPhoneControllerOnlyEnabled: Bool {
+        get { userDefaults.bool(forKey: phoneControllerOnlyKey) }
+        set { userDefaults.set(newValue, forKey: phoneControllerOnlyKey) }
     }
 
     var blankedPhoneBrightness: Double? {
