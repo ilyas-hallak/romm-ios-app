@@ -54,7 +54,6 @@
 		A1B2C3D4E5F600000000CE31 /* ppsspp_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1B2C3D4E5F600000000CE41 /* PPSSPPAssets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */; };
 		B15E618AAC568C724782CEBF /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5DCB1107000000000000D102 /* MarkdownUI */; };
-		B2C50E58DD04BAFE1871D2DB /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 06AE83611D07CF381A3FF1E6 /* Foundation.framework */; };
 		C76A342286C84AAC02000105 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 5D2C4E1E2F7B9A43009CF871 /* SWCompression */; };
 		CC634C86D707B1E1E0BD66A1 /* mft.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D2B9D032E5BA8C200F5233E /* mft.xcframework */; };
 		CE9DA7E6DD79A81FA79C5B94 /* flycast_libretro_ios.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600000000CE22 /* flycast_libretro_ios.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -206,7 +205,6 @@
 /* Begin PBXFileReference section */
 		06AE83611D07CF381A3FF1E6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		5D2B9D032E5BA8C200F5233E /* mft.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:8J69P655GN:Ilyas Hallak"; lastKnownFileType = wrapper.xcframework; name = mft.xcframework; path = ../mft.xcframework; sourceTree = SOURCE_ROOT; };
-		5DC0AF16000000000000C001 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
 		5D93A11E2FBF55AE00086CE8 /* GPGXDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GPGXDeltaCore.xcodeproj; path = ../Vendor/GPGXDeltaCore/GPGXDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5D93A1342FBF67DB00086CE8 /* NESDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = NESDeltaCore.xcodeproj; path = ../Vendor/NESDeltaCore/NESDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5D93A1412FBF67E300086CE8 /* N64DeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = N64DeltaCore.xcodeproj; path = ../Vendor/N64DeltaCore/N64DeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
@@ -218,6 +216,7 @@
 		5DA7E43D2E43D872003680D9 /* rommUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rommUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DAA110000000001ABCD0001 /* SNESDeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = SNESDeltaCore.xcodeproj; path = ../Vendor/SNESDeltaCore/SNESDeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5DBEEF00000000000000F001 /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = System/Library/Frameworks/OpenGLES.framework; sourceTree = SDKROOT; };
+		5DC0AF16000000000000C001 /* Config/Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
 		5DCA1106000000000000C101 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = CHANGELOG.md; path = ../CHANGELOG.md; sourceTree = SOURCE_ROOT; };
 		5DF893EB2FB7D2200083B111 /* GBADeltaCore.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GBADeltaCore.xcodeproj; path = ../Vendor/GBADeltaCore/GBADeltaCore.xcodeproj; sourceTree = SOURCE_ROOT; };
 		5DF893F82FB7D26D0083B111 /* DeltaCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = DeltaCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -228,7 +227,7 @@
 		A1B2C3D4E5F600000000CE22 /* flycast_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = flycast_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE32 /* ppsspp_libretro_ios.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = ppsspp_libretro_ios.framework; sourceTree = "<group>"; };
 		A1B2C3D4E5F600000000CE42 /* PPSSPPAssets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = PPSSPPAssets; sourceTree = "<group>"; };
-		DFF3D5729B89724B00B1BE2E /* romm-AppStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "romm-AppStore.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DFF3D5729B89724B00B1BE2E /* romm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = romm.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -260,15 +259,11 @@
 		};
 		5DA7E4362E43D872003680D9 /* rommTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = rommTests;
 			sourceTree = "<group>";
 		};
 		5DA7E4402E43D872003680D9 /* rommUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = rommUITests;
 			sourceTree = "<group>";
 		};
@@ -309,14 +304,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		8710F702895FEFB7BA2E10E3 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				B2C50E58DD04BAFE1871D2DB /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -415,7 +402,7 @@
 		5DA7E4172E43D870003680D9 = {
 			isa = PBXGroup;
 			children = (
-				5DC0AF16000000000000C001 /* Shared.xcconfig */,
+				5DC0AF16000000000000C001 /* Config/Shared.xcconfig */,
 				5DCA1106000000000000C101 /* CHANGELOG.md */,
 				5DFA9001000000000000F101 /* FAQ.md */,
 				5D93A8952FC2419700086CE8 /* Libretro */,
@@ -440,7 +427,7 @@
 				5DA7E4202E43D870003680D9 /* romm.app */,
 				5DA7E4332E43D872003680D9 /* rommTests.xctest */,
 				5DA7E43D2E43D872003680D9 /* rommUITests.xctest */,
-				DFF3D5729B89724B00B1BE2E /* romm-AppStore.app */,
+				DFF3D5729B89724B00B1BE2E /* romm.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -487,7 +474,7 @@
 				5D2C4E1E2F7B9A43009CF871 /* SWCompression */,
 			);
 			productName = "romm-AppStore";
-			productReference = DFF3D5729B89724B00B1BE2E /* romm-AppStore.app */;
+			productReference = DFF3D5729B89724B00B1BE2E /* romm.app */;
 			productType = "com.apple.product-type.application";
 		};
 		5DA7E41F2E43D870003680D9 /* romm */ = {
@@ -741,13 +728,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		E3FB0A2D3C744B10AF65D3B2 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -773,13 +753,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		8E084055CB36C06A2CE3DB01 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		B1911746251615C1CFF895DC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -814,7 +787,7 @@
 /* Begin XCBuildConfiguration section */
 		5DA7E4452E43D872003680D9 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 5DC0AF16000000000000C001 /* Shared.xcconfig */;
+			baseConfigurationReference = 5DC0AF16000000000000C001 /* Config/Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -876,7 +849,7 @@
 		};
 		5DA7E4462E43D872003680D9 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 5DC0AF16000000000000C001 /* Shared.xcconfig */;
+			baseConfigurationReference = 5DC0AF16000000000000C001 /* Config/Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
