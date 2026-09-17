@@ -63,10 +63,30 @@ final class RommGameViewController: GameViewController {
     /// `updateGameViews()` rebuilds that array on every skin or trait change and
     /// always starts a rebuilt view unhidden, so this has to run again after
     /// every rebuild, not just when the flag itself changes.
+    ///
+    /// A touch screen stays visible throughout: on the DS the lower screen is
+    /// what the player taps on, hiding it would mean tapping blind.
     func applyPhoneVideoHiddenState() {
-        for gameView in gameViews {
-            gameView.isHidden = isPhoneVideoHidden
+        for (gameView, isTouchScreen) in zip(gameViews, touchScreenFlags) {
+            gameView.isHidden = isPhoneVideoHidden && !isTouchScreen
         }
+    }
+
+    /// One flag per entry in `gameViews`, in the same order: DeltaCore builds
+    /// the views from the skin's screens in exactly that order.
+    private var touchScreenFlags: [Bool] {
+        guard let traits = controllerView?.controllerSkinTraits,
+              let screens = controllerView?.controllerSkin?.screens(for: traits)
+        else { return [Bool](repeating: false, count: gameViews.count) }
+
+        guard screens.count == gameViews.count else {
+            // DeltaCore collapses the screens into one in a few cases the raw
+            // skin does not report, so the order no longer maps. Rather than
+            // guess, keep every view of a system that has a touch screen at all.
+            let hasTouchScreen = screens.contains(where: \.isTouchScreen)
+            return [Bool](repeating: hasTouchScreen, count: gameViews.count)
+        }
+        return screens.map(\.isTouchScreen)
     }
 
     override func viewDidLoad() {
@@ -233,11 +253,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         onMenuRequested?()
     }
 
-    /// DeltaCore calls this at the end of every `updateGameViews()` rebuild
-    /// (rotation, skin change, keyboard show/hide, …), which is the only place
-    /// guaranteed to run whenever the `gameViews` array is replaced. Re-applying
-    /// the hidden state here is what keeps Phone as Controller from reverting
-    /// itself after such a rebuild.
+    /// DeltaCore calls this after every gameViews rebuild, so re-apply the hidden state.
     func gameViewController(_ gameViewController: GameViewController, didUpdateGameViews gameViews: [GameView]) {
         (viewController as? RommGameViewController)?.applyPhoneVideoHiddenState()
     }
@@ -612,17 +628,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         EmulatorControllerState.isConnected
     }
 
-    /// Recomputes whether the phone's own game picture should be hidden, per
-    /// `ExternalDisplayPolicy`. Called whenever any input to that decision
-    /// changes: touch-control visibility here, and the external display's
-    /// connection or Phone-as-Controller preference from the SwiftUI layer, so
-    /// flipping the toggle in the in-game menu takes effect without a relaunch.
+    /// Recomputes whether the phone's picture should be hidden, so the in-game toggle applies live.
     func updatePhoneVideoVisibility() {
-        let hidden = ExternalDisplayPolicy.shouldHidePhoneVideo(
-            isRenderingExternally: ExternalDisplayManager.shared.isActive,
-            isPhoneControllerOnlyEnabled: ExternalDisplayManager.shared.isPhoneControllerOnlyEnabled,
-            areTouchControlsHidden: shouldHideOnScreenControls
-        )
+        let hidden = ExternalDisplayManager.shared.isPhoneVideoHidden(areTouchControlsHidden: shouldHideOnScreenControls)
         (viewController as? RommGameViewController)?.isPhoneVideoHidden = hidden
     }
 

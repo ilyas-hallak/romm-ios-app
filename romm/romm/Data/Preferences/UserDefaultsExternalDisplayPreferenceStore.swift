@@ -21,8 +21,10 @@ final class UserDefaultsExternalDisplayPreferenceStore: PExternalDisplayPreferen
         set { userDefaults.set(newValue, forKey: autoDimKey) }
     }
 
+    /// Off by default, unlike the two switches above: it takes the picture off a
+    /// phone that used to show one, so it has to be the player's choice.
     var isPhoneControllerOnlyEnabled: Bool {
-        get { boolOrTrue(phoneControllerOnlyKey) }
+        get { userDefaults.bool(forKey: phoneControllerOnlyKey) }
         set { userDefaults.set(newValue, forKey: phoneControllerOnlyKey) }
     }
 

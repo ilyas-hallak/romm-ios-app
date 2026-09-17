@@ -96,18 +96,13 @@ private struct PlayOnTVModifier: ViewModifier {
             .transition(.opacity)
     }
 
-    /// The engines hide their own picture themselves, but they leave the space it
-    /// used behind. Without a word in it that gap reads as a broken screen.
     private var isPhoneVideoHidden: Bool {
-        ExternalDisplayPolicy.shouldHidePhoneVideo(
-            isRenderingExternally: display.isActive,
-            isPhoneControllerOnlyEnabled: display.isPhoneControllerOnlyEnabled,
-            areTouchControlsHidden: areTouchControlsHidden
-        )
+        display.isPhoneVideoHidden(areTouchControlsHidden: areTouchControlsHidden)
     }
 
-    /// Sits in the middle, where neither layout puts a control, and never takes
-    /// a touch away from the pad.
+    /// Shown when the engines hide their own picture: otherwise the gap reads as
+    /// a broken screen. Sits in the middle, where neither layout puts a control,
+    /// and never takes a touch away from the pad.
     private var playingOnTVBadge: some View {
         VStack(spacing: 10) {
             Image(systemName: "tv")

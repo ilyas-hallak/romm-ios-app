@@ -154,6 +154,16 @@ final class ExternalDisplayManager: ObservableObject {
         isPhoneControllerOnlyEnabled = enabled
     }
 
+    /// The policy's verdict for this display, so the call sites do not each have
+    /// to know which of its fields feed the decision.
+    func isPhoneVideoHidden(areTouchControlsHidden: Bool) -> Bool {
+        ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: isActive,
+            isPhoneControllerOnlyEnabled: isPhoneControllerOnlyEnabled,
+            areTouchControlsHidden: areTouchControlsHidden
+        )
+    }
+
     // MARK: - Window plumbing
 
     /// Single place that acts on the policy's verdict, so every entry point above
