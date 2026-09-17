@@ -36,6 +36,10 @@ final class CloudSaveSyncService {
     private let syncDevice: PSyncDeviceRepository
 
     private var serverBatteryId: Int?
+    /// When that row was last written, as far as this session knows. Updating
+    /// it in place is only safe while the server still agrees (see
+    /// `batteryTarget`).
+    private var serverBatteryUpdatedAt: Date?
     private var serverStateIdBySlot: [Int: Int] = [:]
 
     init(
@@ -139,6 +143,7 @@ final class CloudSaveSyncService {
             }
             if let match = batteryCandidates.first(where: { $0.fileName == config.batteryFileName }) ?? batteryCandidates.first {
                 serverBatteryId = match.saveId
+                serverBatteryUpdatedAt = match.serverUpdatedAt
             }
             for op in response.operations where op.action == .download && op.romId == config.romId {
                 await applyDownload(op)
@@ -216,6 +221,7 @@ final class CloudSaveSyncService {
                 try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
             }
             serverBatteryId = saveId
+            serverBatteryUpdatedAt = op.serverUpdatedAt
             logger.info("Negotiate down: battery (\(data.count) bytes)")
             await confirmDownload(saveId: saveId, deviceId: deviceId)
         } catch {
@@ -229,6 +235,7 @@ final class CloudSaveSyncService {
             let match = saves.first { $0.fileName == config.batteryFileName } ?? saves.first
             guard let match else { return }
             serverBatteryId = match.id
+            serverBatteryUpdatedAt = match.updatedAt
 
             let localMTime = saveStore.batteryModifiedAt(romId: config.romId)
             if let localMTime, localMTime >= match.updatedAt { return }
@@ -298,10 +305,13 @@ final class CloudSaveSyncService {
     /// instead of only observed indirectly through its side effects.
     func pushBatteryAsync(data: Data) async {
         let cfg = config
-        let serverId = serverBatteryId
         do {
             let result: SaveSchema
-            if let serverId {
+            switch await batteryTarget() {
+            case .leaveAlone(let reason):
+                logger.warning("Battery push skipped: \(reason)")
+                return
+            case .update(let serverId):
                 result = try await updateSaveUseCase.execute(
                     id: serverId,
                     emulator: cfg.emulator,
@@ -309,7 +319,7 @@ final class CloudSaveSyncService {
                     fileData: data,
                     screenshotData: nil
                 )
-            } else {
+            case .create:
                 let deviceId = await syncDevice.deviceId()
                 result = try await uploadSaveUseCase.execute(
                     romId: cfg.romId,
@@ -327,7 +337,7 @@ final class CloudSaveSyncService {
                     screenshotData: nil
                 )
             }
-            recordBatteryId(result.id)
+            recordBattery(result)
             recordAutoSync()
             logger.info("Battery pushed id=\(result.id)")
         } catch APIClientError.conflict {
@@ -378,7 +388,45 @@ final class CloudSaveSyncService {
         }
     }
 
-    private func recordBatteryId(_ id: Int) { serverBatteryId = id }
+    /// What a push may do with the row this session has been writing to.
+    private enum BatteryTarget {
+        /// No row known yet. The upload carries this device's id, so the
+        /// server's own conflict guard decides.
+        case create
+        /// Still the row this session last read or wrote, safe to replace.
+        case update(id: Int)
+        /// It moved, or could not be checked. `PUT` has no conflict guard of
+        /// its own, so this is the only thing between a push from a long
+        /// session and a save another device wrote in the meantime.
+        case leaveAlone(reason: String)
+    }
+
+    private func batteryTarget() async -> BatteryTarget {
+        guard let serverId = serverBatteryId else { return .create }
+        // Nothing to compare against, so leave the row as the only thing this
+        // session knows and update it, as before.
+        guard let knownUpdatedAt = serverBatteryUpdatedAt else { return .update(id: serverId) }
+
+        let saves: [SaveSchema]
+        do {
+            saves = try await listSavesUseCase.execute(romId: config.romId)
+        } catch {
+            return .leaveAlone(reason: "could not check the server row (\(error.localizedDescription))")
+        }
+        guard let current = saves.first(where: { $0.id == serverId }) else {
+            // Deleted, or pruned by autocleanup. A fresh upload is guarded.
+            return .create
+        }
+        guard current.updatedAt <= knownUpdatedAt else {
+            return .leaveAlone(reason: "another device wrote save \(serverId) in the meantime")
+        }
+        return .update(id: serverId)
+    }
+
+    private func recordBattery(_ save: SaveSchema) {
+        serverBatteryId = save.id
+        serverBatteryUpdatedAt = save.updatedAt
+    }
     private func recordStateId(slot: Int, id: Int) { serverStateIdBySlot[slot] = id }
     private func recordAutoSync() { recordSyncUseCase.execute(romId: config.romId, trigger: .automatic) }
 }

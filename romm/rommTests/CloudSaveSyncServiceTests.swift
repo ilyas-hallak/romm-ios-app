@@ -71,10 +71,12 @@ private func negotiateOperationJSON(
 
 private final class FakeListServerSavesUseCase: PListServerSavesUseCase, @unchecked Sendable {
     var savesByRomId: [Int: [SaveSchema]] = [:]
+    var error: Error?
     private(set) var requestedRomIds: [Int] = []
 
     func execute(romId: Int) async throws -> [SaveSchema] {
         requestedRomIds.append(romId)
+        if let error { throw error }
         return savesByRomId[romId] ?? []
     }
 
@@ -332,6 +334,87 @@ struct CloudSaveSyncServiceTests {
         await service.pushBatteryAsync(data: Data([0xAA]))
 
         #expect(fakes.recordSync.calls.isEmpty)
+    }
+
+    /// Replacing a row in place has no conflict guard of its own, so a push
+    /// may only do it while the server row is still the one this session
+    /// pulled.
+    @Test func pushUpdatesInPlaceWhileTheServerRowIsUnchanged() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let (service, _) = await makeServiceAfterPull(id: 42, fakes: fakes, store: store)
+
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.updateSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.first?.id == 42)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// A play session can run for hours. If another device wrote that row in
+    /// the meantime, the push has to leave it alone instead of silently
+    /// replacing a save this device never saw.
+    @Test func pushLeavesTheRowAloneWhenAnotherDeviceWroteIt() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let (service, pulledAt) = await makeServiceAfterPull(id: 42, fakes: fakes, store: store)
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(
+                id: 42, romId: 1, fileName: "battery.sav", updatedAt: pulledAt.addingTimeInterval(60)
+            )
+        ]
+
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// The row can also be gone, deleted or pruned by autocleanup. Then there
+    /// is nothing to replace and a fresh, guarded upload is the right move.
+    @Test func pushUploadsAFreshRowWhenTheKnownOneIsGone() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let (service, _) = await makeServiceAfterPull(id: 42, fakes: fakes, store: store)
+        fakes.listSaves.savesByRomId[1] = []
+
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.count == 1)
+        #expect(fakes.uploadSave.calls.first?.overwrite == nil)
+    }
+
+    /// Unverifiable is treated like moved: without an answer from the server
+    /// there is no way to tell a safe replace from a clobber.
+    @Test func pushLeavesTheRowAloneWhenTheServerCannotBeChecked() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let (service, _) = await makeServiceAfterPull(id: 42, fakes: fakes, store: store)
+        fakes.listSaves.error = APIClientError.invalidResponse(500, "offline")
+
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// A service in the state a launch leaves it in: it knows the server's
+    /// battery row and when that row was last written. The timestamp comes
+    /// back with it, so a test can move the row forward from it.
+    private func makeServiceAfterPull(
+        id: Int, fakes: Fakes, store: PSaveStore
+    ) async -> (service: CloudSaveSyncService, pulledAt: Date) {
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: id, romId: 1, fileName: "battery.sav", updatedAt: serverTime)
+        ]
+        fakes.downloadSave.dataForId[id] = Data([0x01])
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig())
+        await service.pullBeforeLaunch()
+        return (service, serverTime)
     }
 
     /// `pushBattery` is the fire-and-forget entry point production code
