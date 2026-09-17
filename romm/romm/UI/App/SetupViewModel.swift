@@ -278,6 +278,10 @@ final class SetupViewModel {
                 return ("Server error (\(code))", "The server returned an error response")
             case .decodingError:
                 return ("Invalid response", "The server did not return a valid RomM response")
+            case .conflict:
+                // Never actually reachable from a connection/auth check, but the
+                // switch has to cover every case (see APIClientError).
+                return ("Server error", "The server rejected the request as a conflict")
             case .networkError(let underlyingError):
                 return parseGeneralConnectionError(underlyingError)
             }

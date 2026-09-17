@@ -6,6 +6,8 @@ import Foundation
 private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable {
     var operations: [SyncOperationSchema] = []
     var errorToThrow: Error?
+    /// Nil reproduces a server too old to open a sync session at all.
+    var sessionIdToReturn: Int? = 1
     private(set) var reportedSaves: [ClientSaveState] = []
     private(set) var reportedDeviceId: String?
 
@@ -13,20 +15,20 @@ private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable 
         if let errorToThrow { throw errorToThrow }
         reportedSaves = body.saves
         reportedDeviceId = body.deviceId
-        return Self.response(operations)
+        return Self.response(operations, sessionId: sessionIdToReturn)
     }
 
     /// Builds a response through the decoder, since the schemas only have
     /// decoding initialisers.
-    private static func response(_ operations: [SyncOperationSchema]) -> SyncNegotiateResponse {
-        let payload: [String: Any] = [
-            "session_id": 1,
+    private static func response(_ operations: [SyncOperationSchema], sessionId: Int?) -> SyncNegotiateResponse {
+        var payload: [String: Any] = [
             "operations": operations.map(Self.operationJSON),
             "total_upload": operations.filter { $0.action == .upload }.count,
             "total_download": operations.filter { $0.action == .download }.count,
             "total_conflict": operations.filter { $0.action == .conflict }.count,
             "total_no_op": operations.filter { $0.action == .noOp }.count
         ]
+        if let sessionId { payload["session_id"] = sessionId }
         let data = try! JSONSerialization.data(withJSONObject: payload)
         return try! JSONDecoder().decode(SyncNegotiateResponse.self, from: data)
     }
@@ -34,11 +36,48 @@ private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable 
     private static func operationJSON(_ op: SyncOperationSchema) -> [String: Any] {
         var json: [String: Any] = ["action": op.action.rawValue]
         if let romId = op.romId { json["rom_id"] = romId }
+        if let saveId = op.saveId { json["save_id"] = saveId }
         if let fileName = op.fileName { json["file_name"] = fileName }
         if let slot = op.slot { json["slot"] = slot }
         if let reason = op.reason { json["reason"] = reason }
+        if let serverContentHash = op.serverContentHash { json["server_content_hash"] = serverContentHash }
         return json
     }
+}
+
+/// Minimal `PSaveStore` double: unlike `LocalSaveStoreRepository`, it can
+/// report a battery file that exists with no modification date attached,
+/// which the filesystem-backed store cannot be made to do.
+private final class FakeSaveStore: PSaveStore, @unchecked Sendable {
+    var romIds: [Int] = []
+    var batteryData: [Int: Data] = [:]
+    var batteryModifiedAtByRomId: [Int: Date] = [:]
+
+    func listRomIds() throws -> [Int] { romIds }
+    func readBattery(romId: Int) throws -> Data? { batteryData[romId] }
+    func writeBattery(romId: Int, data: Data) throws { batteryData[romId] = data }
+    func batteryModifiedAt(romId: Int) -> Date? { batteryModifiedAtByRomId[romId] }
+    func setBatteryModifiedAt(romId: Int, date: Date) throws { batteryModifiedAtByRomId[romId] = date }
+
+    func listStates(romId: Int) throws -> [SaveStateEntry] { [] }
+    func readState(romId: Int, slot: Int) throws -> Data? { nil }
+    func writeState(romId: Int, slot: Int, data: Data) throws {}
+    func deleteState(romId: Int, slot: Int) throws {}
+    func stateModifiedAt(romId: Int, slot: Int) -> Date? { nil }
+    func setStateModifiedAt(romId: Int, slot: Int, date: Date) throws {}
+
+    func readThumbnail(romId: Int, slot: Int) throws -> Data? { nil }
+    func writeThumbnail(romId: Int, slot: Int, data: Data) throws {}
+
+    func backupSlotForUndoSave(romId: Int, slot: Int) throws {}
+    func restoreSlotFromUndoSave(romId: Int, slot: Int) throws -> Bool { false }
+    func hasUndoSave(romId: Int, slot: Int) -> Bool { false }
+
+    func writeUndoLoadSnapshot(romId: Int, stateData: Data, thumbnailData: Data?) throws {}
+    func readUndoLoadState(romId: Int) throws -> Data? { nil }
+    func readUndoLoadThumbnail(romId: Int) throws -> Data? { nil }
+    func hasUndoLoad(romId: Int) -> Bool { false }
+    func clearUndoLoad(romId: Int) throws {}
 }
 
 private final class FakeSyncDevice: PSyncDeviceRepository, @unchecked Sendable {
@@ -46,6 +85,7 @@ private final class FakeSyncDevice: PSyncDeviceRepository, @unchecked Sendable {
     var idToReturn: String? = "device-1"
     func syncAPIAvailability() async -> SyncAPIAvailability { availability }
     func deviceId() async -> String? { idToReturn }
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
 }
 
 private final class FakeTokenProvider: PTokenProvider, @unchecked Sendable {
@@ -73,7 +113,7 @@ struct SyncPreviewUseCaseTests {
     }
 
     private func makeUseCase(
-        store: LocalSaveStoreRepository,
+        store: PSaveStore,
         client: FakeNegotiateClient = FakeNegotiateClient(),
         device: FakeSyncDevice = FakeSyncDevice(),
         token: FakeTokenProvider = FakeTokenProvider()
@@ -86,13 +126,17 @@ struct SyncPreviewUseCaseTests {
         romId: Int? = 1,
         fileName: String? = "battery.sav",
         slot: String? = SaveSlot.battery,
-        reason: String? = nil
+        reason: String? = nil,
+        saveId: Int? = nil,
+        serverContentHash: String? = nil
     ) -> SyncOperationSchema {
         var json: [String: Any] = ["action": action.rawValue]
         if let romId { json["rom_id"] = romId }
         if let fileName { json["file_name"] = fileName }
         if let slot { json["slot"] = slot }
         if let reason { json["reason"] = reason }
+        if let saveId { json["save_id"] = saveId }
+        if let serverContentHash { json["server_content_hash"] = serverContentHash }
         let data = try! JSONSerialization.data(withJSONObject: json)
         return try! JSONDecoder().decode(SyncOperationSchema.self, from: data)
     }
@@ -154,6 +198,18 @@ struct SyncPreviewUseCaseTests {
         #expect(preview.isUpToDate)
     }
 
+    /// `.noOp` is the fourth known direction: mapped through, not dropped like
+    /// `.unknown`, just excluded from `uploads`/`downloads`/`conflicts`.
+    @Test func mapsNoOpAsItsOwnDirectionRatherThanDroppingIt() async throws {
+        let client = FakeNegotiateClient()
+        client.operations = [operation(.noOp, romId: 1)]
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+
+        #expect(preview.operations.map(\.romId) == [1])
+        #expect(preview.operations.first?.direction == .noOp)
+    }
+
     /// This preview reports battery saves only, so an operation about a state
     /// came from somewhere else and would misstate what syncing here does.
     @Test func dropsSaveStateOperations() async throws {
@@ -166,6 +222,24 @@ struct SyncPreviewUseCaseTests {
         let preview = try await makeUseCase(store: makeStore(), client: client).execute()
 
         #expect(preview.downloads.map(\.romId) == [2])
+    }
+
+    /// The server plans per (rom_id, slot), so a ROM with rows under other
+    /// slots (another client's autosave or default save) still comes back
+    /// with an operation for each of them, even though this device only ever
+    /// reports its battery slot. Those are not battery saves.
+    @Test func dropsOperationsForAForeignSlot() async throws {
+        let client = FakeNegotiateClient()
+        client.operations = [
+            operation(.download, romId: 1, slot: "autosave"),
+            operation(.download, romId: 2, slot: "default"),
+            operation(.download, romId: 3, slot: SaveSlot.battery),
+            operation(.download, romId: 4, slot: nil)
+        ]
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+
+        #expect(preview.downloads.map(\.romId).sorted() == [3, 4])
     }
 
     /// A newer server can plan something this build has no name for. Showing it
@@ -247,5 +321,82 @@ struct SyncPreviewUseCaseTests {
         await #expect(throws: SyncPreviewError.self) {
             try await makeUseCase(store: makeStore(), client: client).execute()
         }
+    }
+
+    // MARK: - Fields the runner resolves downloads and sessions by
+
+    /// New in this branch: the runner resolves a download by save id and can
+    /// skip one whose content already matches (see `SaveSyncRunner`), both of
+    /// which only work if negotiate's `save_id` and `server_content_hash`
+    /// survive the mapping onto `SyncPreviewOperation`.
+    @Test func mapsSaveIdAndContentHashOntoTheOperation() async throws {
+        let client = FakeNegotiateClient()
+        client.operations = [operation(.download, romId: 5, saveId: 77, serverContentHash: "abc123")]
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+
+        #expect(preview.downloads.first?.saveId == 77)
+        #expect(preview.downloads.first?.serverContentHash == "abc123")
+    }
+
+    @Test func mapsSessionIdOntoThePreview() async throws {
+        let client = FakeNegotiateClient()
+        client.sessionIdToReturn = 42
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+
+        #expect(preview.sessionId == "42")
+    }
+
+    /// A server too old to open a sync session simply omits `session_id`; the
+    /// preview must carry that absence through rather than inventing one.
+    @Test func sessionIdIsNilWhenTheServerDoesNotOpenOne() async throws {
+        let client = FakeNegotiateClient()
+        client.sessionIdToReturn = nil
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+
+        #expect(preview.sessionId == nil)
+    }
+
+    @Test func emptyOperationListProducesAValidEmptyPreview() async throws {
+        let client = FakeNegotiateClient()
+        client.operations = []
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+
+        #expect(preview.operations.isEmpty)
+        #expect(preview.uploads.isEmpty)
+        #expect(preview.downloads.isEmpty)
+        #expect(preview.conflicts.isEmpty)
+        #expect(preview.isUpToDate)
+    }
+
+    @Test func reportedSaveCountMatchesTheNumberOfReportedSaves() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0x01]))
+        try store.writeBattery(romId: 2, data: Data([0x02]))
+        try store.writeBattery(romId: 3, data: Data()) // empty, not reported
+
+        let preview = try await makeUseCase(store: store, client: FakeNegotiateClient()).execute()
+
+        #expect(preview.reportedSaveCount == 2)
+    }
+
+    // MARK: - collectBatterySaves edge cases
+
+    /// When a store cannot say when a battery file last changed, the epoch is
+    /// used rather than "now": that reads as the oldest possible save, so
+    /// negotiate prefers the server's copy instead of assuming this one just
+    /// changed.
+    @Test func missingModificationDateFallsBackToTheEpoch() async throws {
+        let store = FakeSaveStore()
+        store.romIds = [7]
+        store.batteryData[7] = Data([0xCA, 0xFE])
+        let client = FakeNegotiateClient()
+
+        _ = try await makeUseCase(store: store, client: client).execute()
+
+        #expect(client.reportedSaves.first?.updatedAt == Date(timeIntervalSince1970: 0))
     }
 }

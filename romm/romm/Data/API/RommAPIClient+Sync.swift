@@ -19,4 +19,25 @@ extension RommAPIClient {
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse {
         try await post("api/sync/negotiate", body: body, responseType: SyncNegotiateResponse.self)
     }
+
+    /// `POST /api/sync/sessions/{sessionId}/complete` — closes out the session
+    /// opened by `negotiate` with how many operations actually succeeded. The
+    /// response carries nothing callers need, so it is decoded into an empty
+    /// struct purely to satisfy `post`'s Codable requirement.
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {
+        struct Body: Codable {
+            let operationsCompleted: Int
+            let operationsFailed: Int
+            enum CodingKeys: String, CodingKey {
+                case operationsCompleted = "operations_completed"
+                case operationsFailed = "operations_failed"
+            }
+        }
+        struct EmptyResponse: Codable {}
+        _ = try await post(
+            "api/sync/sessions/\(sessionId)/complete",
+            body: Body(operationsCompleted: operationsCompleted, operationsFailed: operationsFailed),
+            responseType: EmptyResponse.self
+        )
+    }
 }

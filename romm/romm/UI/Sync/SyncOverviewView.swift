@@ -33,6 +33,9 @@ struct SyncOverviewView: View {
                 thisDeviceSection(preview)
             }
             externalAppsSection
+            if viewModel.preview != nil {
+                syncNowSection
+            }
         }
         .navigationTitle("Save Sync")
         .navigationBarTitleDisplayMode(.inline)
@@ -43,7 +46,7 @@ struct SyncOverviewView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .disabled(viewModel.isLoading)
+                .disabled(viewModel.isLoading || viewModel.isSyncing)
                 .accessibilityLabel("Check again")
             }
         }
@@ -76,10 +79,9 @@ struct SyncOverviewView: View {
         } header: {
             Text("RomM")
         } footer: {
-            // Said plainly: uploads still send no slot, so this is a preview of
-            // a change that has not been made yet.
-            Text("Nothing has been changed. This is what a sync would do once saves "
-                + "are uploaded under a slot. Registered as device \(preview.deviceId).")
+            // Only a plan until "Sync Now" below is actually tapped.
+            Text("Nothing has been changed yet. This is what tapping \"Sync Now\" "
+                + "below would do. Registered as device \(preview.deviceId).")
         }
     }
 
@@ -99,7 +101,42 @@ struct SyncOverviewView: View {
             Text("Emulator Apps")
         } footer: {
             Text("Read from the folder set up for each app in Settings › Emulator. "
-                + "Nothing is written to them, and they are not part of the plan above yet.")
+                + "Nothing is ever written to them; \"Sync Now\" below only uploads "
+                + "a matched save when it is newer than what the server already has. "
+                + "Each app says what the last run did with its saves.")
+        }
+    }
+
+    // MARK: - Sync Now
+
+    private var syncNowSection: some View {
+        Section {
+            Button {
+                Task { await viewModel.syncNow() }
+            } label: {
+                HStack {
+                    Spacer()
+                    if viewModel.isSyncing {
+                        ProgressView()
+                            .padding(.trailing, 8)
+                    }
+                    Text("Sync Now")
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+            }
+            .disabled(!viewModel.canSyncNow || viewModel.isSyncing)
+        } footer: {
+            if let summary = viewModel.lastSyncSummary {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(summary)
+                    ForEach(viewModel.lastSyncErrors, id: \.self) { error in
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
     }
 
@@ -107,15 +144,19 @@ struct SyncOverviewView: View {
     private func externalAppRow(_ emulator: ExternalEmulatorID) -> some View {
         let title = emulator.emulator.displayName
         if let scan = viewModel.externalScans[emulator] {
+            // With saves to act on, what the last run did with them is the
+            // news and the folder's own inventory moves below the name. With
+            // none, that inventory is all there is to say.
+            let hasSaves = !scan.matched.isEmpty
             NavigationLink {
                 ExternalScanDetailView(scan: scan, romName: viewModel.displayName(forRom:))
             } label: {
                 sourceRow(
                     icon: "gamecontroller",
                     title: title,
-                    subtitle: nil,
-                    detail: scan.statusSummary,
-                    isWarning: scan.matched.isEmpty
+                    subtitle: hasSaves ? scan.statusSummary : nil,
+                    detail: hasSaves ? viewModel.lastSyncDetail(for: emulator) : scan.statusSummary,
+                    isWarning: !hasSaves || viewModel.lastSyncNeedsAttention(for: emulator)
                 )
             }
             .disabled(scan.isEmpty)

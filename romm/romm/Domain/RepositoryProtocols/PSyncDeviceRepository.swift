@@ -19,4 +19,9 @@ protocol PSyncDeviceRepository {
     /// A registered device id, registering once if needed. Nil when the server
     /// is too old or registration fails, so callers can fall back.
     func deviceId() async -> String?
+
+    /// Closes out a sync session opened by `negotiate`, so the server's own
+    /// bookkeeping reflects what actually happened. Best effort: callers should
+    /// treat a thrown error as a log warning, not a run failure.
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws
 }

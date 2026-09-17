@@ -1,6 +1,6 @@
 import Foundation
 
-final class CloudSaveSyncSettings: ObservableObject, PCloudSaveSyncStore {
+final class CloudSaveSyncSettings: ObservableObject, PCloudSaveSyncStore, PCloudSaveSyncSettings {
     static let shared = CloudSaveSyncSettings()
 
     private let userDefaults = UserDefaults.standard

@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 protocol PSyncPreviewUseCase {
@@ -66,15 +65,15 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
         return SyncPreview(
             deviceId: deviceId,
             reportedSaveCount: localSaves.count,
-            operations: response.operations.compactMap(Self.previewOperation)
+            operations: response.operations.compactMap(Self.previewOperation),
+            sessionId: response.sessionId
         )
     }
 
     // MARK: - Private
 
     /// Every battery save on this device, reported under the battery slot,
-    /// without which the server pairs nothing. Uploads still send no slot, so
-    /// this shows what a sync *would* do once they do.
+    /// without which the server pairs nothing.
     private func collectBatterySaves() -> [ClientSaveState] {
         let romIds = (try? saveStore.listRomIds()) ?? []
         return romIds.compactMap { romId in
@@ -86,7 +85,7 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
                 // Attribution only, and which engine wrote a save is not
                 // recorded per ROM, so an invented value is worse than none.
                 emulator: nil,
-                contentHash: Self.contentHash(data),
+                contentHash: SaveContentHash.of(data),
                 updatedAt: saveStore.batteryModifiedAt(romId: romId) ?? Date(timeIntervalSince1970: 0),
                 fileSizeBytes: data.count
             )
@@ -98,6 +97,14 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
     private static func previewOperation(_ op: SyncOperationSchema) -> SyncPreviewOperation? {
         guard let romId = op.romId else { return nil }
         if op.fileName?.hasSuffix(".state") == true { return nil }
+
+        // The server plans per (rom_id, slot). This device only ever reports
+        // its battery slot, but a ROM with rows under other slots (e.g.
+        // "autosave", "default" from another client) still gets an operation
+        // back for each of them. Those are not battery saves and must not be
+        // shown, let alone applied, here. `slot == nil` is kept: those are
+        // rows from before slots existed.
+        if let slot = op.slot, slot != SaveSlot.battery { return nil }
 
         let direction: SyncPreviewOperation.Direction
         switch op.action {
@@ -117,13 +124,9 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
             slot: op.slot,
             emulator: op.emulator,
             reason: op.reason,
-            serverUpdatedAt: op.serverUpdatedAt
+            serverUpdatedAt: op.serverUpdatedAt,
+            saveId: op.saveId,
+            serverContentHash: op.serverContentHash
         )
-    }
-
-    /// Matches the hash the rest of the sync path sends, so the server compares
-    /// like with like.
-    private static func contentHash(_ data: Data) -> String {
-        Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }

@@ -150,7 +150,7 @@ class DefaultConfigurationService: ConfigurationService {
         // Use refresh token to get new access token
         let formParameters = [
             "grant_type=refresh_token",
-            "refresh_token=\(refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+            "refresh_token=\(refreshToken.addingURLFormValueEncoding())"
         ]
         let formData = formParameters.joined(separator: "&")
         request.httpBody = formData.data(using: .utf8)

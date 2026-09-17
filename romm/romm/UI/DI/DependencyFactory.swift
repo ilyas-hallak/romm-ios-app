@@ -97,6 +97,8 @@ protocol PDependencyFactory {
     func makeUpdateSaveUseCase() -> PUpdateSaveUseCase
     func makeUploadStateUseCase() -> PUploadStateUseCase
     func makeUpdateStateUseCase() -> PUpdateStateUseCase
+    func makeConfirmSaveDownloadUseCase() -> PConfirmSaveDownloadUseCase
+    func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase
     func makeRecordSyncUseCase() -> PRecordSyncUseCase
     func makeGetLastSyncUseCase() -> PGetLastSyncUseCase
 
@@ -123,6 +125,7 @@ protocol PDependencyFactory {
     var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
     @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
+    @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
 
     // Emulator Engine
@@ -539,12 +542,29 @@ class DefaultDependencyFactory: PDependencyFactory {
             uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
             updateSaveUseCase: UpdateSaveUseCase(repository: savesRepository),
             downloadSaveUseCase: DownloadSaveUseCase(repository: savesRepository),
+            confirmSaveDownloadUseCase: ConfirmSaveDownloadUseCase(repository: savesRepository),
             listStatesUseCase: ListServerStatesUseCase(repository: statesRepository),
             uploadStateUseCase: UploadStateUseCase(repository: statesRepository),
             updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
             downloadStateUseCase: DownloadStateUseCase(repository: statesRepository),
             apiClient: apiClient,
             syncDevice: syncDeviceRepository
+        )
+    }
+
+    @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner {
+        SaveSyncRunner(
+            saveStore: saveStore,
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
+            listServerSavesUseCase: makeListServerSavesUseCase(),
+            listServerStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase(),
+            completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
+            externalSaveFolderStore: externalSaveFolderStore
         )
     }
 
@@ -580,6 +600,14 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeUpdateStateUseCase() -> PUpdateStateUseCase {
         UpdateStateUseCase(repository: statesRepository)
+    }
+
+    func makeConfirmSaveDownloadUseCase() -> PConfirmSaveDownloadUseCase {
+        ConfirmSaveDownloadUseCase(repository: savesRepository)
+    }
+
+    func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase {
+        CompleteSyncSessionUseCase(repository: syncDeviceRepository)
     }
 
     func makeRecordSyncUseCase() -> PRecordSyncUseCase {

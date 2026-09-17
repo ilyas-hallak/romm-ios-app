@@ -103,10 +103,11 @@ protocol PRommAPIClient {
     func getStates(romId: Int) async throws -> [StateSchema]
 
     // Saves sync
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
     func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data
+    func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data
     func deleteSaves(ids: [Int]) async throws
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema
 
     // States sync
     func uploadState(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema
@@ -117,6 +118,7 @@ protocol PRommAPIClient {
     // Save-sync API (RomM 5.0+)
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws
 }
 
 enum APIClientError: LocalizedError {
@@ -128,6 +130,10 @@ enum APIClientError: LocalizedError {
     case invalidResponse(Int, String)
     case decodingError(Error)
     case cloudflareProtection(String)
+    /// HTTP 409. The sync API uses this specifically to mean a slot moved on
+    /// since this device's last sync, so callers need to tell it apart from a
+    /// generic failure instead of counting it as one.
+    case conflict(String)
 
     var errorDescription: String? {
         switch self {
@@ -147,6 +153,8 @@ enum APIClientError: LocalizedError {
             return "Data decoding error: \(error.localizedDescription)"
         case .cloudflareProtection(let details):
             return "Server is protected by Cloudflare - browser authentication required"
+        case .conflict(let message):
+            return "Conflict: \(message)"
         }
     }
 }
@@ -257,6 +265,10 @@ class RommAPIClient: PRommAPIClient {
                 // Regular 403 error
                 logger.error("Forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
+            case 409:
+                let msg = String(data: data, encoding: .utf8) ?? "Conflict"
+                logger.warning("Conflict (409): \(msg)")
+                throw APIClientError.conflict(msg)
             case 400...499:
                 let msg = String(data: data, encoding: .utf8) ?? "Client error"
                 logger.error("Client error (\(httpResponse.statusCode)): \(msg)")
@@ -520,6 +532,10 @@ class RommAPIClient: PRommAPIClient {
 
                 logger.error("Multipart forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
+            case 409:
+                let msg = String(data: data, encoding: .utf8) ?? "Conflict"
+                logger.warning("Multipart conflict (409): \(msg)")
+                throw APIClientError.conflict(msg)
             case 400...499:
                 let msg = String(data: data, encoding: .utf8) ?? "Client error"
                 logger.error("Multipart client error (\(httpResponse.statusCode)): \(msg)")
@@ -656,8 +672,7 @@ class RommAPIClient: PRommAPIClient {
     func withQuery(_ path: String, _ params: [(String, String?)]) -> String {
         let parts = params.compactMap { key, value -> String? in
             guard let value else { return nil }
-            let encoded = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
-            return "\(key)=\(encoded)"
+            return "\(key)=\(value.addingURLFormValueEncoding())"
         }
         guard !parts.isEmpty else { return path }
         return "\(path)?\(parts.joined(separator: "&"))"

@@ -65,7 +65,11 @@ final class LocalSaveStoreRepository: PSaveStore {
             let name = url.deletingPathExtension().lastPathComponent
             guard url.pathExtension == SaveStorePaths.stateFileExtension, let slot = Int(name) else { return nil }
             let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey])
-            return SaveStateEntry(slot: slot, modifiedAt: attrs?.contentModificationDate ?? Date())
+            // An unreadable timestamp must lose any newer-than comparison, not win it.
+            return SaveStateEntry(
+                slot: slot,
+                modifiedAt: attrs?.contentModificationDate ?? Date(timeIntervalSince1970: 0)
+            )
         }
     }
 
