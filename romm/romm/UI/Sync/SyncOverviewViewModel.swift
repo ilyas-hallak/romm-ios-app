@@ -96,7 +96,7 @@ final class SyncOverviewViewModel {
             String(localized: "\(report.downloaded) downloaded")
         ]
         if report.skippedConflicts > 0 {
-            parts.append(String(localized: "\(report.skippedConflicts) conflicts left"))
+            parts.append(conflictsLeft(report.skippedConflicts))
         }
         if report.skipped > 0 {
             parts.append(String(localized: "\(report.skipped) skipped"))
@@ -108,6 +108,12 @@ final class SyncOverviewViewModel {
         return summary
     }
 
+    private func conflictsLeft(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "1 conflict left")
+            : String(localized: "\(count) conflicts left")
+    }
+
     /// What the last run did with one app's saves, for its row. Empty until a
     /// run actually had that app's files in hand: whether a file is newer than
     /// the server's copy is only known once the run has listed them.
@@ -117,7 +123,7 @@ final class SyncOverviewViewModel {
             return String(localized: "\(outcome.failed) failed")
         }
         if outcome.conflicts > 0 {
-            return String(localized: "\(outcome.conflicts) conflicts left")
+            return conflictsLeft(outcome.conflicts)
         }
         if outcome.uploaded > 0 {
             return String(localized: "\(outcome.uploaded) uploaded")

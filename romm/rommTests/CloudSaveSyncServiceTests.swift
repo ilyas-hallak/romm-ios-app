@@ -440,6 +440,9 @@ struct CloudSaveSyncServiceTests {
         let store = makeStore()
         let fakes = Fakes()
         fakes.syncDevice.deviceIdToReturn = "device-1"
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 77, romId: 1, fileName: "battery.sav")
+        ]
         let response = makeNegotiateResponse(operations: [
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
         ])
@@ -459,6 +462,38 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.uploadSave.calls.isEmpty)
     }
 
+    /// A negotiate response names the row but is allowed to leave out when it
+    /// was last written, and a `noOp` verdict usually does. That must not cost
+    /// the push its baseline, or the guard above would be skipped for the most
+    /// ordinary session there is: launch, nothing changed, play, push.
+    @Test func aRowNamedWithoutATimestampIsStillGuarded() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let pulledAt = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt)
+        ]
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        // Another device writes that row while the game is running.
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(
+                id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt.addingTimeInterval(60)
+            )
+        ]
+        await service.pushBatteryAsync(data: Data([0xBB]))
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
     // MARK: - serverBatteryId learned deterministically among several rows
 
     /// There is no unique constraint on (rom_id, slot) server-side, so
@@ -474,6 +509,10 @@ struct CloudSaveSyncServiceTests {
         let store = makeStore()
         let fakes = Fakes()
         fakes.syncDevice.deviceIdToReturn = "device-1"
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 100, romId: 1, fileName: "battery.sav"),
+            FakeListServerSavesUseCase.makeSchema(id: 200, romId: 1, fileName: "other.sav")
+        ]
         let response = makeNegotiateResponse(operations: [
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 100),
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "other.sav", saveId: 200)
@@ -495,6 +534,10 @@ struct CloudSaveSyncServiceTests {
         let store = makeStore()
         let fakes = Fakes()
         fakes.syncDevice.deviceIdToReturn = "device-1"
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 100, romId: 1, fileName: "a.sav"),
+            FakeListServerSavesUseCase.makeSchema(id: 200, romId: 1, fileName: "b.sav")
+        ]
         let response = makeNegotiateResponse(operations: [
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "a.sav", saveId: 100),
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "b.sav", saveId: 200)

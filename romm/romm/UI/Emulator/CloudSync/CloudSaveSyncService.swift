@@ -95,6 +95,7 @@ final class CloudSaveSyncService {
             await pullBattery()
         }
         await pullStates()
+        await learnBatteryUpdatedAt()
         recordSyncUseCase.execute(romId: config.romId, trigger: .automatic)
     }
 
@@ -401,11 +402,11 @@ final class CloudSaveSyncService {
         case leaveAlone(reason: String)
     }
 
+    /// This narrows the window in which another device can write the row down
+    /// to the gap between this check and the request that follows it, rather
+    /// than closing it: `PUT` has no guard of its own to fall back on.
     private func batteryTarget() async -> BatteryTarget {
         guard let serverId = serverBatteryId else { return .create }
-        // Nothing to compare against, so leave the row as the only thing this
-        // session knows and update it, as before.
-        guard let knownUpdatedAt = serverBatteryUpdatedAt else { return .update(id: serverId) }
 
         let saves: [SaveSchema]
         do {
@@ -417,10 +418,25 @@ final class CloudSaveSyncService {
             // Deleted, or pruned by autocleanup. A fresh upload is guarded.
             return .create
         }
+        // No baseline, so there is nothing this could be compared against.
+        // Writing anyway, because a session that never learned a timestamp
+        // still has to get its save up (`learnBatteryUpdatedAt` keeps this
+        // rare).
+        guard let knownUpdatedAt = serverBatteryUpdatedAt else { return .update(id: serverId) }
         guard current.updatedAt <= knownUpdatedAt else {
             return .leaveAlone(reason: "another device wrote save \(serverId) in the meantime")
         }
         return .update(id: serverId)
+    }
+
+    /// A negotiate response may name the row without saying when it was last
+    /// written, and a `noOp` verdict usually does. Without that timestamp the
+    /// push at the end of the session has no baseline, so it is fetched here,
+    /// while the row is still the one this device just read.
+    private func learnBatteryUpdatedAt() async {
+        guard let serverId = serverBatteryId, serverBatteryUpdatedAt == nil else { return }
+        guard let saves = try? await listSavesUseCase.execute(romId: config.romId) else { return }
+        serverBatteryUpdatedAt = saves.first(where: { $0.id == serverId })?.updatedAt
     }
 
     private func recordBattery(_ save: SaveSchema) {

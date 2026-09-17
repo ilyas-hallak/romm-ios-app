@@ -299,7 +299,7 @@ struct SyncOverviewViewModelTests {
 
         let summary = try #require(vm.lastSyncSummary)
         #expect(summary.contains("1 uploaded"))
-        #expect(summary.contains("1 conflicts left"))
+        #expect(summary.contains("1 conflict left"))
         #expect(summary.contains("1 failed"))
     }
 
@@ -317,6 +317,8 @@ struct SyncOverviewViewModelTests {
         await vm.syncNow()
 
         #expect(runner.lastPreview?.deviceId == "fresh")
+        // Once for the plan the run acts on, once for the reload afterwards.
+        #expect(factory.previewUseCase.callCount == 2)
     }
 
     /// Without a fresh plan there is nothing safe to act on, so the run is not
@@ -367,7 +369,7 @@ struct SyncOverviewViewModelTests {
         #expect(vm.lastSyncDetail(for: .provenance) == "1 failed")
         // A refused save is still only in the app's folder, so the row must
         // not read as "Up to date".
-        #expect(vm.lastSyncDetail(for: .manicEmu) == "1 conflicts left")
+        #expect(vm.lastSyncDetail(for: .manicEmu) == "1 conflict left")
         #expect(vm.lastSyncNeedsAttention(for: .provenance))
         #expect(vm.lastSyncNeedsAttention(for: .manicEmu))
         #expect(vm.lastSyncNeedsAttention(for: .retroarch) == false)
