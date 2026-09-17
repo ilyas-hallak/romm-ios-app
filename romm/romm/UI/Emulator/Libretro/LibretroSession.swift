@@ -275,6 +275,16 @@ final class LibretroSession: NSObject {
     func pause() { frontend.pause() }
     func resume() { frontend.resume() }
 
+    /// Re-applies the Play on TV hidden-video state to the running view
+    /// controller. Called from the SwiftUI layer on returning to the
+    /// foreground: a background/foreground round trip can tear down and
+    /// rebuild the external display scene without the manager's `isActive`
+    /// ever settling on a different value than before, so waiting for that
+    /// publisher to fire again is not enough on its own.
+    func updatePhoneVideoVisibility() {
+        viewController.updatePhoneVideoVisibility()
+    }
+
     // MARK: - Physical controller input
 
     @objc private func handleControllerConnectionChanged() {
@@ -611,7 +621,7 @@ final class LibretroGameViewController: UIViewController {
     /// screen. Safe to hide: the external picture is painted through a separate
     /// mirror layer (`LibretroExternalRenderTarget`), not through this view, so
     /// `isHidden` here has no effect on the TV feed.
-    private func updatePhoneVideoVisibility() {
+    func updatePhoneVideoVisibility() {
         let display = ExternalDisplayManager.shared
         videoView.isHidden = ExternalDisplayPolicy.shouldHidePhoneVideo(
             isRenderingExternally: display.isActive,

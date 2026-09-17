@@ -59,7 +59,14 @@ struct NativeEmulatorView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active: viewModel.session?.resume()
+            case .active:
+                viewModel.session?.resume()
+                // A background/foreground trip can silently drop Phone as
+                // Controller's hidden state (the external scene disconnects
+                // and reconnects without `isActive` necessarily changing, or
+                // DeltaCore rebuilds gameViews unhidden), so re-assert it
+                // rather than trust it survived.
+                viewModel.session?.updatePhoneVideoVisibility()
             case .inactive, .background: viewModel.session?.pause()
             @unknown default: break
             }

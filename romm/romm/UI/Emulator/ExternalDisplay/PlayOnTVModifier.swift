@@ -68,8 +68,15 @@ private struct PlayOnTVModifier: ViewModifier {
             .onChange(of: isMenuOpen) { _, _ in updateAutoDim() }
             .onChange(of: isPhoneVideoHidden) { _, _ in applyOrientationLock() }
             .onChange(of: scenePhase) { _, phase in
-                // Leaving the app must never strand the user with a dark panel.
-                if phase != .active { screenBlanker.restore() }
+                if phase != .active {
+                    // Leaving the app must never strand the user with a dark panel.
+                    screenBlanker.restore()
+                } else {
+                    // Nothing guarantees the lock survived a background trip
+                    // (the system can reset orientation while the app is away),
+                    // so re-assert it instead of trusting it stuck.
+                    applyOrientationLock()
+                }
             }
     }
 

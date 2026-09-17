@@ -59,7 +59,12 @@ struct LibretroEmulatorView: View {
             // singleton frontend with stale state.
             guard let session = viewModel.session else { return }
             switch phase {
-            case .active: session.resume()
+            case .active:
+                session.resume()
+                // Same reasoning as the native path: re-assert Phone as
+                // Controller's hidden state rather than rely on `isActive`
+                // having actually toggled during the round trip.
+                session.updatePhoneVideoVisibility()
             case .inactive, .background: session.pause()
             @unknown default: break
             }
