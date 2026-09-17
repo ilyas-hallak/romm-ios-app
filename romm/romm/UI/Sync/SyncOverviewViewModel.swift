@@ -116,14 +116,20 @@ final class SyncOverviewViewModel {
         if outcome.failed > 0 {
             return String(localized: "\(outcome.failed) failed")
         }
+        if outcome.conflicts > 0 {
+            return String(localized: "\(outcome.conflicts) conflicts left")
+        }
         if outcome.uploaded > 0 {
             return String(localized: "\(outcome.uploaded) uploaded")
         }
         return String(localized: "Up to date")
     }
 
-    func lastSyncFailed(for emulator: ExternalEmulatorID) -> Bool {
-        (lastSyncReport?.externalApps[emulator]?.failed ?? 0) > 0
+    /// Whether the row should read as a warning: something went wrong, or a
+    /// save stayed behind because the server refused it.
+    func lastSyncNeedsAttention(for emulator: ExternalEmulatorID) -> Bool {
+        guard let outcome = lastSyncReport?.externalApps[emulator] else { return false }
+        return outcome.failed > 0 || outcome.conflicts > 0
     }
 
     /// The last run's failure messages, capped so one bad run cannot flood the
@@ -136,14 +142,24 @@ final class SyncOverviewViewModel {
         return shown + [String(localized: "and \(remaining) more")]
     }
 
-    /// Runs the plan for real, then reloads it so the screen reflects the new
-    /// state rather than the one it was computed against.
+    /// Asks for a fresh plan first, then runs that one and reloads, so the
+    /// screen reflects the new state rather than the one it was computed
+    /// against.
+    ///
+    /// The plan on screen survives leaving and returning, so it can be hours
+    /// old, and an upload now overrides the server's conflict guard (see
+    /// `SaveSyncRunner`). Acting on a stale plan could therefore overwrite a
+    /// save another device wrote in the meantime. Negotiating right before the
+    /// run narrows that window to the run itself.
     func syncNow() async {
-        guard let preview, !isSyncing else { return }
+        guard preview != nil, !isSyncing else { return }
         isSyncing = true
         defer { isSyncing = false }
 
-        lastSyncReport = await syncRunner.run(preview: preview, externalScans: externalScans)
+        // No plan, nothing to act on: the failure is already on screen.
+        guard let fresh = await negotiate() else { return }
+
+        lastSyncReport = await syncRunner.run(preview: fresh, externalScans: externalScans)
         await load()
     }
 
@@ -152,15 +168,23 @@ final class SyncOverviewViewModel {
         rescanExternalFolders()
 
         state = .loading
+        _ = await negotiate()
+    }
+
+    /// Asks the server what would change and puts the answer on screen.
+    /// Returns nil when that failed, in which case `state` says why.
+    private func negotiate() async -> SyncPreview? {
         do {
             let preview = try await previewUseCase.execute()
             romNames = resolveNames(for: preview)
             state = .loaded(preview)
+            return preview
         } catch let error as SyncPreviewError {
             state = .failed(error)
         } catch {
             state = .failed(.negotiationFailed(error.localizedDescription))
         }
+        return nil
     }
 
     func rescanExternalFolders() {

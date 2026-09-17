@@ -156,7 +156,7 @@ struct SyncOverviewView: View {
                     title: title,
                     subtitle: hasSaves ? scan.statusSummary : nil,
                     detail: hasSaves ? viewModel.lastSyncDetail(for: emulator) : scan.statusSummary,
-                    isWarning: !hasSaves || viewModel.lastSyncFailed(for: emulator)
+                    isWarning: !hasSaves || viewModel.lastSyncNeedsAttention(for: emulator)
                 )
             }
             .disabled(scan.isEmpty)

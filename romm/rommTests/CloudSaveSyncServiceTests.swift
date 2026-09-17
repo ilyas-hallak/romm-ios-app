@@ -313,6 +313,9 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.uploadSave.calls.first?.slot == SaveSlot.battery)
         #expect(fakes.uploadSave.calls.first?.deviceId == "device-9")
         #expect(fakes.uploadSave.calls.first?.autocleanup == true)
+        // Nothing here established that this device wins, so the server's
+        // conflict guard has to stay on: no `overwrite` at all.
+        #expect(fakes.uploadSave.calls.first?.overwrite == nil)
     }
 
     /// HTTP 409 means the slot moved on the server since this device's last

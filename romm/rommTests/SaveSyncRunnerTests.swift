@@ -862,6 +862,9 @@ struct SaveSyncRunnerTests {
         #expect(fakes.uploadSave.calls.first?.emulator == ExternalEmulatorID.retroarch.rawValue)
         #expect(fakes.uploadSave.calls.first?.deviceId == "device-3")
         #expect(fakes.uploadSave.calls.first?.autocleanup == true)
+        // Same reason as the battery upload: this file already beat everything
+        // the server holds, so the guard would only refuse a decided upload.
+        #expect(fakes.uploadSave.calls.first?.overwrite == true)
         // The overview's row for this app reads its share of the run from here.
         #expect(report.externalApps[.retroarch] == SaveSyncReport.ExternalAppOutcome(uploaded: 1))
     }
@@ -1017,6 +1020,9 @@ struct SaveSyncRunnerTests {
         #expect(report.skippedConflicts == 1)
         #expect(report.failed == 0)
         #expect(report.uploaded == 0)
+        // The app's own row has to say so too, otherwise a refused save reads
+        // as "Up to date" there while the summary reports a conflict.
+        #expect(report.externalApps[.retroarch] == SaveSyncReport.ExternalAppOutcome(conflicts: 1))
     }
 
     /// A matched file can vanish between the scan and the run (the external

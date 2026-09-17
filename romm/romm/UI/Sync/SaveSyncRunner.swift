@@ -28,6 +28,10 @@ struct SaveSyncReport: Equatable {
     struct ExternalAppOutcome: Equatable {
         var uploaded = 0
         var failed = 0
+        /// Saves the server refused, so they are still only in the app's
+        /// folder. Counted apart from failures: nothing went wrong here, the
+        /// save just did not make it up.
+        var conflicts = 0
     }
 }
 
@@ -134,11 +138,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
             var perApp = SaveSyncReport.ExternalAppOutcome()
             for outcome in outcomes {
                 apply(outcome, to: &report)
-                switch outcome {
-                case .uploaded: perApp.uploaded += 1
-                case .failed: perApp.failed += 1
-                case .downloaded, .skipped, .conflict: break
-                }
+                apply(outcome, to: &perApp)
             }
             report.externalApps[emulator] = perApp
         }
@@ -212,9 +212,10 @@ final class SaveSyncRunner: PSaveSyncRunner {
                 screenshotData: nil
             )
         } catch APIClientError.conflict {
-            // Only reachable now if the slot moved between this run's negotiate
-            // and the upload, since `overwrite` above covers the plan's own
-            // view. Not a failure: the next negotiate plans around the new state.
+            // `overwrite` above switches the server's guard off entirely, so
+            // this should not happen anymore. Kept so a server that refuses
+            // anyway is never reported as a failed upload: the next negotiate
+            // plans around whatever state it is in.
             return .conflict
         } catch {
             return .failed("ROM \(op.romId): battery upload failed (\(error.localizedDescription))")
@@ -498,6 +499,17 @@ final class SaveSyncRunner: PSaveSyncRunner {
             failed += 1
         case .skipped, .conflict:
             break
+        }
+    }
+
+    /// The same outcome again, for the one app it belongs to. Its row says
+    /// what happened to that app's saves, which the run totals cannot.
+    private func apply(_ outcome: StepOutcome, to app: inout SaveSyncReport.ExternalAppOutcome) {
+        switch outcome {
+        case .uploaded: app.uploaded += 1
+        case .failed: app.failed += 1
+        case .conflict: app.conflicts += 1
+        case .downloaded, .skipped: break
         }
     }
 

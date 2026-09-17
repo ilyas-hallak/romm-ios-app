@@ -29,8 +29,12 @@ private final class FakeLocalROMs: PLocalROMRepository, @unchecked Sendable {
 /// towards success or one particular failure, never a real network call.
 private final class FakeSyncPreviewUseCase: PSyncPreviewUseCase, @unchecked Sendable {
     var result: Result<SyncPreview, Error>
+    private(set) var callCount = 0
     init(result: Result<SyncPreview, Error>) { self.result = result }
-    func execute() async throws -> SyncPreview { try result.get() }
+    func execute() async throws -> SyncPreview {
+        callCount += 1
+        return try result.get()
+    }
 }
 
 /// A deterministic suspension point so a test can observe `isSyncing` and
@@ -61,9 +65,11 @@ private final class FakeSaveSyncRunner: PSaveSyncRunner {
     var reportToReturn = SaveSyncReport()
     var gate: Gate?
     private(set) var callCount = 0
+    private(set) var lastPreview: SyncPreview?
 
     func run(preview: SyncPreview, externalScans: [ExternalEmulatorID: ExternalSaveScan]) async -> SaveSyncReport {
         callCount += 1
+        lastPreview = preview
         await gate?.wait()
         return reportToReturn
     }
@@ -74,16 +80,16 @@ private final class FakeSaveSyncRunner: PSaveSyncRunner {
 /// has no injection parameter of its own, since the base factory builds it for
 /// real from other dependencies rather than taking it in through `init`.
 private final class SyncTestFactory: MockDependencyFactory {
-    private let previewResult: Result<SyncPreview, Error>
+    /// One instance for the whole view model, so a test can count how often
+    /// negotiate actually ran.
+    let previewUseCase: FakeSyncPreviewUseCase
 
     init(localROMRepository: PLocalROMRepository, previewResult: Result<SyncPreview, Error>, saveSyncRunner: PSaveSyncRunner) {
-        self.previewResult = previewResult
+        self.previewUseCase = FakeSyncPreviewUseCase(result: previewResult)
         super.init(apiClient: FakeAPIClient(), localROMRepository: localROMRepository, saveSyncRunner: saveSyncRunner)
     }
 
-    override func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
-        FakeSyncPreviewUseCase(result: previewResult)
-    }
+    override func makeSyncPreviewUseCase() -> PSyncPreviewUseCase { previewUseCase }
 }
 
 @MainActor
@@ -297,6 +303,46 @@ struct SyncOverviewViewModelTests {
         #expect(summary.contains("1 failed"))
     }
 
+    /// The plan on screen survives leaving and returning, so it can be hours
+    /// old by the time the button is tapped, and an upload overrides the
+    /// server's conflict guard. The run must therefore act on a plan fetched
+    /// right before it, not on the one the screen still shows.
+    @Test func syncNowNegotiatesAgainAndRunsTheFreshPlan() async throws {
+        let stale = SyncPreview(deviceId: "stale", reportedSaveCount: 0, operations: [])
+        let fresh = SyncPreview(deviceId: "fresh", reportedSaveCount: 0, operations: [])
+        let runner = FakeSaveSyncRunner()
+        let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(fresh), saveSyncRunner: runner)
+        let vm = SyncOverviewViewModel(showing: .loaded(stale), factory: factory)
+
+        await vm.syncNow()
+
+        #expect(runner.lastPreview?.deviceId == "fresh")
+    }
+
+    /// Without a fresh plan there is nothing safe to act on, so the run is not
+    /// started at all and the screen says why.
+    @Test func syncNowDoesNotRunWhenNegotiateFails() async throws {
+        let stale = SyncPreview(deviceId: "stale", reportedSaveCount: 0, operations: [])
+        let runner = FakeSaveSyncRunner()
+        let factory = SyncTestFactory(
+            localROMRepository: FakeLocalROMs(),
+            previewResult: .failure(SyncPreviewError.notConnected),
+            saveSyncRunner: runner
+        )
+        let vm = SyncOverviewViewModel(showing: .loaded(stale), factory: factory)
+
+        await vm.syncNow()
+
+        #expect(runner.callCount == 0)
+        #expect(vm.lastSyncReport == nil)
+        if case .failed(let error) = vm.state {
+            #expect(error == .notConnected)
+        } else {
+            Issue.record("expected the screen to show the negotiate failure")
+        }
+        #expect(vm.isSyncing == false)
+    }
+
     // MARK: - External app rows
 
     /// An emulator app's row has nothing else to go on: nothing is ever
@@ -307,7 +353,8 @@ struct SyncOverviewViewModelTests {
         runner.reportToReturn = SaveSyncReport(uploaded: 1, failed: 1, externalApps: [
             .retroarch: SaveSyncReport.ExternalAppOutcome(uploaded: 1),
             .delta: SaveSyncReport.ExternalAppOutcome(),
-            .provenance: SaveSyncReport.ExternalAppOutcome(failed: 1)
+            .provenance: SaveSyncReport.ExternalAppOutcome(failed: 1),
+            .manicEmu: SaveSyncReport.ExternalAppOutcome(conflicts: 1)
         ])
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
         let factory = SyncTestFactory(localROMRepository: FakeLocalROMs(), previewResult: .success(preview), saveSyncRunner: runner)
@@ -318,17 +365,19 @@ struct SyncOverviewViewModelTests {
         #expect(vm.lastSyncDetail(for: .retroarch) == "1 uploaded")
         #expect(vm.lastSyncDetail(for: .delta) == "Up to date")
         #expect(vm.lastSyncDetail(for: .provenance) == "1 failed")
-        #expect(vm.lastSyncFailed(for: .provenance))
-        #expect(vm.lastSyncFailed(for: .retroarch) == false)
-        // Never looked at by this run, so there is nothing to claim about it.
-        #expect(vm.lastSyncDetail(for: .manicEmu).isEmpty)
+        // A refused save is still only in the app's folder, so the row must
+        // not read as "Up to date".
+        #expect(vm.lastSyncDetail(for: .manicEmu) == "1 conflicts left")
+        #expect(vm.lastSyncNeedsAttention(for: .provenance))
+        #expect(vm.lastSyncNeedsAttention(for: .manicEmu))
+        #expect(vm.lastSyncNeedsAttention(for: .retroarch) == false)
     }
 
     @Test func lastSyncDetailIsEmptyBeforeAnyRun() {
         let vm = makeViewModel(showing: .loaded(SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])))
 
         #expect(vm.lastSyncDetail(for: .retroarch).isEmpty)
-        #expect(vm.lastSyncFailed(for: .retroarch) == false)
+        #expect(vm.lastSyncNeedsAttention(for: .retroarch) == false)
     }
 
     // MARK: - lastSyncErrors
