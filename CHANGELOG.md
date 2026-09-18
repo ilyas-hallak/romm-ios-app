@@ -4,6 +4,34 @@ All builds of the RomM iOS app, newest first.
 
 ## Version 1.0
 
+### Build 53 (2026-09-18)
+
+**New**
+- RetroAchievements can now be browsed properly.
+Tap an achievement for its details, expand the list on a game, and see your progress per platform.
+- The sync overview has a Sync Now button, so saves move on demand and not only when a game ends.
+Each external emulator app also reports what the last run did with its saves.
+- Manic EMU and Provenance are available as Play targets, alongside RetroArch and Delta.
+Play now honours that setting in the downloads list as well, where it previously always started the built-in engine.
+- Downloads show a real percentage and the current transfer rate.
+
+**Fixed**
+- Covers load noticeably faster.
+They now come from your own RomM server instead of external CDNs, which is about five times less data per image, and the prefetching that was supposed to load them ahead of time never actually ran.
+- Wide covers no longer break out of their card, and PC Engine, Neo Geo and MAME show their platform icon again.
+- Share on a downloaded game did nothing.
+- A German device showed a mix of German and English labels.
+The app is English only, so the German strings are gone.
+- The picture on an external display was cross fading on every frame, which made it look soft.
+- Searching for a title containing &, + or = searched for the wrong text.
+
+**Known issues**
+- PS1, PC Engine and Master System can still crash when audio resumes after a call, unplugged headphones, or coming back from the background.
+- N64 can exit on its own in some games.
+- With a physical controller you cannot reach the save and load menu yet.
+- Handing a ROM to Manic EMU or Provenance only works for systems the built-in engines know, and disc based games cannot be handed over at all.
+- Save and state files cannot be downloaded from a server over plain http.
+
 ### Build 50 (2026-08-31)
 
 **New**
