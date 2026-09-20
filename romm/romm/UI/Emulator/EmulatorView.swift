@@ -15,9 +15,14 @@ struct EmulatorView: View {
     @State private var showExitConfirmation = false
     @State private var showMenu = false
 
-    init(rom: Rom) {
+    init(rom: Rom, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.rom = rom
-        _viewModel = State(initialValue: EmulatorViewModel(rom: rom))
+        _viewModel = State(
+            initialValue: EmulatorViewModel(
+                rom: rom,
+                bezelPreference: factory.emulatorBezelPreference
+            )
+        )
     }
 
     var body: some View {
@@ -27,6 +32,7 @@ struct EmulatorView: View {
                 EmulatorWebView(viewModel: viewModel)
                     .id(viewModel.emulatorURL?.absoluteString ?? "webview")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .webEmulatorBezel(isEnabled: viewModel.showsBezel)
                     .edgesIgnoringSafeArea(.bottom)  // Ignore bottom, navbar handles top
 
                 // Overlay Controls (optional, for later)
