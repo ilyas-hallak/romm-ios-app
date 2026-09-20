@@ -77,7 +77,12 @@ final class RommGameViewController: GameViewController {
     private var touchScreenFlags: [Bool] {
         guard let traits = controllerView?.controllerSkinTraits,
               let screens = controllerView?.controllerSkin?.screens(for: traits)
-        else { return [Bool](repeating: false, count: gameViews.count) }
+        else {
+            // Traits are only set from the first layout pass on, so nothing is
+            // known about the screens yet. Assume every view is a touch screen,
+            // so an early call cannot hide the one the player taps on.
+            return [Bool](repeating: true, count: gameViews.count)
+        }
 
         guard screens.count == gameViews.count else {
             // DeltaCore collapses the screens into one in a few cases the raw
