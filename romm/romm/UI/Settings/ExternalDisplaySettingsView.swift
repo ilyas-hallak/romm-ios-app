@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Settings for playing on a TV. The in-game menu carries the same two switches
-/// for changing them mid-session, this is where they can be set up beforehand.
+/// Settings for playing on a TV. Play on TV and Phone as Controller are in the
+/// in-game menu too for changing them mid-session, this is where they can be set
+/// up beforehand.
 struct ExternalDisplaySettingsView: View {
 
     @ObservedObject private var display = ExternalDisplayManager.shared
