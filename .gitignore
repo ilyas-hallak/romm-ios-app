@@ -139,7 +139,12 @@ Temporary Items
 
 # Documentation
 documentation/features/
-.claude
+
+# Claude Code: shared commands and agreements are tracked,
+# per-developer state and the device command (team id, device udid) are not
+.claude/*
+!.claude/commands/
+.claude/commands/device.md
 
 # Git worktrees
 .worktrees/
