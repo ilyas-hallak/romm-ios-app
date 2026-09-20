@@ -9,6 +9,10 @@ protocol PExternalDisplayPreference: AnyObject {
     /// controller is in use.
     var isAutoDimPhoneEnabled: Bool { get set }
 
+    /// Hide the phone's own game picture once it plays on the TV, so the
+    /// handset shows nothing but the touch controls.
+    var isPhoneControllerOnlyEnabled: Bool { get set }
+
     /// Brightness captured before the phone screen was blanked. Not a setting the
     /// user makes, but it has to outlive the process: brightness is system wide,
     /// so a crash while blanked would otherwise leave a phone that looks broken.

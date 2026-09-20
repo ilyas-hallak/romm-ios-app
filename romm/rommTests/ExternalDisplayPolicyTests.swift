@@ -73,6 +73,40 @@ struct ExternalDisplayPolicyTests {
             isMenuOpen: false, isAutoDimPhoneEnabled: false
         ))
     }
+
+    // MARK: - Hiding the phone's own video
+
+    /// Mirroring or a plain phone session means the phone screen is the only
+    /// picture there is.
+    @Test func doesNotHideVideoWithoutExternalRendering() {
+        #expect(!ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: false, isPhoneControllerOnlyEnabled: true,
+            areTouchControlsHidden: false
+        ))
+    }
+
+    @Test func doesNotHideVideoWhenThePreferenceIsOff() {
+        #expect(!ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: true, isPhoneControllerOnlyEnabled: false,
+            areTouchControlsHidden: false
+        ))
+    }
+
+    @Test func hidesVideoOnceOnTVWithTouchControlsVisible() {
+        #expect(ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: true, isPhoneControllerOnlyEnabled: true,
+            areTouchControlsHidden: false
+        ))
+    }
+
+    /// Hidden touch controls mean a physical controller took over, so there is
+    /// nothing left on the phone to show, `shouldAutoDimPhone` already blanks it.
+    @Test func doesNotHideVideoWhenTouchControlsAreAlreadyHidden() {
+        #expect(!ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: true, isPhoneControllerOnlyEnabled: true,
+            areTouchControlsHidden: true
+        ))
+    }
 }
 
 struct PhoneScreenBlankerTests {

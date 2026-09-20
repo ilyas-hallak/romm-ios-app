@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// Settings for playing on a TV. The in-game menu carries the same two switches
-/// for changing them mid-session, this is where they can be set up beforehand.
+/// Settings for playing on a TV. Play on TV and Phone as Controller are in the
+/// in-game menu too for changing them mid-session, this is where they can be set
+/// up beforehand.
 struct ExternalDisplaySettingsView: View {
 
     @ObservedObject private var display = ExternalDisplayManager.shared
     @SwiftUI.State private var playOnTV = ExternalDisplayManager.shared.isPlayOnTVEnabled
     @SwiftUI.State private var autoDim = ExternalDisplayManager.shared.isAutoDimPhoneEnabled
+    @SwiftUI.State private var controllerOnly = ExternalDisplayManager.shared.isPhoneControllerOnlyEnabled
 
     var body: some View {
         List {
@@ -52,6 +54,19 @@ struct ExternalDisplaySettingsView: View {
                 }
                 .onChange(of: autoDim) { _, newValue in
                     display.setAutoDimPhoneEnabled(newValue)
+                }
+
+                Toggle(isOn: $controllerOnly) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Phone as Controller")
+                        Text("The game shows only on the TV, the phone shows just the touch controls")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .disabled(!playOnTV)
+                .onChange(of: controllerOnly) { _, newValue in
+                    display.setPhoneControllerOnlyEnabled(newValue)
                 }
             } header: {
                 Text("Options")

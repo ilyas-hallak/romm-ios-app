@@ -47,6 +47,11 @@ final class ExternalDisplayManager: ObservableObject {
     /// the only concrete thing we can show.
     @Published private(set) var displayResolution: String?
 
+    /// Mirrors the preference, unlike the plain forwarders below: the running
+    /// emulator view observes this directly, so flipping it from the in-game
+    /// menu has to take effect without a relaunch.
+    @Published private(set) var isPhoneControllerOnlyEnabled: Bool
+
     private let preference: PExternalDisplayPreference
 
     /// Every state change here is also a measurement point for the AirPlay
@@ -74,6 +79,7 @@ final class ExternalDisplayManager: ObservableObject {
     ) {
         self.preference = preference
         self.diagnostics = diagnostics
+        self.isPhoneControllerOnlyEnabled = preference.isPhoneControllerOnlyEnabled
     }
 
     // MARK: - Scene lifecycle (called from ExternalDisplaySceneDelegate)
@@ -138,6 +144,24 @@ final class ExternalDisplayManager: ObservableObject {
 
     func setAutoDimPhoneEnabled(_ enabled: Bool) {
         preference.isAutoDimPhoneEnabled = enabled
+    }
+
+    /// Lets the player turn the phone into a pure controller while the game
+    /// plays on the TV. The engine views watch `isPhoneControllerOnlyEnabled`
+    /// themselves to decide what that means for their own video layer.
+    func setPhoneControllerOnlyEnabled(_ enabled: Bool) {
+        preference.isPhoneControllerOnlyEnabled = enabled
+        isPhoneControllerOnlyEnabled = enabled
+    }
+
+    /// The policy's verdict for this display, so the call sites do not each have
+    /// to know which of its fields feed the decision.
+    func isPhoneVideoHidden(areTouchControlsHidden: Bool) -> Bool {
+        ExternalDisplayPolicy.shouldHidePhoneVideo(
+            isRenderingExternally: isActive,
+            isPhoneControllerOnlyEnabled: isPhoneControllerOnlyEnabled,
+            areTouchControlsHidden: areTouchControlsHidden
+        )
     }
 
     // MARK: - Window plumbing
