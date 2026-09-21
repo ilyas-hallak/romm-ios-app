@@ -101,6 +101,8 @@ protocol PDependencyFactory {
     func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase
     func makeRecordSyncUseCase() -> PRecordSyncUseCase
     func makeGetLastSyncUseCase() -> PGetLastSyncUseCase
+    func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase
+    func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase
 
     // Local ROM Use Cases
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
@@ -564,8 +566,17 @@ class DefaultDependencyFactory: PDependencyFactory {
             updateStateUseCase: makeUpdateStateUseCase(),
             downloadStateUseCase: makeDownloadStateUseCase(),
             completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
-            externalSaveFolderStore: externalSaveFolderStore
+            externalSaveFolderStore: externalSaveFolderStore,
+            recordRunUseCase: makeRecordSaveSyncRunUseCase()
         )
+    }
+
+    func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase {
+        RecordSaveSyncRunUseCase(store: CloudSaveSyncSettings.shared)
+    }
+
+    func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase {
+        GetLastSaveSyncRunUseCase(store: CloudSaveSyncSettings.shared)
     }
 
     // MARK: - Save/State Sync Use Cases

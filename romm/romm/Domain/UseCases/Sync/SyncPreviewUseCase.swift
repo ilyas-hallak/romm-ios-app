@@ -48,22 +48,23 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
         let localSaves = collectBatterySaves()
         logger.info("Sync preview: reporting \(localSaves.count) battery saves as device \(deviceId)")
 
-        let response: SyncNegotiateResponse
+        let negotiated: (response: SyncNegotiateResponse, deviceId: String)
         do {
-            response = try await apiClient.negotiateSync(
-                SyncNegotiateRequest(deviceId: deviceId, saves: localSaves)
-            )
+            negotiated = try await negotiate(deviceId: deviceId, saves: localSaves)
+        } catch let error as SyncPreviewError {
+            throw error
         } catch {
             logger.warning("Sync preview failed: \(error.localizedDescription)")
             throw SyncPreviewError.negotiationFailed(error.localizedDescription)
         }
+        let response = negotiated.response
 
         logger.info("Sync preview: \(response.operations.count) operations "
             + "(up=\(response.totalUpload ?? 0) down=\(response.totalDownload ?? 0) "
             + "conflict=\(response.totalConflict ?? 0) noop=\(response.totalNoOp ?? 0))")
 
         return SyncPreview(
-            deviceId: deviceId,
+            deviceId: negotiated.deviceId,
             reportedSaveCount: localSaves.count,
             operations: response.operations.compactMap(Self.previewOperation),
             sessionId: response.sessionId
@@ -71,6 +72,35 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
     }
 
     // MARK: - Private
+
+    /// Negotiates, and registers again when the server does not know this
+    /// device any more.
+    ///
+    /// The device id is stored once and kept, so a server that lost its device
+    /// row (a reset database, a restored backup) answers every later negotiate
+    /// with a 404 and sync stays broken for good. Registering again costs one
+    /// request and is the only way back.
+    private func negotiate(
+        deviceId: String,
+        saves: [ClientSaveState]
+    ) async throws -> (response: SyncNegotiateResponse, deviceId: String) {
+        do {
+            let response = try await apiClient.negotiateSync(
+                SyncNegotiateRequest(deviceId: deviceId, saves: saves)
+            )
+            return (response, deviceId)
+        } catch APIClientError.invalidResponse(404, let message) {
+            logger.warning("Server does not know device \(deviceId) (\(message)), registering again")
+            syncDevice.forgetDevice()
+            guard let freshId = await syncDevice.deviceId(), freshId != deviceId else {
+                throw SyncPreviewError.deviceRegistrationFailed
+            }
+            let response = try await apiClient.negotiateSync(
+                SyncNegotiateRequest(deviceId: freshId, saves: saves)
+            )
+            return (response, freshId)
+        }
+    }
 
     /// Every battery save on this device, reported under the battery slot,
     /// without which the server pairs nothing.

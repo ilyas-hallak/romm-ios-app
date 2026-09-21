@@ -22,9 +22,10 @@ private final class FakeSyncPreviewUseCase: PSyncPreviewUseCase, @unchecked Send
 private final class AccountTestFactory: MockDependencyFactory {
     let previewUseCase: FakeSyncPreviewUseCase
 
-    init(previewResult: Result<SyncPreview, Error>) {
+    init(previewResult: Result<SyncPreview, Error>, lastRun: SaveSyncOutcome? = nil) {
         self.previewUseCase = FakeSyncPreviewUseCase(result: previewResult)
         super.init(apiClient: FakeAPIClient())
+        saveSyncOutcomeStore = InMemorySaveSyncOutcomeStore(outcome: lastRun)
     }
 
     override func makeSyncPreviewUseCase() -> PSyncPreviewUseCase { previewUseCase }
@@ -39,10 +40,11 @@ private final class FakeCloudSyncSettings: PCloudSaveSyncSettings {
 struct AccountViewModelTests {
 
     private func makeViewModel(
-        previewResult: Result<SyncPreview, Error>,
+        previewResult: Result<SyncPreview, Error> = .success(upToDatePlan),
+        lastRun: SaveSyncOutcome? = nil,
         syncEnabled: Bool = true
     ) -> (AccountViewModel, AccountTestFactory) {
-        let factory = AccountTestFactory(previewResult: previewResult)
+        let factory = AccountTestFactory(previewResult: previewResult, lastRun: lastRun)
         let viewModel = AccountViewModel(
             factory: factory,
             syncSettings: FakeCloudSyncSettings(isEnabled: syncEnabled)
@@ -50,35 +52,77 @@ struct AccountViewModelTests {
         return (viewModel, factory)
     }
 
-    @Test func aLoadedPlanBecomesTheStatusOnTheAccountButton() async {
-        let plan = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let (viewModel, _) = makeViewModel(previewResult: .success(plan))
+    private static let upToDatePlan = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
 
-        await viewModel.refreshSyncStatus()
+    // MARK: - What Home shows
 
-        #expect(viewModel.syncStatus == .synced)
+    /// The whole point of the rework: Home paints the badge from what is
+    /// already known, and never negotiates on its own. Negotiating opens a
+    /// session on the server and cancels the one the Save Sync screen holds.
+    @Test func loadingTheRecordedStatusNeverAsksTheServer() {
+        let outcome = SaveSyncOutcome(date: Date(), uploaded: 1, downloaded: 0, conflicts: 0, failed: 0)
+        let (viewModel, factory) = makeViewModel(lastRun: outcome)
+
+        viewModel.loadRecordedStatus()
+
+        #expect(viewModel.syncStatus == .synced(at: outcome.date))
+        #expect(factory.previewUseCase.callCount == 0)
     }
 
-    @Test func aFailedNegotiationBecomesTheStatusItDescribes() async {
+    /// Nothing synced yet is not a failure, and must not be drawn as one.
+    @Test func withNoRunRecordedTheStatusIsUnknownAndCarriesNoBadge() {
+        let (viewModel, _) = makeViewModel(lastRun: nil)
+
+        viewModel.loadRecordedStatus()
+
+        #expect(viewModel.syncStatus == .unknown)
+        #expect(viewModel.syncStatus.badgeIcon == nil)
+        #expect(viewModel.canCheckNow)
+    }
+
+    @Test func withSyncSwitchedOffNothingIsReportedAndNoCheckIsOffered() {
+        let outcome = SaveSyncOutcome(date: Date(), uploaded: 0, downloaded: 0, conflicts: 0, failed: 2)
+        let (viewModel, factory) = makeViewModel(lastRun: outcome, syncEnabled: false)
+
+        viewModel.loadRecordedStatus()
+
+        #expect(viewModel.syncStatus == .off)
+        #expect(viewModel.syncStatus.badgeIcon == nil)
+        #expect(viewModel.canCheckNow == false)
+        #expect(factory.previewUseCase.callCount == 0)
+    }
+
+    // MARK: - The check the user asks for
+
+    @Test func checkingAsksTheServerAndShowsWhatItPlanned() async {
+        let (viewModel, factory) = makeViewModel(previewResult: .success(Self.upToDatePlan))
+
+        await viewModel.checkNow()
+
+        #expect(viewModel.syncStatus == .synced(at: nil))
+        #expect(factory.previewUseCase.callCount == 1)
+    }
+
+    @Test func aFailedCheckBecomesTheStatusItDescribes() async {
         let (viewModel, _) = makeViewModel(previewResult: .failure(SyncPreviewError.serverTooOld(version: "4.8.1")))
 
-        await viewModel.refreshSyncStatus()
+        await viewModel.checkNow()
 
         #expect(viewModel.syncStatus == .unavailable(
             reason: SyncPreviewError.serverTooOld(version: "4.8.1").localizedDescription
         ))
     }
 
-    /// Negotiating reports every battery save on the device, so a user who
-    /// never switched sync on must not pay for a request they cannot use.
-    @Test func withSyncSwitchedOffTheServerIsNeverAsked() async {
-        let plan = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let (viewModel, factory) = makeViewModel(previewResult: .success(plan), syncEnabled: false)
+    /// Coming back to Home re-reads the recorded run, which is older than the
+    /// answer the user just asked for. It must not overwrite it.
+    @Test func aFreshCheckSurvivesReturningToHome() async {
+        let stale = SaveSyncOutcome(date: Date(timeIntervalSince1970: 0), uploaded: 0, downloaded: 0, conflicts: 0, failed: 3)
+        let (viewModel, _) = makeViewModel(previewResult: .success(Self.upToDatePlan), lastRun: stale)
 
-        await viewModel.refreshSyncStatus()
+        await viewModel.checkNow()
+        viewModel.loadRecordedStatus()
 
-        #expect(viewModel.syncStatus == .off)
-        #expect(factory.previewUseCase.callCount == 0)
+        #expect(viewModel.syncStatus == .synced(at: nil))
     }
 
     // MARK: - Avatar

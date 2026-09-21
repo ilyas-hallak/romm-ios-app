@@ -72,6 +72,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
     private let downloadStateUseCase: PDownloadStateUseCase
     private let completeSyncSessionUseCase: PCompleteSyncSessionUseCase
     private let externalSaveFolderStore: PExternalSaveFolderStore
+    private let recordRunUseCase: PRecordSaveSyncRunUseCase
 
     init(
         saveStore: PSaveStore,
@@ -84,7 +85,8 @@ final class SaveSyncRunner: PSaveSyncRunner {
         updateStateUseCase: PUpdateStateUseCase,
         downloadStateUseCase: PDownloadStateUseCase,
         completeSyncSessionUseCase: PCompleteSyncSessionUseCase,
-        externalSaveFolderStore: PExternalSaveFolderStore
+        externalSaveFolderStore: PExternalSaveFolderStore,
+        recordRunUseCase: PRecordSaveSyncRunUseCase
     ) {
         self.saveStore = saveStore
         self.uploadSaveUseCase = uploadSaveUseCase
@@ -97,6 +99,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
         self.downloadStateUseCase = downloadStateUseCase
         self.completeSyncSessionUseCase = completeSyncSessionUseCase
         self.externalSaveFolderStore = externalSaveFolderStore
+        self.recordRunUseCase = recordRunUseCase
     }
 
     func run(
@@ -146,6 +149,17 @@ final class SaveSyncRunner: PSaveSyncRunner {
         logger.info("Manual sync finished: uploaded=\(report.uploaded) "
             + "downloaded=\(report.downloaded) conflicts=\(report.skippedConflicts) "
             + "skipped=\(report.skipped) failed=\(report.failed)")
+
+        // What the account badge reads. Recorded here because this is the one
+        // place a whole run ends with a real result, so the badge never has to
+        // negotiate with the server just to have something to show.
+        recordRunUseCase.execute(SaveSyncOutcome(
+            date: Date(),
+            uploaded: report.uploaded,
+            downloaded: report.downloaded,
+            conflicts: report.skippedConflicts,
+            failed: report.failed
+        ))
 
         // Purely the server's own bookkeeping (see CompleteSyncSessionUseCase),
         // and only meaningful when negotiate actually opened a session.

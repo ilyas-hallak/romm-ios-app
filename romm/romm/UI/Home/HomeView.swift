@@ -34,10 +34,11 @@ struct HomeView: View {
             .sheet(isPresented: $showingAccount, onDismiss: pushPendingDestination) {
                 AccountSheet(
                     avatarURLString: accountViewModel.avatarURL(for: appData.currentUser),
-                    syncStatus: accountViewModel.syncStatus
-                ) { picked in
-                    pendingDestination = picked
-                }
+                    syncStatus: accountViewModel.syncStatus,
+                    canCheckSync: accountViewModel.canCheckNow,
+                    onSelect: { pendingDestination = $0 },
+                    onCheckSync: { Task { await accountViewModel.checkNow() } }
+                )
             }
             .navigationDestination(item: $destination) { destination in
                 switch destination {
@@ -48,16 +49,17 @@ struct HomeView: View {
             }
             .refreshable {
                 await viewModel.load()
-                await accountViewModel.refreshSyncStatus()
             }
             .task {
                 if !viewModel.hasStartedLoading {
                     await viewModel.load()
-                    // Asking the server for a sync plan reports every battery
-                    // save on this device, so it runs with the first load and
-                    // on pull to refresh, not on every return to Home.
-                    await accountViewModel.refreshSyncStatus()
                 }
+            }
+            // Local and free, so it can run on every appearance and pick up a
+            // sync that finished on the Save Sync screen. The badge never
+            // negotiates on its own, see AccountViewModel.
+            .onAppear {
+                accountViewModel.loadRecordedStatus()
             }
     }
 

@@ -1,17 +1,20 @@
 import SwiftUI
 
-/// How the last save sync went, in the one line the account button and the
-/// account sheet have room for.
+/// How saving last went, in the one line the account button and the account
+/// sheet have room for.
 ///
-/// Derived from the plan the server answers with, so it says what a sync would
-/// do rather than what the app believes it did. That is the question after a
-/// game came back from RetroArch, Delta or Manic EMU: was the state taken up.
+/// The badge sits on the user's own face, so it has to be conservative: it only
+/// ever alarms about something that actually happened. Nothing known yet is
+/// ``unknown`` and draws no badge at all, rather than a red mark for a sync
+/// that was never even attempted.
 enum SaveSyncStatus: Equatable {
     /// Cloud save sync is switched off, so there is nothing to report.
     case off
+    /// No sync has finished on this device yet, and none has been asked for.
+    case unknown
     case checking
-    case synced
-    /// Saves would move, worded the way the Save Sync screen words it.
+    case synced(at: Date?)
+    /// A check found saves that would move, worded the way Save Sync words it.
     case pending(summary: String)
     case conflict(count: Int)
     /// The server cannot sync at all, for example because it predates the API.
@@ -22,15 +25,29 @@ enum SaveSyncStatus: Equatable {
 // MARK: - Derivation
 
 extension SaveSyncStatus {
-    /// Conflicts win over the plain counts: a save neither side can claim is
-    /// the one thing here the user has to act on.
+    /// What a finished run leaves behind. Failures outrank conflicts, which
+    /// outrank the plain counts: the badge shows the worst thing that happened,
+    /// since that is the only part the user may need to act on.
+    init(run: SaveSyncOutcome) {
+        if run.failed > 0 {
+            self = .failed(reason: run.failed == 1
+                ? String(localized: "The last sync could not transfer 1 save.")
+                : String(localized: "The last sync could not transfer \(run.failed) saves."))
+        } else if run.conflicts > 0 {
+            self = .conflict(count: run.conflicts)
+        } else {
+            self = .synced(at: run.date)
+        }
+    }
+
+    /// What a check found. Conflicts outrank the counts for the same reason.
     init(preview: SyncPreview) {
         if !preview.conflicts.isEmpty {
             self = .conflict(count: preview.conflicts.count)
         } else if let summary = preview.changeSummary {
             self = .pending(summary: summary)
         } else {
-            self = .synced
+            self = .synced(at: nil)
         }
     }
 
@@ -50,11 +67,11 @@ extension SaveSyncStatus {
 // MARK: - Presentation
 
 extension SaveSyncStatus {
-    /// The badge drawn on the account button, or nil while there is nothing
-    /// worth putting there.
+    /// The badge drawn on the account button. Nil for every state that has not
+    /// established anything, so an untouched app shows a plain avatar.
     var badgeIcon: String? {
         switch self {
-        case .off, .checking: return nil
+        case .off, .unknown, .checking: return nil
         case .synced: return "checkmark.circle.fill"
         case .pending: return "arrow.triangle.2.circlepath.circle.fill"
         case .conflict: return "exclamationmark.circle.fill"
@@ -65,7 +82,7 @@ extension SaveSyncStatus {
 
     var tint: Color {
         switch self {
-        case .off, .checking, .unavailable: return .secondary
+        case .off, .unknown, .checking, .unavailable: return .secondary
         case .synced: return .green
         case .pending: return .blue
         case .conflict: return .orange
@@ -77,8 +94,11 @@ extension SaveSyncStatus {
     var detail: String {
         switch self {
         case .off: return String(localized: "Off")
+        case .unknown: return String(localized: "Not checked yet")
         case .checking: return String(localized: "Checking…")
-        case .synced: return String(localized: "Up to date")
+        case .synced(let date):
+            guard let date else { return String(localized: "Up to date") }
+            return String(localized: "Synced \(date.formatted(.relative(presentation: .named)))")
         case .pending(let summary): return summary
         case .conflict(let count):
             return count == 1
@@ -93,8 +113,12 @@ extension SaveSyncStatus {
     /// user guessing. Nil when the detail already says it all.
     var explanation: String? {
         switch self {
-        case .unavailable(let reason), .failed(let reason): return reason
-        default: return nil
+        case .unknown:
+            return String(localized: "Nothing has been synced on this device yet. Check now to see where your saves stand.")
+        case .unavailable(let reason), .failed(let reason):
+            return reason
+        default:
+            return nil
         }
     }
 

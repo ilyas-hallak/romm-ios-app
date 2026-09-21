@@ -20,7 +20,9 @@ struct AccountSheet: View {
 
     let avatarURLString: String?
     let syncStatus: SaveSyncStatus
+    let canCheckSync: Bool
     let onSelect: (AccountDestination) -> Void
+    let onCheckSync: () -> Void
 
     @State private var profileViewModel = ProfileViewModel()
     @State private var showingHelp = false
@@ -130,11 +132,27 @@ struct AccountSheet: View {
                     }
                 }
             }
+
+            // The status is only ever as fresh as the last finished sync, so
+            // this is the one way to go and ask. Deliberately a tap rather than
+            // something the app does on its own: asking opens a session on the
+            // server and cancels the one the Save Sync screen may be holding.
+            if canCheckSync {
+                Button(action: onCheckSync) {
+                    Label("Check now", systemImage: "arrow.clockwise")
+                }
+                .disabled(isChecking)
+            }
         } footer: {
             if let explanation = syncStatus.explanation {
                 Text(explanation)
             }
         }
+    }
+
+    private var isChecking: Bool {
+        if case .checking = syncStatus { return true }
+        return false
     }
 
     private var settingsSection: some View {
@@ -208,13 +226,29 @@ struct AccountSheet: View {
     }
 }
 
+#Preview("Nothing checked yet") {
+    Text("Home")
+        .sheet(isPresented: .constant(true)) {
+            AccountSheet(
+                avatarURLString: nil,
+                syncStatus: .unknown,
+                canCheckSync: true,
+                onSelect: { _ in },
+                onCheckSync: {}
+            )
+            .environmentObject(AppData())
+        }
+}
+
 #Preview("Pending sync") {
     Text("Home")
         .sheet(isPresented: .constant(true)) {
             AccountSheet(
                 avatarURLString: nil,
                 syncStatus: .pending(summary: "2 up, 1 down"),
-                onSelect: { _ in }
+                canCheckSync: true,
+                onSelect: { _ in },
+                onCheckSync: {}
             )
             .environmentObject(AppData())
         }
@@ -226,7 +260,9 @@ struct AccountSheet: View {
             AccountSheet(
                 avatarURLString: nil,
                 syncStatus: SaveSyncStatus(error: .serverTooOld(version: "4.8.1")),
-                onSelect: { _ in }
+                canCheckSync: true,
+                onSelect: { _ in },
+                onCheckSync: {}
             )
             .environmentObject(AppData())
         }
