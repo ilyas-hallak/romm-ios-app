@@ -12,7 +12,7 @@ import AVFoundation
 /// Status: PCSX ReARMed Bring-Up. Video als RGB565/XRGB8888 Software-Blit auf
 /// ein CALayer (siehe `LibretroVideoView`). Audio TODO. Input TODO.
 @MainActor
-final class LibretroFrontend {
+final class LibretroFrontend: PAchievementMemoryProvider {
 
     // MARK: - Singleton (für C-Callbacks)
     static let shared = LibretroFrontend()
@@ -85,6 +85,8 @@ final class LibretroFrontend {
     var sramURL: URL?
 
     weak var videoSink: LibretroVideoSink?
+    /// Invoked after each completed core frame while the memory map is valid.
+    var onFrameCompleted: (() -> Void)?
 
     // MARK: - Input state (Joypad port 0)
     /// Index = JoypadButton.rawValue. Atomar via MainActor-Isolation.
@@ -382,6 +384,7 @@ final class LibretroFrontend {
             // call and would run at double speed.
             guard !coreIsAheadOfAudio() else { throttled += 1; break }
             retro_run?()
+            onFrameCompleted?()
             runs += 1
         }
 
@@ -529,6 +532,20 @@ final class LibretroFrontend {
             guard let base = raw.baseAddress else { return false }
             return unserFn(base, data.count)
         }
+    }
+
+    /// Returns a copied slice of system memory so achievement evaluation never
+    /// retains a pointer owned by the currently loaded libretro core.
+    func readMemory(address: UInt32, length: Int) -> Data? {
+        guard length > 0,
+              let memory = retro_get_memory_data?(LibretroABI.MEMORY_SYSTEM_RAM),
+              let size = retro_get_memory_size?(LibretroABI.MEMORY_SYSTEM_RAM) else {
+            return nil
+        }
+
+        let offset = Int(address)
+        guard offset >= 0, offset <= size, length <= size - offset else { return nil }
+        return Data(bytes: memory.advanced(by: offset), count: length)
     }
 
     // MARK: - Symbol resolution
