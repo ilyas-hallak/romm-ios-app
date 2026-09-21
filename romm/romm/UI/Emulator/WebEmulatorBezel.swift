@@ -61,6 +61,7 @@ private struct WebEmulatorBezelModifier: ViewModifier {
                 .aspectRatio(contentMode: .fit)
                 .frame(height: logoHeight)
                 .opacity(0.75)
+                .accessibilityHidden(true)
         }
     }
 
