@@ -8,6 +8,11 @@ struct LibretroEmulatorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Observed only to react to Phone as Controller's inputs (display
+    /// connection, the preference toggle); `.playOnTV` below owns the rest of
+    /// the external-display wiring.
+    @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
+
     private let resumeSlot: Int?
 
     init(rom: Rom, core: LibretroCore, resumeSlot: Int? = nil, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
@@ -49,6 +54,8 @@ struct LibretroEmulatorView: View {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.onMenuRequested = { showMenu = true }
             viewModel.bootstrap(resumeSlot: resumeSlot)
+            // Set the starting state outright, see the native path.
+            viewModel.session?.updatePhoneVideoVisibility()
         }
         .onDisappear {
             viewModel.teardown()
@@ -69,6 +76,8 @@ struct LibretroEmulatorView: View {
             @unknown default: break
             }
         }
+        .onChange(of: externalDisplay.isActive) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }
+        .onChange(of: externalDisplay.isPhoneControllerOnlyEnabled) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }
         .onChange(of: showMenu) { _, presented in
             // Skip resume when the user is quitting — the emulator is about
             // to be torn down, kicking the core run-loop back to life would
