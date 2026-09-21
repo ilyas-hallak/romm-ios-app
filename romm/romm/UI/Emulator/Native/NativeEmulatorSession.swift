@@ -76,7 +76,7 @@ final class RommGameViewController: GameViewController {
     /// the views from the skin's screens in exactly that order.
     private var touchScreenFlags: [Bool] {
         ExternalDisplayPolicy.touchScreenFlags(
-            isTouchScreen: skinTouchScreenFlags,
+            fromSkin: skinTouchScreenFlags,
             gameViewCount: gameViews.count
         )
     }
