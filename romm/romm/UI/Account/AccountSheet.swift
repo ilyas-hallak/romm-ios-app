@@ -23,7 +23,9 @@ struct AccountSheet: View {
     let syncStatus: SaveSyncStatus
     let canCheckSync: Bool
     let isChecking: Bool
-    let changelog: String
+    /// Read only when the history is actually opened: it comes off disk
+    /// uncached, and this view is rebuilt whenever the sync status ticks over.
+    let changelog: () -> String
     let onSelect: (AccountDestination) -> Void
     let onCheckSync: () -> Void
 
@@ -62,7 +64,7 @@ struct AccountSheet: View {
         }
         .sheet(isPresented: $showingVersionHistory) {
             // The whole history, and no mark-seen side effect.
-            ChangelogView(markdown: changelog, mode: .versionHistory)
+            ChangelogView(markdown: changelog(), mode: .versionHistory)
         }
     }
 
@@ -228,7 +230,7 @@ struct AccountSheet: View {
                 syncStatus: .unknown,
                 canCheckSync: true,
                 isChecking: false,
-                changelog: "# 1.0.0\n- Erster Eintrag",
+                changelog: { "# 1.0.0\n- Erster Eintrag" },
                 onSelect: { _ in },
                 onCheckSync: {}
             )
@@ -244,7 +246,7 @@ struct AccountSheet: View {
                 syncStatus: .pending(summary: "2 up, 1 down"),
                 canCheckSync: true,
                 isChecking: false,
-                changelog: "# 1.0.0\n- Erster Eintrag",
+                changelog: { "# 1.0.0\n- Erster Eintrag" },
                 onSelect: { _ in },
                 onCheckSync: {}
             )
@@ -260,7 +262,7 @@ struct AccountSheet: View {
                 syncStatus: SaveSyncStatus(error: .serverTooOld(version: "4.8.1")),
                 canCheckSync: true,
                 isChecking: false,
-                changelog: "# 1.0.0\n- Erster Eintrag",
+                changelog: { "# 1.0.0\n- Erster Eintrag" },
                 onSelect: { _ in },
                 onCheckSync: {}
             )
