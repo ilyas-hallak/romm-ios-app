@@ -53,9 +53,10 @@ struct LibretroEmulatorView: View {
         .onAppear {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.onMenuRequested = { showMenu = true }
+            // No starting state to set here, unlike the native path: this
+            // bootstrap is async, so the session does not exist yet. The view
+            // controller sets it itself once it loads.
             viewModel.bootstrap(resumeSlot: resumeSlot)
-            // Set the starting state outright, see the native path.
-            viewModel.session?.updatePhoneVideoVisibility()
         }
         .onDisappear {
             viewModel.teardown()
