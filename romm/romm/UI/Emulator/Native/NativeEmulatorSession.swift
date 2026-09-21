@@ -75,22 +75,18 @@ final class RommGameViewController: GameViewController {
     /// One flag per entry in `gameViews`, in the same order: DeltaCore builds
     /// the views from the skin's screens in exactly that order.
     private var touchScreenFlags: [Bool] {
+        ExternalDisplayPolicy.touchScreenFlags(
+            isTouchScreen: skinTouchScreenFlags,
+            gameViewCount: gameViews.count
+        )
+    }
+
+    /// What the skin says about its screens, or nil until the traits are set,
+    /// which happens from the first layout pass on.
+    private var skinTouchScreenFlags: [Bool]? {
         guard let traits = controllerView?.controllerSkinTraits,
               let screens = controllerView?.controllerSkin?.screens(for: traits)
-        else {
-            // Traits are only set from the first layout pass on, so nothing is
-            // known about the screens yet. Assume every view is a touch screen,
-            // so an early call cannot hide the one the player taps on.
-            return [Bool](repeating: true, count: gameViews.count)
-        }
-
-        guard screens.count == gameViews.count else {
-            // DeltaCore collapses the screens into one in a few cases the raw
-            // skin does not report, so the order no longer maps. Rather than
-            // guess, keep every view of a system that has a touch screen at all.
-            let hasTouchScreen = screens.contains(where: \.isTouchScreen)
-            return [Bool](repeating: hasTouchScreen, count: gameViews.count)
-        }
+        else { return nil }
         return screens.map(\.isTouchScreen)
     }
 

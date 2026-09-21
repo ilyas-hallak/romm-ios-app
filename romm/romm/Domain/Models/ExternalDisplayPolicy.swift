@@ -50,4 +50,26 @@ enum ExternalDisplayPolicy {
     ) -> Bool {
         isRenderingExternally && isPhoneControllerOnlyEnabled && !areTouchControlsHidden
     }
+
+    /// One flag per game view, saying whether that view may be hidden while the
+    /// phone acts as a controller. A touch screen never may: on the DS the lower
+    /// screen is what the player taps on, hiding it would mean tapping blind.
+    ///
+    /// - Parameter isTouchScreen: The skin's answer per screen, or nil while the
+    ///   skin or its traits are not known yet, which is the case until the first
+    ///   layout pass.
+    static func touchScreenFlags(isTouchScreen: [Bool]?, gameViewCount: Int) -> [Bool] {
+        guard let isTouchScreen else {
+            // Nothing is known about the screens, so assume the worst and keep
+            // every view, rather than hide the one the player taps on.
+            return [Bool](repeating: true, count: gameViewCount)
+        }
+        guard isTouchScreen.count == gameViewCount else {
+            // DeltaCore collapses the screens into one in a few cases the raw
+            // skin does not report, so the order no longer maps. Rather than
+            // guess, keep every view of a system that has a touch screen at all.
+            return [Bool](repeating: isTouchScreen.contains(true), count: gameViewCount)
+        }
+        return isTouchScreen
+    }
 }

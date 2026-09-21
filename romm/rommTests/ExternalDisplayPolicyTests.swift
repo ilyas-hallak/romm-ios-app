@@ -107,6 +107,36 @@ struct ExternalDisplayPolicyTests {
             areTouchControlsHidden: true
         ))
     }
+
+    // MARK: - Which views may be hidden
+
+    /// Until the first layout pass the traits are not set, so the skin cannot
+    /// say which screen is which.
+    @Test func keepsEveryViewWhenTheSkinIsNotKnownYet() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            isTouchScreen: nil, gameViewCount: 2
+        ) == [true, true])
+    }
+
+    @Test func mapsTheSkinsScreensOneToOne() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            isTouchScreen: [false, true], gameViewCount: 2
+        ) == [false, true])
+    }
+
+    /// The counts disagree, so the order no longer maps. A system with a touch
+    /// screen keeps every view rather than risk hiding the wrong one.
+    @Test func keepsEveryViewWhenTheCountsDisagreeAndATouchScreenExists() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            isTouchScreen: [true], gameViewCount: 2
+        ) == [true, true])
+    }
+
+    @Test func releasesEveryViewWhenTheCountsDisagreeWithoutATouchScreen() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            isTouchScreen: [false], gameViewCount: 2
+        ) == [false, false])
+    }
 }
 
 struct PhoneScreenBlankerTests {
