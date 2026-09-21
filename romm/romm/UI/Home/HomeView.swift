@@ -37,6 +37,7 @@ struct HomeView: View {
                     syncStatus: accountViewModel.syncStatus,
                     canCheckSync: accountViewModel.reportsSyncStatus,
                     isChecking: accountViewModel.isChecking,
+                    changelog: accountViewModel.changelog,
                     onSelect: { pendingDestination = $0 },
                     onCheckSync: { Task { await accountViewModel.checkNow() } }
                 )
@@ -46,6 +47,7 @@ struct HomeView: View {
                 case .saveSync: SyncOverviewView()
                 case .settings: SettingsView()
                 case .statistics: StatsView()
+                case .retroAchievements: RetroAchievementsSettingsView()
                 }
             }
             .refreshable {

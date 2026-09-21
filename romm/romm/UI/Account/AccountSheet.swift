@@ -6,14 +6,15 @@ enum AccountDestination: Hashable {
     case saveSync
     case settings
     case statistics
+    case retroAchievements
 }
 
 /// The account behind the avatar on Home, the way the web app hangs its
 /// settings off the signed in user.
 ///
-/// Everything about the account lives here: who is signed in, which server,
-/// how saves last synced, and the way out. Settings itself stays a screen of
-/// its own and is reached from here.
+/// Holds what a user reaches for often: who is signed in, how saves last
+/// synced, what the server knows, and the two pages about the app itself.
+/// Everything else, signing out included, lives behind Settings.
 struct AccountSheet: View {
     @EnvironmentObject var appData: AppData
     @Environment(\.dismiss) private var dismiss
@@ -22,13 +23,12 @@ struct AccountSheet: View {
     let syncStatus: SaveSyncStatus
     let canCheckSync: Bool
     let isChecking: Bool
+    let changelog: String
     let onSelect: (AccountDestination) -> Void
     let onCheckSync: () -> Void
 
-    @State private var profileViewModel = ProfileViewModel()
     @State private var showingHelp = false
-    @State private var showingLogoutAlert = false
-    @State private var showingResetAlert = false
+    @State private var showingVersionHistory = false
 
     var body: some View {
         NavigationStack {
@@ -38,7 +38,8 @@ struct AccountSheet: View {
                 saveSyncSection
                 #endif
                 settingsSection
-                accountSection
+                serverSection
+                aboutSection
             }
             .listSectionSpacing(.compact)
             .navigationBarTitleDisplayMode(.inline)
@@ -59,21 +60,9 @@ struct AccountSheet: View {
         .sheet(isPresented: $showingHelp) {
             HelpView()
         }
-        .alert("Logout", isPresented: $showingLogoutAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Logout", role: .destructive) {
-                dismissThen { profileViewModel.logout() }
-            }
-        } message: {
-            Text("Are you sure you want to logout?")
-        }
-        .alert("Reset Configuration", isPresented: $showingResetAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Reset", role: .destructive) {
-                dismissThen { profileViewModel.restartSetup() }
-            }
-        } message: {
-            Text("This will delete all configuration settings including your server connection and credentials. You will be returned to the setup screen.")
+        .sheet(isPresented: $showingVersionHistory) {
+            // The whole history, and no mark-seen side effect.
+            ChangelogView(markdown: changelog, mode: .versionHistory)
         }
     }
 
@@ -160,7 +149,12 @@ struct AccountSheet: View {
             } label: {
                 row(icon: "gearshape", title: String(localized: "Settings"))
             }
+        }
+    }
 
+    /// What the server knows, as opposed to what the app is set to.
+    private var serverSection: some View {
+        Section {
             Button {
                 select(.statistics)
             } label: {
@@ -168,28 +162,30 @@ struct AccountSheet: View {
             }
 
             Button {
-                showingHelp = true
+                select(.retroAchievements)
             } label: {
-                row(icon: "questionmark.circle", title: String(localized: "Help"))
+                row(icon: "trophy", title: String(localized: "RetroAchievements")) {
+                    Text(appData.currentUser?.linkedRetroAchievementsUsername
+                        ?? String(localized: "Not linked"))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
 
-    private var accountSection: some View {
+    /// The two pages about the app itself.
+    private var aboutSection: some View {
         Section {
-            Button(role: .destructive) {
-                showingLogoutAlert = true
+            Button {
+                showingHelp = true
             } label: {
-                Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                row(icon: "questionmark.circle", title: String(localized: "Help"))
             }
 
-            if appData.currentConfiguration != nil {
-                Button {
-                    showingResetAlert = true
-                } label: {
-                    Label("Reset Configuration", systemImage: "arrow.clockwise")
-                        .foregroundStyle(.orange)
-                }
+            Button {
+                showingVersionHistory = true
+            } label: {
+                row(icon: "clock.arrow.circlepath", title: String(localized: "Version History"))
             }
         }
     }
@@ -222,13 +218,6 @@ struct AccountSheet: View {
         onSelect(destination)
         dismiss()
     }
-
-    /// Both of these swap the whole root view out from under this sheet, so it
-    /// has to be on its way out before they run.
-    private func dismissThen(_ action: () -> Void) {
-        dismiss()
-        action()
-    }
 }
 
 #Preview("Nothing checked yet") {
@@ -239,6 +228,7 @@ struct AccountSheet: View {
                 syncStatus: .unknown,
                 canCheckSync: true,
                 isChecking: false,
+                changelog: "# 1.0.0\n- Erster Eintrag",
                 onSelect: { _ in },
                 onCheckSync: {}
             )
@@ -254,6 +244,7 @@ struct AccountSheet: View {
                 syncStatus: .pending(summary: "2 up, 1 down"),
                 canCheckSync: true,
                 isChecking: false,
+                changelog: "# 1.0.0\n- Erster Eintrag",
                 onSelect: { _ in },
                 onCheckSync: {}
             )
@@ -269,6 +260,7 @@ struct AccountSheet: View {
                 syncStatus: SaveSyncStatus(error: .serverTooOld(version: "4.8.1")),
                 canCheckSync: true,
                 isChecking: false,
+                changelog: "# 1.0.0\n- Erster Eintrag",
                 onSelect: { _ in },
                 onCheckSync: {}
             )

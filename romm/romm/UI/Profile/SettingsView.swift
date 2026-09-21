@@ -7,15 +7,16 @@
 
 import SwiftUI
 
-/// The app's own settings. Who is signed in, which server, and the way out of
-/// both live in ``AccountSheet``, which is also what opens this screen.
+/// The app's own settings, plus signing out. Who is signed in, which server,
+/// and the pages about the app live in ``AccountSheet``, which is also what
+/// opens this screen.
 struct SettingsView: View {
     @EnvironmentObject var appData: AppData
     @State private var profileViewModel = ProfileViewModel()
     @StateObject private var experimentalSettings = ExperimentalFeatureSettings.shared
     @StateObject private var cloudSyncSettings = CloudSaveSyncSettings.shared
-    @State private var showingWhatsNew = false
-    private let updateStore: AppUpdateStore = DefaultDependencyFactory.shared.appUpdateStore
+    @State private var showingLogoutAlert = false
+    @State private var showingResetAlert = false
     private let enginePreference: PEmulatorEnginePreference = DefaultDependencyFactory.shared.enginePreference
     private let playTargetPreference: PPlayTargetPreference = DefaultDependencyFactory.shared.playTargetPreference
     /// Read on appear rather than computed, so coming back from the engine
@@ -67,6 +68,28 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var profileVM = profileViewModel
         return List {
+            // Signing out and starting over. Who is signed in and on which
+            // server is shown in the account itself, see AccountSheet, this is
+            // only the pair of actions, kept out of a menu one taps by mistake.
+            Section {
+                Button(role: .destructive) {
+                    showingLogoutAlert = true
+                } label: {
+                    Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+
+                if appData.currentConfiguration != nil {
+                    Button {
+                        showingResetAlert = true
+                    } label: {
+                        Label("Reset Configuration", systemImage: "arrow.clockwise")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            } header: {
+                Text("RomM account")
+            }
+
             // Platforms Section
             Section {
                 Toggle(isOn: $profileVM.groupRomsByMetaId) {
@@ -87,16 +110,6 @@ struct SettingsView: View {
             // App Settings Section
             Section("App Settings") {
                 UpdateAvailableRow()
-
-                Button {
-                    showingWhatsNew = true
-                } label: {
-                    HStack {
-                        Image(systemName: "clock.arrow.circlepath")
-                        Text("Version History")
-                    }
-                    .foregroundStyle(.primary)
-                }
 
                 // Logging Configuration (TestFlight & Debug only)
                 if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
@@ -179,19 +192,6 @@ struct SettingsView: View {
                             }
                         }
 
-                        NavigationLink(destination: RetroAchievementsSettingsView()) {
-                            HStack {
-                                Image(systemName: "trophy.fill")
-                                    .foregroundStyle(.orange)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("RetroAchievements")
-                                    Text(appData.currentUser?.linkedRetroAchievementsUsername ?? "No account linked")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-
                         Toggle(isOn: $cloudSyncSettings.isEnabled) {
                             HStack {
                                 Image(systemName: "icloud.and.arrow.up")
@@ -241,9 +241,21 @@ struct SettingsView: View {
         .onAppear {
             refreshPlayDestination()
         }
-        .sheet(isPresented: $showingWhatsNew) {
-            // The whole history from Settings, and no mark-seen side effect.
-            ChangelogView(markdown: updateStore.changelog, mode: .versionHistory)
+        .alert("Logout", isPresented: $showingLogoutAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Logout", role: .destructive) {
+                profileViewModel.logout()
+            }
+        } message: {
+            Text("Are you sure you want to logout?")
+        }
+        .alert("Reset Configuration", isPresented: $showingResetAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) {
+                profileViewModel.restartSetup()
+            }
+        } message: {
+            Text("This will delete all configuration settings including your server connection and credentials. You will be returned to the setup screen.")
         }
     }
 }

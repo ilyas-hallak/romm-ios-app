@@ -20,6 +20,7 @@ final class AccountViewModel {
     private let getLastRun: PGetLastSaveSyncRunUseCase
     private let syncSettings: PCloudSaveSyncSettings
     private let tokenProvider: PTokenProvider
+    private let updateStore: AppUpdateStore
 
     init(
         factory: PDependencyFactory = DefaultDependencyFactory.shared,
@@ -29,7 +30,11 @@ final class AccountViewModel {
         self.getLastRun = factory.makeGetLastSaveSyncRunUseCase()
         self.syncSettings = syncSettings
         self.tokenProvider = factory.tokenProvider
+        self.updateStore = factory.appUpdateStore
     }
+
+    /// The whole version history, for the account's Version History entry.
+    var changelog: String { updateStore.changelog }
 
     /// Whether the app can say anything about syncing at all. Save sync stays
     /// out of the App Store build, and elsewhere it is opt-in.
