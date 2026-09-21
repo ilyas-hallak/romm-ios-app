@@ -38,6 +38,7 @@ struct EmulatorEngineSettingsView: View {
     @State private var menuShortcut: EmulatorMenuShortcut
     @State private var swapFaceButtons: Bool
     @State private var rumbleEnabled: Bool
+    @State private var bezelEnabled: Bool
     @State private var installedEmulators: [ExternalEmulatorID] = []
     /// Apps the user has been through the assistant for, the only ones offered
     /// as a Play target.
@@ -48,6 +49,7 @@ struct EmulatorEngineSettingsView: View {
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
     private let faceButtonPreference: PGamepadFaceButtonPreference
     private let rumblePreference: PRumblePreference
+    private let bezelPreference: PEmulatorBezelPreference
     private let playTargetPreference: PPlayTargetPreference
     private let externalAppLauncher: PExternalAppLauncher
 
@@ -68,12 +70,14 @@ struct EmulatorEngineSettingsView: View {
         self.menuShortcutPreference = factory.emulatorMenuShortcutPreference
         self.faceButtonPreference = factory.gamepadFaceButtonPreference
         self.rumblePreference = factory.rumblePreference
+        self.bezelPreference = factory.emulatorBezelPreference
         self.playTargetPreference = factory.playTargetPreference
         self.externalAppLauncher = factory.externalAppLauncher
         self.setupStore = factory.externalEmulatorSetupStore
         _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
         _swapFaceButtons = State(wrappedValue: factory.gamepadFaceButtonPreference.isSwapped)
         _rumbleEnabled = State(wrappedValue: factory.rumblePreference.isEnabled)
+        _bezelEnabled = State(wrappedValue: factory.emulatorBezelPreference.isEnabled)
         _playChoice = State(wrappedValue: PlayChoice(
             engine: factory.enginePreference.current,
             target: factory.playTargetPreference.current
@@ -84,6 +88,7 @@ struct EmulatorEngineSettingsView: View {
         Form {
             playWithSection
             emulatorAppsSection
+            bezelSection
 
             Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it, handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
 
@@ -136,6 +141,7 @@ struct EmulatorEngineSettingsView: View {
         .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
         .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
         .onChange(of: rumbleEnabled) { _, new in rumblePreference.isEnabled = new }
+        .onChange(of: bezelEnabled) { _, new in bezelPreference.isEnabled = new }
         .onChange(of: playChoice) { _, new in apply(new) }
         .sheet(isPresented: $isAddingEmulator) {
             ExternalEmulatorSetupView {
@@ -241,6 +247,21 @@ struct EmulatorEngineSettingsView: View {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Only shown where the web emulator can actually run, it is the one engine
+    /// the frame applies to. The native engines get their look from a controller
+    /// skin instead.
+    @ViewBuilder
+    private var bezelSection: some View {
+        if AppFeatures.webEmulatorEnabled {
+            Section(
+                header: Text("Web Emulator"),
+                footer: Text("Puts the web emulator into a frame instead of running it edge to edge. Takes effect the next time you start a game.")
+            ) {
+                Toggle("Bezel", isOn: $bezelEnabled)
             }
         }
     }

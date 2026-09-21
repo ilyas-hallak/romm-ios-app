@@ -135,6 +135,7 @@ protocol PDependencyFactory {
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
     var rumblePreference: PRumblePreference { get }
+    var emulatorBezelPreference: PEmulatorBezelPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
     var externalDisplayDiagnostics: PExternalDisplayDiagnostics { get }
     var screenBrightness: PScreenBrightness { get }
@@ -436,6 +437,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
+    lazy var emulatorBezelPreference: PEmulatorBezelPreference = UserDefaultsEmulatorBezelPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
     lazy var externalDisplayDiagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
