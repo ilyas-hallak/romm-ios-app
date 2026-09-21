@@ -51,26 +51,45 @@ enum ExternalDisplayPolicy {
         isRenderingExternally && isPhoneControllerOnlyEnabled && !areTouchControlsHidden
     }
 
+    /// What the skin says about its screens, which is not the same question as
+    /// how many there are. Telling "not asked yet" apart from "names none"
+    /// matters: the first has to be treated with care, the second does not.
+    enum SkinScreens: Equatable {
+        /// No traits yet, so the skin has not been asked. The case until the
+        /// first layout pass.
+        case unknown
+        /// The skin names no screen for these traits. DeltaCore then draws the
+        /// game into a single main view, which never takes touch input.
+        case singleMainView
+        /// One entry per screen, true where that screen is a touch screen.
+        case screens([Bool])
+    }
+
     /// One flag per game view, true where that view is a touch screen. Those are
     /// the views that have to stay visible while the phone acts as a controller:
     /// on the DS the lower screen is what the player taps on, hiding it would
     /// mean tapping blind.
-    ///
-    /// - Parameter fromSkin: The skin's answer per screen, or nil while the skin
-    ///   or its traits are not known yet, which is the case until the first
-    ///   layout pass.
-    static func touchScreenFlags(fromSkin skinFlags: [Bool]?, gameViewCount: Int) -> [Bool] {
-        guard let skinFlags else {
-            // Nothing is known about the screens, so assume the worst and keep
-            // every view, rather than hide the one the player taps on.
+    static func touchScreenFlags(from skinScreens: SkinScreens, gameViewCount: Int) -> [Bool] {
+        switch skinScreens {
+        case .unknown:
+            // Nothing is known yet, so assume the worst and keep every view,
+            // rather than hide the one the player taps on.
             return [Bool](repeating: true, count: gameViewCount)
+
+        case .singleMainView:
+            // One view holding the whole picture and no touch input, so there is
+            // nothing here that has to survive.
+            return [Bool](repeating: false, count: gameViewCount)
+
+        case .screens(let flags):
+            guard flags.count == gameViewCount else {
+                // DeltaCore collapses the screens into one in a few cases the
+                // raw skin does not report, so the order no longer maps. Rather
+                // than guess, keep every view of a system that has a touch
+                // screen at all.
+                return [Bool](repeating: flags.contains(true), count: gameViewCount)
+            }
+            return flags
         }
-        guard skinFlags.count == gameViewCount else {
-            // DeltaCore collapses the screens into one in a few cases the raw
-            // skin does not report, so the order no longer maps. Rather than
-            // guess, keep every view of a system that has a touch screen at all.
-            return [Bool](repeating: skinFlags.contains(true), count: gameViewCount)
-        }
-        return skinFlags
     }
 }

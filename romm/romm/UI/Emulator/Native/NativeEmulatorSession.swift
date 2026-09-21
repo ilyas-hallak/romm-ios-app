@@ -76,18 +76,18 @@ final class RommGameViewController: GameViewController {
     /// the views from the skin's screens in exactly that order.
     private var touchScreenFlags: [Bool] {
         ExternalDisplayPolicy.touchScreenFlags(
-            fromSkin: skinTouchScreenFlags,
+            from: skinScreens,
             gameViewCount: gameViews.count
         )
     }
 
-    /// What the skin says about its screens, or nil until the traits are set,
-    /// which happens from the first layout pass on.
-    private var skinTouchScreenFlags: [Bool]? {
-        guard let traits = controllerView?.controllerSkinTraits,
-              let screens = controllerView?.controllerSkin?.screens(for: traits)
-        else { return nil }
-        return screens.map(\.isTouchScreen)
+    /// Asks the skin about its screens. The traits arrive with the first layout
+    /// pass, and a skin may well name no screen at all for the ones it gets.
+    private var skinScreens: ExternalDisplayPolicy.SkinScreens {
+        guard let traits = controllerView?.controllerSkinTraits else { return .unknown }
+        guard let screens = controllerView?.controllerSkin?.screens(for: traits)
+        else { return .singleMainView }
+        return .screens(screens.map(\.isTouchScreen))
     }
 
     override func viewDidLoad() {

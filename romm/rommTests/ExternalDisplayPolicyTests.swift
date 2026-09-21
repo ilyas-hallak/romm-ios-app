@@ -114,13 +114,13 @@ struct ExternalDisplayPolicyTests {
     /// say which screen is which.
     @Test func keepsEveryViewWhenTheSkinIsNotKnownYet() {
         #expect(ExternalDisplayPolicy.touchScreenFlags(
-            fromSkin: nil, gameViewCount: 2
+            from: .unknown, gameViewCount: 2
         ) == [true, true])
     }
 
     @Test func mapsTheSkinsScreensOneToOne() {
         #expect(ExternalDisplayPolicy.touchScreenFlags(
-            fromSkin: [false, true], gameViewCount: 2
+            from: .screens([false, true]), gameViewCount: 2
         ) == [false, true])
     }
 
@@ -128,20 +128,28 @@ struct ExternalDisplayPolicyTests {
     /// screen keeps every view rather than risk hiding the wrong one.
     @Test func keepsEveryViewWhenTheCountsDisagreeAndATouchScreenExists() {
         #expect(ExternalDisplayPolicy.touchScreenFlags(
-            fromSkin: [true], gameViewCount: 2
+            from: .screens([true]), gameViewCount: 2
         ) == [true, true])
     }
 
     @Test func releasesEveryViewWhenTheCountsDisagreeWithoutATouchScreen() {
         #expect(ExternalDisplayPolicy.touchScreenFlags(
-            fromSkin: [false], gameViewCount: 2
+            from: .screens([false]), gameViewCount: 2
         ) == [false, false])
+    }
+
+    /// A skin that names no screen leaves one main view holding the whole
+    /// picture, and that one takes no touch input, so it may go.
+    @Test func releasesTheMainViewWhenTheSkinNamesNoScreen() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .singleMainView, gameViewCount: 1
+        ) == [false])
     }
 
     /// One touch screen among several is enough to keep them all.
     @Test func keepsEveryViewWhenTheCountsDisagreeAndOnlyOneScreenTouches() {
         #expect(ExternalDisplayPolicy.touchScreenFlags(
-            fromSkin: [true, false], gameViewCount: 3
+            from: .screens([true, false]), gameViewCount: 3
         ) == [true, true, true])
     }
 }
