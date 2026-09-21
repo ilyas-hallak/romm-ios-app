@@ -51,6 +51,11 @@ struct AccountSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        // The list itself draws no background inside a sheet, so without this
+        // the whole of Home blurs through the system's glass surface, hardest
+        // while the sheet is still on its way up. This is a page of settings,
+        // not a floating control, so it gets a solid one.
+        .presentationBackground(Color(.systemGroupedBackground))
         .sheet(isPresented: $showingHelp) {
             HelpView()
         }
