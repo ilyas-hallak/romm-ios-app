@@ -161,6 +161,19 @@ final class LibretroTouchControllerView: UIView {
     private let menuButton = UIButton(type: .custom)
     var onMenuTapped: (() -> Void)?
 
+    /// Where a press goes. The running core by default, the pad on a second
+    /// phone points it at the network instead.
+    var onButton: (LibretroABI.JoypadButton, Bool) -> Void = { button, pressed in
+        LibretroFrontend.shared.setButton(button, pressed: pressed)
+    }
+
+    /// Hides the button that opens the in-game menu, for a pad that has no game
+    /// of its own to pause.
+    var isMenuButtonHidden: Bool {
+        get { menuButton.isHidden }
+        set { menuButton.isHidden = newValue }
+    }
+
     /// Vergrößert die Trefferzone für Face/Shoulder-Buttons (visuell unverändert).
     private let hitSlop: CGFloat = 28
     private let dpadSlop: CGFloat = 32
@@ -496,13 +509,13 @@ final class LibretroTouchControllerView: UIView {
                 let stillHeld = faceTouchMap.contains { $0.key != key && $0.value === prev }
                 if !stillHeld {
                     prev.isPressed = false
-                    LibretroFrontend.shared.setButton(prev.button, pressed: false)
+                    onButton(prev.button, false)
                     fireReleaseHaptic()
                 }
             }
             if let hit {
                 hit.isPressed = true
-                LibretroFrontend.shared.setButton(hit.button, pressed: true)
+                onButton(hit.button, true)
                 haptic.impactOccurred(intensity: 1.0)
             }
         }
@@ -520,10 +533,10 @@ final class LibretroTouchControllerView: UIView {
         dpad.currentDirection = direction
         let target = Set(direction.buttons)
         for b in currentDpadButtons.subtracting(target) {
-            LibretroFrontend.shared.setButton(b, pressed: false)
+            onButton(b, false)
         }
         for b in target.subtracting(currentDpadButtons) {
-            LibretroFrontend.shared.setButton(b, pressed: true)
+            onButton(b, true)
         }
         currentDpadButtons = target
         // Leichter Tick bei Richtungswechsel; weicher Release-Tick beim Loslassen.

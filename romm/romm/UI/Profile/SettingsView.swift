@@ -192,6 +192,13 @@ struct SettingsView: View {
                             }
                         }
 
+                        NavigationLink(destination: SecondControllerSettingsView()) {
+                            HStack {
+                                Image(systemName: "gamecontroller")
+                                Text("Second Controller")
+                            }
+                        }
+
                         Toggle(isOn: $cloudSyncSettings.isEnabled) {
                             HStack {
                                 Image(systemName: "icloud.and.arrow.up")

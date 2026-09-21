@@ -62,9 +62,9 @@ extension LibretroFrontend {
     static let inputPollCallback: LibretroABI.InputPollFn = { }
 
     static let inputStateCallback: LibretroABI.InputStateFn = { port, device, _, id in
-        guard port == 0, device == LibretroABI.DEVICE_JOYPAD, id < 16 else { return 0 }
+        guard device == LibretroABI.DEVICE_JOYPAD else { return 0 }
         return MainActor.assumeIsolated {
-            LibretroFrontend.shared.buttonState[Int(id)] ? 1 : 0
+            LibretroFrontend.shared.isButtonPressed(Int(id), player: Int(port)) ? 1 : 0
         }
     }
 
