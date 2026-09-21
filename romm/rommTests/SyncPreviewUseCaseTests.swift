@@ -6,13 +6,22 @@ import Foundation
 private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable {
     var operations: [SyncOperationSchema] = []
     var errorToThrow: Error?
+    /// Thrown by the first call only, so a test can script a failure the use
+    /// case is meant to recover from.
+    var errorOnFirstCall: Error?
     /// Nil reproduces a server too old to open a sync session at all.
     var sessionIdToReturn: Int? = 1
     private(set) var reportedSaves: [ClientSaveState] = []
     private(set) var reportedDeviceId: String?
+    private(set) var negotiateCount = 0
 
     override func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse {
+        negotiateCount += 1
         if let errorToThrow { throw errorToThrow }
+        if let first = errorOnFirstCall {
+            errorOnFirstCall = nil
+            throw first
+        }
         reportedSaves = body.saves
         reportedDeviceId = body.deviceId
         return Self.response(operations, sessionId: sessionIdToReturn)
@@ -83,8 +92,15 @@ private final class FakeSaveStore: PSaveStore, @unchecked Sendable {
 private final class FakeSyncDevice: PSyncDeviceRepository, @unchecked Sendable {
     var availability: SyncAPIAvailability = .available
     var idToReturn: String? = "device-1"
+    /// Handed out after `forgetDevice()`, so a test can script a re-registration.
+    var idAfterForgetting: String?
+    private(set) var forgetCount = 0
     func syncAPIAvailability() async -> SyncAPIAvailability { availability }
     func deviceId() async -> String? { idToReturn }
+    func forgetDevice() {
+        forgetCount += 1
+        if let idAfterForgetting { idToReturn = idAfterForgetting }
+    }
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
 }
 
@@ -398,5 +414,58 @@ struct SyncPreviewUseCaseTests {
         _ = try await makeUseCase(store: store, client: client).execute()
 
         #expect(client.reportedSaves.first?.updatedAt == Date(timeIntervalSince1970: 0))
+    }
+
+    // MARK: - A device the server no longer knows
+
+    /// The device id is stored once and kept, so a server that lost its device
+    /// row answers every later negotiate with a 404. Without registering again
+    /// sync would stay broken for good, which is exactly the state the account
+    /// badge would then report for ever.
+    @Test func aDeviceTheServerForgotIsRegisteredAgainAndTheSyncGoesThrough() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0x01]))
+        let client = FakeNegotiateClient()
+        client.errorOnFirstCall = APIClientError.invalidResponse(404, "Device with ID device-1 not found")
+        let device = FakeSyncDevice()
+        device.idAfterForgetting = "device-2"
+
+        let preview = try await makeUseCase(store: store, client: client, device: device).execute()
+
+        #expect(device.forgetCount == 1)
+        #expect(client.negotiateCount == 2)
+        #expect(client.reportedDeviceId == "device-2")
+        // The plan belongs to the device it was actually negotiated for, not
+        // to the id the server had just rejected.
+        #expect(preview.deviceId == "device-2")
+    }
+
+    /// Registering again is worth one attempt, not a loop. A server that keeps
+    /// refusing has to surface as a failure.
+    @Test func aSecondRefusalIsReportedRatherThanRetried() async throws {
+        let store = makeStore()
+        let client = FakeNegotiateClient()
+        client.errorToThrow = APIClientError.invalidResponse(404, "Device with ID device-1 not found")
+        let device = FakeSyncDevice()
+        device.idAfterForgetting = "device-2"
+
+        await #expect(throws: SyncPreviewError.self) {
+            _ = try await makeUseCase(store: store, client: client, device: device).execute()
+        }
+        #expect(client.negotiateCount == 2)
+    }
+
+    /// Nothing to register again with, so the device error is reported as it
+    /// is rather than dressed up as a negotiation failure.
+    @Test func aFailedReRegistrationIsReportedAsADeviceProblem() async throws {
+        let store = makeStore()
+        let client = FakeNegotiateClient()
+        client.errorOnFirstCall = APIClientError.invalidResponse(404, "not found")
+        let device = FakeSyncDevice()
+        device.idAfterForgetting = nil
+
+        await #expect(throws: SyncPreviewError.deviceRegistrationFailed) {
+            _ = try await makeUseCase(store: store, client: client, device: device).execute()
+        }
     }
 }

@@ -125,6 +125,11 @@ private final class FakeCompleteSyncSessionUseCase: PCompleteSyncSessionUseCase,
     }
 }
 
+private final class FakeRecordSaveSyncRunUseCase: PRecordSaveSyncRunUseCase, @unchecked Sendable {
+    private(set) var recorded: [SaveSyncOutcome] = []
+    func execute(_ outcome: SaveSyncOutcome) { recorded.append(outcome) }
+}
+
 /// Grants a plain (non security-scoped) folder so tests can put files on disk
 /// without needing a real user-picked bookmark.
 private final class FakeExternalSaveFolderStore: PExternalSaveFolderStore, @unchecked Sendable {
@@ -191,6 +196,7 @@ struct SaveSyncRunnerTests {
         let downloadState = FakeDownloadStateUseCase()
         let completeSession = FakeCompleteSyncSessionUseCase()
         let folderStore = FakeExternalSaveFolderStore()
+        let recordRun = FakeRecordSaveSyncRunUseCase()
     }
 
     private func makeRunner(store: PSaveStore, fakes: Fakes) -> SaveSyncRunner {
@@ -205,8 +211,32 @@ struct SaveSyncRunnerTests {
             updateStateUseCase: fakes.updateState,
             downloadStateUseCase: fakes.downloadState,
             completeSyncSessionUseCase: fakes.completeSession,
-            externalSaveFolderStore: fakes.folderStore
+            externalSaveFolderStore: fakes.folderStore,
+            recordRunUseCase: fakes.recordRun
         )
+    }
+
+    // MARK: - What the account badge reads
+
+    /// The badge on Home reports the last run rather than negotiating with the
+    /// server itself, so a finished run has to leave that record behind.
+    @Test func aFinishedRunRecordsWhatItDidForTheAccountBadge() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+
+        let preview = SyncPreview(
+            deviceId: "d1",
+            reportedSaveCount: 0,
+            operations: [conflictOp(romId: 5), conflictOp(romId: 6)]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        let recorded = try #require(fakes.recordRun.recorded.last)
+        #expect(recorded.conflicts == 2)
+        #expect(recorded.conflicts == report.skippedConflicts)
+        #expect(recorded.uploaded == report.uploaded)
+        #expect(recorded.downloaded == report.downloaded)
+        #expect(recorded.failed == report.failed)
     }
 
     // MARK: - Upload is device-scoped

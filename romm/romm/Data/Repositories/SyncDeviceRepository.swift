@@ -84,6 +84,11 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
         return result
     }
 
+    func forgetDevice() {
+        userDefaults.removeObject(forKey: deviceIdKey)
+        logger.info("Dropped the stored sync device id, will register again")
+    }
+
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {
         try await apiClient.completeSyncSession(
             sessionId: sessionId,

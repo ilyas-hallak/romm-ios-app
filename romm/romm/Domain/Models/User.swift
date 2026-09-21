@@ -17,6 +17,9 @@ struct User: Identifiable, Equatable {
     let lastLogin: Date?
     let lastActive: Date?
     let createdAt: Date?
+    /// When the account last changed, used to get a new avatar past the image
+    /// cache after it was swapped on the server.
+    let updatedAt: Date?
     let retroAchievementsUsername: String?
     let retroAchievementsProgression: [RetroAchievementsProgression]
 
@@ -30,6 +33,7 @@ struct User: Identifiable, Equatable {
         lastLogin: Date? = nil,
         lastActive: Date? = nil,
         createdAt: Date? = nil,
+        updatedAt: Date? = nil,
         retroAchievementsUsername: String? = nil,
         retroAchievementsProgression: [RetroAchievementsProgression] = []
     ) {
@@ -42,6 +46,7 @@ struct User: Identifiable, Equatable {
         self.lastLogin = lastLogin
         self.lastActive = lastActive
         self.createdAt = createdAt
+        self.updatedAt = updatedAt
         self.retroAchievementsUsername = retroAchievementsUsername
         self.retroAchievementsProgression = retroAchievementsProgression
     }
@@ -61,6 +66,17 @@ extension User {
         guard let name = retroAchievementsUsername?.trimmingCharacters(in: .whitespacesAndNewlines),
               !name.isEmpty else { return nil }
         return name
+    }
+
+    /// Where the avatar sits on the RomM server, relative to its root, or nil
+    /// when the account has none.
+    ///
+    /// RomM serves avatars through the API rather than from the asset root, and
+    /// the timestamp is what gets a swapped avatar past the image cache.
+    var avatarRelativePath: String? {
+        guard let avatarPath, !avatarPath.isEmpty else { return nil }
+        let timestamp = Int(updatedAt?.timeIntervalSince1970 ?? 0)
+        return "api/raw/assets/\(avatarPath)?ts=\(timestamp)"
     }
 
     /// Totals across every game the server reports progress for, for the
