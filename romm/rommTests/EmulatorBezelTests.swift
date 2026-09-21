@@ -1,6 +1,5 @@
-import Foundation
 import Testing
-
+import Foundation
 @testable import romm
 
 struct EmulatorBezelPreferenceTests {

@@ -32,7 +32,10 @@ struct EmulatorView: View {
                 EmulatorWebView(viewModel: viewModel)
                     .id(viewModel.emulatorURL?.absoluteString ?? "webview")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .webEmulatorBezel(isEnabled: viewModel.showsBezel)
+                    .webEmulatorBezel(
+                        isEnabled: viewModel.showsBezel,
+                        platformSlug: rom.platformSlug
+                    )
                     .edgesIgnoringSafeArea(.bottom)  // Ignore bottom, navbar handles top
 
                 // Overlay Controls (optional, for later)
