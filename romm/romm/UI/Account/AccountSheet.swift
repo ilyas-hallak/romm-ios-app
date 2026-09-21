@@ -21,6 +21,7 @@ struct AccountSheet: View {
     let avatarURLString: String?
     let syncStatus: SaveSyncStatus
     let canCheckSync: Bool
+    let isChecking: Bool
     let onSelect: (AccountDestination) -> Void
     let onCheckSync: () -> Void
 
@@ -56,7 +57,7 @@ struct AccountSheet: View {
         .alert("Logout", isPresented: $showingLogoutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Logout", role: .destructive) {
-                profileViewModel.logout()
+                dismissThen { profileViewModel.logout() }
             }
         } message: {
             Text("Are you sure you want to logout?")
@@ -64,7 +65,7 @@ struct AccountSheet: View {
         .alert("Reset Configuration", isPresented: $showingResetAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Reset", role: .destructive) {
-                profileViewModel.restartSetup()
+                dismissThen { profileViewModel.restartSetup() }
             }
         } message: {
             Text("This will delete all configuration settings including your server connection and credentials. You will be returned to the setup screen.")
@@ -133,10 +134,7 @@ struct AccountSheet: View {
                 }
             }
 
-            // The status is only ever as fresh as the last finished sync, so
-            // this is the one way to go and ask. Deliberately a tap rather than
-            // something the app does on its own: asking opens a session on the
-            // server and cancels the one the Save Sync screen may be holding.
+            // The one way to go and ask, see AccountViewModel.checkNow().
             if canCheckSync {
                 Button(action: onCheckSync) {
                     Label("Check now", systemImage: "arrow.clockwise")
@@ -148,11 +146,6 @@ struct AccountSheet: View {
                 Text(explanation)
             }
         }
-    }
-
-    private var isChecking: Bool {
-        if case .checking = syncStatus { return true }
-        return false
     }
 
     private var settingsSection: some View {
@@ -224,6 +217,13 @@ struct AccountSheet: View {
         onSelect(destination)
         dismiss()
     }
+
+    /// Both of these swap the whole root view out from under this sheet, so it
+    /// has to be on its way out before they run.
+    private func dismissThen(_ action: () -> Void) {
+        dismiss()
+        action()
+    }
 }
 
 #Preview("Nothing checked yet") {
@@ -233,6 +233,7 @@ struct AccountSheet: View {
                 avatarURLString: nil,
                 syncStatus: .unknown,
                 canCheckSync: true,
+                isChecking: false,
                 onSelect: { _ in },
                 onCheckSync: {}
             )
@@ -247,6 +248,7 @@ struct AccountSheet: View {
                 avatarURLString: nil,
                 syncStatus: .pending(summary: "2 up, 1 down"),
                 canCheckSync: true,
+                isChecking: false,
                 onSelect: { _ in },
                 onCheckSync: {}
             )
@@ -261,6 +263,7 @@ struct AccountSheet: View {
                 avatarURLString: nil,
                 syncStatus: SaveSyncStatus(error: .serverTooOld(version: "4.8.1")),
                 canCheckSync: true,
+                isChecking: false,
                 onSelect: { _ in },
                 onCheckSync: {}
             )

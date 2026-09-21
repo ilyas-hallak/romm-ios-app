@@ -64,7 +64,7 @@ struct SaveSyncStatusTests {
             operation(.download, romId: 3),
         ])
 
-        #expect(SaveSyncStatus(preview: plan) == .pending(summary: plan.changeSummary ?? ""))
+        #expect(SaveSyncStatus(preview: plan) == .pending(summary: "2 up, 1 down"))
     }
 
     @Test func conflictsOutrankTheCounts() {

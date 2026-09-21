@@ -12,9 +12,9 @@ final class AccountViewModel {
 
     private(set) var syncStatus: SaveSyncStatus = .off
 
-    /// Set once the user has asked for a check, so returning to Home does not
-    /// drop a fresh answer back to the older recorded run.
-    private var hasCheckedThisSession = false
+    /// When the user last got an answer out of a check, so a recorded run only
+    /// takes the screen back over once it is genuinely newer.
+    private var lastCheckedAt: Date?
 
     private let previewUseCase: PSyncPreviewUseCase
     private let getLastRun: PGetLastSaveSyncRunUseCase
@@ -41,11 +41,11 @@ final class AccountViewModel {
         #endif
     }
 
-    /// True while the only honest thing to show is an offer to go and look.
-    var canCheckNow: Bool {
-        guard reportsSyncStatus else { return false }
-        if case .checking = syncStatus { return false }
-        return true
+    /// True while a check is in flight, so the button offering one can stay put
+    /// and grey out instead of disappearing from under the finger.
+    var isChecking: Bool {
+        if case .checking = syncStatus { return true }
+        return false
     }
 
     /// Reads what the last finished run left behind. Local and free, so Home
@@ -54,16 +54,22 @@ final class AccountViewModel {
     /// Never talks to the server: negotiating opens a session server side and
     /// cancels the one an open Save Sync screen is holding, so it may only ever
     /// happen because the user asked for it. See ``checkNow()``.
+    ///
+    /// A run only takes the screen back over when it is newer than the last
+    /// check. Otherwise coming back to Home would drop a just-fetched answer
+    /// for an older one, and locking the screen after the first check would
+    /// freeze out every real sync that follows.
     func loadRecordedStatus() {
         guard reportsSyncStatus else {
             syncStatus = .off
             return
         }
-        guard !hasCheckedThisSession else { return }
         guard let run = getLastRun.execute() else {
-            syncStatus = .unknown
+            // An answer from a check says more than "nothing recorded yet".
+            if lastCheckedAt == nil { syncStatus = .unknown }
             return
         }
+        if let lastCheckedAt, run.date <= lastCheckedAt { return }
         syncStatus = SaveSyncStatus(run: run)
     }
 
@@ -71,11 +77,7 @@ final class AccountViewModel {
     /// Only ever called because the user tapped for it: it is the same
     /// negotiation the Save Sync screen runs, and it is not free.
     func checkNow() async {
-        guard reportsSyncStatus else {
-            syncStatus = .off
-            return
-        }
-        hasCheckedThisSession = true
+        guard reportsSyncStatus, !isChecking else { return }
         syncStatus = .checking
         do {
             syncStatus = SaveSyncStatus(preview: try await previewUseCase.execute())
@@ -84,6 +86,9 @@ final class AccountViewModel {
         } catch {
             syncStatus = .failed(reason: error.localizedDescription)
         }
+        // Stamped once the answer is in, so a sync finishing afterwards is the
+        // newer of the two and wins in `loadRecordedStatus()`.
+        lastCheckedAt = Date()
     }
 
     /// The user's avatar on their own server, or nil when they have none.

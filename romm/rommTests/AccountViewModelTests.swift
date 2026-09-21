@@ -7,12 +7,32 @@ import Testing
 import Foundation
 @testable import romm
 
+/// A deterministic suspension point, so a test can observe the view model
+/// while a check is still in flight.
+private actor Gate {
+    private var isOpen = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 private final class FakeSyncPreviewUseCase: PSyncPreviewUseCase, @unchecked Sendable {
     var result: Result<SyncPreview, Error>
+    var gate: Gate?
     private(set) var callCount = 0
     init(result: Result<SyncPreview, Error>) { self.result = result }
     func execute() async throws -> SyncPreview {
         callCount += 1
+        await gate?.wait()
         return try result.get()
     }
 }
@@ -21,11 +41,14 @@ private final class FakeSyncPreviewUseCase: PSyncPreviewUseCase, @unchecked Send
 /// factory builds it for real from other dependencies, so it is overridden here.
 private final class AccountTestFactory: MockDependencyFactory {
     let previewUseCase: FakeSyncPreviewUseCase
+    /// Held as the concrete type so a test can record a run mid-scenario.
+    let outcomeStore: InMemorySaveSyncOutcomeStore
 
     init(previewResult: Result<SyncPreview, Error>, lastRun: SaveSyncOutcome? = nil) {
         self.previewUseCase = FakeSyncPreviewUseCase(result: previewResult)
+        self.outcomeStore = InMemorySaveSyncOutcomeStore(outcome: lastRun)
         super.init(apiClient: FakeAPIClient())
-        saveSyncOutcomeStore = InMemorySaveSyncOutcomeStore(outcome: lastRun)
+        saveSyncOutcomeStore = outcomeStore
     }
 
     override func makeSyncPreviewUseCase() -> PSyncPreviewUseCase { previewUseCase }
@@ -77,7 +100,7 @@ struct AccountViewModelTests {
 
         #expect(viewModel.syncStatus == .unknown)
         #expect(viewModel.syncStatus.badgeIcon == nil)
-        #expect(viewModel.canCheckNow)
+        #expect(viewModel.reportsSyncStatus)
     }
 
     @Test func withSyncSwitchedOffNothingIsReportedAndNoCheckIsOffered() {
@@ -88,7 +111,7 @@ struct AccountViewModelTests {
 
         #expect(viewModel.syncStatus == .off)
         #expect(viewModel.syncStatus.badgeIcon == nil)
-        #expect(viewModel.canCheckNow == false)
+        #expect(viewModel.reportsSyncStatus == false)
         #expect(factory.previewUseCase.callCount == 0)
     }
 
@@ -123,6 +146,40 @@ struct AccountViewModelTests {
         viewModel.loadRecordedStatus()
 
         #expect(viewModel.syncStatus == .synced(at: nil))
+    }
+
+    /// The other direction, and the one that used to be frozen out: after a
+    /// check, an actual sync on the Save Sync screen records a newer run, and
+    /// coming back to Home has to show that one.
+    @Test func aSyncThatRunsAfterACheckTakesTheBadgeBackOver() async {
+        let stale = SaveSyncOutcome(date: Date(timeIntervalSince1970: 0), uploaded: 0, downloaded: 0, conflicts: 0, failed: 3)
+        let (viewModel, factory) = makeViewModel(previewResult: .success(Self.upToDatePlan), lastRun: stale)
+
+        await viewModel.checkNow()
+        let fresh = SaveSyncOutcome(date: Date().addingTimeInterval(60), uploaded: 2, downloaded: 0, conflicts: 0, failed: 0)
+        factory.outcomeStore.recordRun(fresh)
+        viewModel.loadRecordedStatus()
+
+        #expect(viewModel.syncStatus == .synced(at: fresh.date))
+    }
+
+    /// The button offering a check stays on screen while one runs, greyed out,
+    /// so it cannot be fired twice and does not vanish under the finger.
+    @Test func whileACheckRunsItIsMarkedAsRunningAndCannotStartASecond() async {
+        let gate = Gate()
+        let (viewModel, factory) = makeViewModel(previewResult: .success(Self.upToDatePlan))
+        factory.previewUseCase.gate = gate
+
+        let task = Task { await viewModel.checkNow() }
+        while !viewModel.isChecking { await Task.yield() }
+
+        #expect(viewModel.syncStatus == .checking)
+        await viewModel.checkNow()
+        #expect(factory.previewUseCase.callCount == 1)
+
+        await gate.open()
+        await task.value
+        #expect(viewModel.isChecking == false)
     }
 
     // MARK: - Avatar

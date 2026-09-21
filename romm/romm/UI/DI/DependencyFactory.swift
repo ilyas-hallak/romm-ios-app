@@ -484,6 +484,7 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
     lazy var cloudSaveSyncStore: PCloudSaveSyncStore = CloudSaveSyncSettings.shared
+    lazy var saveSyncOutcomeStore: PSaveSyncOutcomeStore = CloudSaveSyncSettings.shared
     lazy var savesRepository: PSavesRepository = SavesRepository(apiClient: apiClient)
     lazy var statesRepository: PStatesRepository = StatesRepository(apiClient: apiClient)
     lazy var fileSystemService: PFileSystemService = DefaultFileSystemService()
@@ -572,11 +573,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase {
-        RecordSaveSyncRunUseCase(store: CloudSaveSyncSettings.shared)
+        RecordSaveSyncRunUseCase(store: saveSyncOutcomeStore)
     }
 
     func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase {
-        GetLastSaveSyncRunUseCase(store: CloudSaveSyncSettings.shared)
+        GetLastSaveSyncRunUseCase(store: saveSyncOutcomeStore)
     }
 
     // MARK: - Save/State Sync Use Cases

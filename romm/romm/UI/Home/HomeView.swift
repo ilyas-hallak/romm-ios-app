@@ -35,7 +35,8 @@ struct HomeView: View {
                 AccountSheet(
                     avatarURLString: accountViewModel.avatarURL(for: appData.currentUser),
                     syncStatus: accountViewModel.syncStatus,
-                    canCheckSync: accountViewModel.canCheckNow,
+                    canCheckSync: accountViewModel.reportsSyncStatus,
+                    isChecking: accountViewModel.isChecking,
                     onSelect: { pendingDestination = $0 },
                     onCheckSync: { Task { await accountViewModel.checkNow() } }
                 )
