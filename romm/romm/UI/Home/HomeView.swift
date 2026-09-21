@@ -7,45 +7,64 @@ import SwiftUI
 
 struct HomeView: View {
     @State private var viewModel = HomeViewModel()
+    @State private var accountViewModel = AccountViewModel()
     @EnvironmentObject var appData: AppData
+
+    @State private var showingAccount = false
+    /// What the sheet picked, pushed once it has closed so the push animates
+    /// instead of happening behind the sheet.
+    @State private var pendingDestination: AccountDestination?
+    @State private var destination: AccountDestination?
 
     var body: some View {
         contentView
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Home")
             .toolbar {
-                // Its own button for now. The plan is a menu on the user name
-                // that gathers this and settings, which needs the account UI
-                // from issue #98 first.
-                //
-                // Save sync stays out of the App Store build, so that build has
-                // no way into the overview either.
-                #if !APP_STORE
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        SyncOverviewView()
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
+                    AccountButton(
+                        username: appData.displayUsername,
+                        avatarURLString: accountViewModel.avatarURL(for: appData.currentUser),
+                        syncStatus: accountViewModel.syncStatus
+                    ) {
+                        showingAccount = true
                     }
-                    .accessibilityLabel("Save Sync")
                 }
-                #endif
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gear")
-                    }
+            }
+            .sheet(isPresented: $showingAccount, onDismiss: pushPendingDestination) {
+                AccountSheet(
+                    avatarURLString: accountViewModel.avatarURL(for: appData.currentUser),
+                    syncStatus: accountViewModel.syncStatus
+                ) { picked in
+                    pendingDestination = picked
+                }
+            }
+            .navigationDestination(item: $destination) { destination in
+                switch destination {
+                case .saveSync: SyncOverviewView()
+                case .settings: SettingsView()
+                case .statistics: StatsView()
                 }
             }
             .refreshable {
                 await viewModel.load()
+                await accountViewModel.refreshSyncStatus()
             }
             .task {
                 if !viewModel.hasStartedLoading {
                     await viewModel.load()
+                    // Asking the server for a sync plan reports every battery
+                    // save on this device, so it runs with the first load and
+                    // on pull to refresh, not on every return to Home.
+                    await accountViewModel.refreshSyncStatus()
                 }
             }
+    }
+
+    private func pushPendingDestination() {
+        guard let pending = pendingDestination else { return }
+        pendingDestination = nil
+        destination = pending
     }
 
     @ViewBuilder

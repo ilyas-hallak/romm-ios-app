@@ -6,18 +6,15 @@
 //
 
 import SwiftUI
-import os
 
+/// The app's own settings. Who is signed in, which server, and the way out of
+/// both live in ``AccountSheet``, which is also what opens this screen.
 struct SettingsView: View {
-    private let logger = Logger.ui
     @EnvironmentObject var appData: AppData
     @State private var profileViewModel = ProfileViewModel()
     @StateObject private var experimentalSettings = ExperimentalFeatureSettings.shared
     @StateObject private var cloudSyncSettings = CloudSaveSyncSettings.shared
-    @State private var showingLogoutAlert = false
-    @State private var showingResetAlert = false
     @State private var showingWhatsNew = false
-    @State private var showingHelp = false
     private let updateStore: AppUpdateStore = DefaultDependencyFactory.shared.appUpdateStore
     private let enginePreference: PEmulatorEnginePreference = DefaultDependencyFactory.shared.enginePreference
     private let playTargetPreference: PPlayTargetPreference = DefaultDependencyFactory.shared.playTargetPreference
@@ -70,75 +67,6 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var profileVM = profileViewModel
         return List {
-            // The RomM account and the server it lives on, in one place. The
-            // username used to appear twice, once from /api/users/me and once
-            // from the stored setup config, which are always the same login.
-            Section {
-                HStack {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.blue)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(appData.currentUser?.username ?? appData.currentConfiguration?.username ?? "Signed in")
-                            .font(.headline)
-
-                        if let role = appData.currentUser?.role {
-                            Text(role.displayName)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-
-                if let config = appData.currentConfiguration {
-                    HStack {
-                        Image(systemName: "server.rack")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Server")
-                            Text(config.serverURL)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-
-                Button(action: {
-                    showingLogoutAlert = true
-                }) {
-                    HStack {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                        Text("Logout")
-                    }
-                    .foregroundColor(.red)
-                }
-
-                if appData.currentConfiguration != nil {
-                    Button(action: {
-                        showingResetAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Reset Configuration")
-                        }
-                        .foregroundColor(.orange)
-                    }
-                }
-            } header: {
-                Text("RomM account")
-            }
-
-            // Statistics Section
-            Section("Statistics") {
-                NavigationLink(destination: StatsView()) {
-                    HStack {
-                        Image(systemName: "chart.bar.fill")
-                        Text("Server Statistics")
-                    }
-                }
-            }
-
             // Platforms Section
             Section {
                 Toggle(isOn: $profileVM.groupRomsByMetaId) {
@@ -159,16 +87,6 @@ struct SettingsView: View {
             // App Settings Section
             Section("App Settings") {
                 UpdateAvailableRow()
-
-                Button {
-                    showingHelp = true
-                } label: {
-                    HStack {
-                        Image(systemName: "questionmark.circle")
-                        Text("Help")
-                    }
-                    .foregroundStyle(.primary)
-                }
 
                 Button {
                     showingWhatsNew = true
@@ -327,34 +245,6 @@ struct SettingsView: View {
             // The whole history from Settings, and no mark-seen side effect.
             ChangelogView(markdown: updateStore.changelog, mode: .versionHistory)
         }
-        .sheet(isPresented: $showingHelp) {
-            HelpView()
-        }
-        .alert("Logout", isPresented: $showingLogoutAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Logout", role: .destructive) {
-                profileViewModel.logout()
-            }
-        } message: {
-            Text("Are you sure you want to logout?")
-        }
-        .alert("Reset Configuration", isPresented: $showingResetAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Reset", role: .destructive) {
-                resetConfiguration()
-            }
-        } message: {
-            Text("This will delete all configuration settings including your server connection and credentials. You will be returned to the setup screen.")
-        }
-    }
-    
-    private func resetConfiguration() {
-        logger.info("Resetting configuration...")
-        
-        // Use ProfileViewModel's restart setup method
-        profileViewModel.restartSetup()
-        
-        logger.info("Configuration reset complete")
     }
 }
 
