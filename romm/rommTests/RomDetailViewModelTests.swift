@@ -68,6 +68,7 @@ struct RomDetailViewModelTests {
             romRepository: NoOpLocalROMs()
         )
         return DownloadQueueManager(
+            apiClient: DownloadRequestAPIClient(),
             transferClient: client,
             coordinator: coordinator,
             fileListProvider: NoOpFileList(),
