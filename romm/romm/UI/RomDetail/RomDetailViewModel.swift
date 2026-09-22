@@ -438,7 +438,7 @@ class RomDetailViewModel {
     /// whether it started, never how it looks.
     enum DownloadButtonTapResult: Equatable {
         case startedDownload
-        case none
+        case ignored
     }
 
     /// Runs a button tap through the same decision its state came from: a
@@ -448,9 +448,9 @@ class RomDetailViewModel {
         switch downloadButtonState(forRomId: rom.id) {
         case .queued, .downloading:
             cancelDownload(romId: rom.id)
-            return .none
+            return .ignored
         case .downloaded:
-            return .none
+            return .ignored
         case .idle, .failed:
             downloadROM(rom: rom)
             return .startedDownload

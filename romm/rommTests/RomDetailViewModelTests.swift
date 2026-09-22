@@ -21,19 +21,6 @@ private final class NoOpLocalROMs: PLocalROMRepository, @unchecked Sendable {
     func getDownloadedROMsCount() throws -> Int { 0 }
 }
 
-/// A job store that is never actually written to in these tests: the button
-/// tap either resolves before a job ever exists (cancel) or is left pending
-/// (start), so nothing here needs to hold real data.
-private final class NoOpJobStore: PDownloadJobStore, @unchecked Sendable {
-    func allJobs() -> [DownloadJob] { [] }
-    func job(id: UUID) -> DownloadJob? { nil }
-    func job(romId: Int) -> DownloadJob? { nil }
-    func add(_ job: DownloadJob) {}
-    func replace(_ job: DownloadJob) {}
-    func updateFile(jobId: UUID, fileName: String, _ mutate: (inout DownloadJobFile) -> Void) {}
-    func remove(jobId: UUID) {}
-}
-
 /// Never reached by these tests: nothing here gets far enough to prepare or
 /// finish a transfer.
 private final class NoOpFinalizer: PROMDownloadFinalizer, @unchecked Sendable {
@@ -71,13 +58,13 @@ private final class NoOpActivityController: PDownloadContinuedTaskController {
 @MainActor
 struct RomDetailViewModelTests {
 
-    private func makeQueue() -> DownloadQueueManager {
+    private func makeQueue(store: QueueJobStore = QueueJobStore()) -> DownloadQueueManager {
         let client = FakeBackgroundTransferClient()
         let coordinator = DownloadJobCoordinator(
             transferClient: client,
-            store: NoOpJobStore(),
+            store: store,
             finalizer: NoOpFinalizer(),
-            apiClient: StubRommAPIClient(),
+            apiClient: DownloadRequestAPIClient(),
             romRepository: NoOpLocalROMs()
         )
         return DownloadQueueManager(
@@ -99,6 +86,16 @@ struct RomDetailViewModelTests {
         Rom(id: id, name: "Pokemon Red", platformId: 3, platformSlug: "gb")
     }
 
+    /// Lets a job's own async retry/restart run until the store shows what the
+    /// test is waiting for. Nothing here awaits anything real, so yielding is
+    /// enough and the test never has to sleep.
+    private func settle(until condition: () -> Bool) async {
+        for _ in 0..<200 {
+            if condition() { return }
+            await Task.yield()
+        }
+    }
+
     // MARK: - downloadButtonTapped
 
     @Test func idleRomStartsTheDownloadAndAsksForTheFlight() {
@@ -113,20 +110,38 @@ struct RomDetailViewModelTests {
         #expect(viewModel.showAddedToast)
     }
 
-    @Test func failedRomIsTreatedLikeIdleAndRestartsTheDownload() {
-        let queue = makeQueue()
+    @Test func failedRomRestartsTheDownload() async throws {
+        let store = QueueJobStore()
+        store.add(job(romId: 42, name: "Pokemon Red", state: .failed, errorMessage: "Disk full"))
+        let queue = makeQueue(store: store)
         let viewModel = makeViewModel(downloadQueue: queue)
         let rom = rom()
-        // No coordinator entry and no settled row for this ROM, which is what
-        // `downloadButtonState` also reads as idle. `.failed` and `.idle` share
-        // a switch case in `downloadButtonTapped`, so this exercises the same
-        // branch a genuinely failed row would.
-        #expect(viewModel.downloadButtonState(forRomId: rom.id) == .idle)
+        #expect(viewModel.downloadButtonState(forRomId: rom.id) == .failed)
 
         let result = viewModel.downloadButtonTapped(rom: rom)
 
         #expect(result == .startedDownload)
-        #expect(viewModel.downloadButtonState(forRomId: rom.id) == .queued)
+        // The retry runs on a task of its own, so the store only shows it once
+        // that task has had a chance to run.
+        await settle { store.job(romId: rom.id)?.state == .running }
+        #expect(viewModel.downloadButtonState(forRomId: rom.id) == .downloading(0, nil))
+    }
+
+    @Test func downloadingRomCancelsAndAsksForNoFlight() {
+        let store = QueueJobStore()
+        store.add(job(romId: 42, name: "Pokemon Red", state: .running, receivedBytes: 40))
+        let queue = makeQueue(store: store)
+        let viewModel = makeViewModel(downloadQueue: queue)
+        let rom = rom()
+        #expect(viewModel.downloadButtonState(forRomId: rom.id) == .downloading(0.4, nil))
+
+        let result = viewModel.downloadButtonTapped(rom: rom)
+
+        #expect(result == .ignored)
+        // Cancelling a download that is already under way gives back its bytes
+        // and drops the job, leaving a settled row that reads back as idle.
+        #expect(store.job(romId: rom.id) == nil)
+        #expect(viewModel.downloadButtonState(forRomId: rom.id) == .idle)
     }
 
     @Test func queuedRomCancelsAndAsksForNoFlight() {
@@ -138,7 +153,7 @@ struct RomDetailViewModelTests {
 
         let result = viewModel.downloadButtonTapped(rom: rom)
 
-        #expect(result == .none)
+        #expect(result == .ignored)
         // Cancelling before the file list ever came back leaves no row behind,
         // which reads back as idle again.
         #expect(viewModel.downloadButtonState(forRomId: rom.id) == .idle)
@@ -152,7 +167,7 @@ struct RomDetailViewModelTests {
 
         let result = viewModel.downloadButtonTapped(rom: rom)
 
-        #expect(result == .none)
+        #expect(result == .ignored)
         #expect(queue.tasks.isEmpty)
     }
 }
