@@ -107,6 +107,59 @@ struct ExternalDisplayPolicyTests {
             areTouchControlsHidden: true
         ))
     }
+
+    // MARK: - Which views may be hidden
+
+    /// Until the first layout pass the traits are not set, so the skin cannot
+    /// say which screen is which.
+    @Test func keepsEveryViewWhenTheSkinIsNotKnownYet() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .unknown, gameViewCount: 2
+        ) == [true, true])
+    }
+
+    /// A skin that names no screen leaves one view holding the whole picture.
+    /// Nothing touches it, so it may go.
+    @Test func releasesTheOneViewWhenNothingTouchesThePicture() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .noneNamed(touches: false), gameViewCount: 1
+        ) == [false])
+    }
+
+    /// Same one view, but the skin puts a touch on it, so the picture carries a
+    /// touch screen the player needs to see, as on the DS.
+    @Test func keepsTheOneViewWhenTheSkinTouchesThePicture() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .noneNamed(touches: true), gameViewCount: 1
+        ) == [true])
+    }
+
+    @Test func mapsTheSkinsScreensOneToOne() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .screens([false, true]), gameViewCount: 2
+        ) == [false, true])
+    }
+
+    /// The counts disagree, so the order no longer maps. A system with a touch
+    /// screen keeps every view rather than risk hiding the wrong one.
+    @Test func keepsEveryViewWhenTheCountsDisagreeAndATouchScreenExists() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .screens([true]), gameViewCount: 2
+        ) == [true, true])
+    }
+
+    @Test func releasesEveryViewWhenTheCountsDisagreeWithoutATouchScreen() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .screens([false]), gameViewCount: 2
+        ) == [false, false])
+    }
+
+    /// One touch screen among several is enough to keep them all.
+    @Test func keepsEveryViewWhenTheCountsDisagreeAndOnlyOneScreenTouches() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .screens([true, false]), gameViewCount: 3
+        ) == [true, true, true])
+    }
 }
 
 struct PhoneScreenBlankerTests {

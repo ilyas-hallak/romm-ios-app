@@ -53,6 +53,10 @@ struct NativeEmulatorView: View {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.bootstrap(resumeSlot: resumeSlot)
             viewModel.session?.onMenuRequested = { showMenu = true }
+            // Set the starting state outright. The `onChange` handlers below
+            // only fire on a real transition, so a display that is already
+            // active when the game starts would otherwise go unnoticed.
+            viewModel.session?.updatePhoneVideoVisibility()
         }
         .onDisappear {
             viewModel.teardown()

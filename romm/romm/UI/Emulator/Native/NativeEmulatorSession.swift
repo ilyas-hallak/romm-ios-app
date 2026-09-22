@@ -75,23 +75,29 @@ final class RommGameViewController: GameViewController {
     /// One flag per entry in `gameViews`, in the same order: DeltaCore builds
     /// the views from the skin's screens in exactly that order.
     private var touchScreenFlags: [Bool] {
-        guard let traits = controllerView?.controllerSkinTraits,
-              let screens = controllerView?.controllerSkin?.screens(for: traits)
-        else {
-            // Traits are only set from the first layout pass on, so nothing is
-            // known about the screens yet. Assume every view is a touch screen,
-            // so an early call cannot hide the one the player taps on.
-            return [Bool](repeating: true, count: gameViews.count)
-        }
+        ExternalDisplayPolicy.touchScreenFlags(
+            from: skinScreens,
+            gameViewCount: gameViews.count
+        )
+    }
 
-        guard screens.count == gameViews.count else {
-            // DeltaCore collapses the screens into one in a few cases the raw
-            // skin does not report, so the order no longer maps. Rather than
-            // guess, keep every view of a system that has a touch screen at all.
-            let hasTouchScreen = screens.contains(where: \.isTouchScreen)
-            return [Bool](repeating: hasTouchScreen, count: gameViews.count)
+    /// Asks the skin about its screens. The traits arrive with the first layout
+    /// pass, and a skin may well name no screen at all for the ones it gets.
+    private var skinScreens: ExternalDisplayPolicy.SkinScreens {
+        // No items means the skin has no layout for these traits at all, which
+        // tells us nothing, so it must not release the picture.
+        guard let traits = controllerView?.controllerSkinTraits,
+              let skin = controllerView?.controllerSkin,
+              let items = skin.items(for: traits)
+        else { return .unknown }
+
+        guard let screens = skin.screens(for: traits), !screens.isEmpty else {
+            // Nothing named, so ask what the skin puts on the picture instead.
+            // A touch item means the picture carries a touch screen, even though
+            // no screen says so.
+            return .noneNamed(touches: items.contains { $0.kind == .touchScreen })
         }
-        return screens.map(\.isTouchScreen)
+        return .screens(screens.map(\.isTouchScreen))
     }
 
     override func viewDidLoad() {
