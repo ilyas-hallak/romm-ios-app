@@ -118,6 +118,22 @@ struct ExternalDisplayPolicyTests {
         ) == [true, true])
     }
 
+    /// A skin that names no screen leaves one view holding the whole picture.
+    /// Nothing touches it, so it may go.
+    @Test func releasesTheOneViewWhenNothingTouchesThePicture() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .noneNamed(touches: false), gameViewCount: 1
+        ) == [false])
+    }
+
+    /// Same one view, but the skin puts a touch on it, so the picture carries a
+    /// touch screen the player needs to see, as on the DS.
+    @Test func keepsTheOneViewWhenTheSkinTouchesThePicture() {
+        #expect(ExternalDisplayPolicy.touchScreenFlags(
+            from: .noneNamed(touches: true), gameViewCount: 1
+        ) == [true])
+    }
+
     @Test func mapsTheSkinsScreensOneToOne() {
         #expect(ExternalDisplayPolicy.touchScreenFlags(
             from: .screens([false, true]), gameViewCount: 2
@@ -136,14 +152,6 @@ struct ExternalDisplayPolicyTests {
         #expect(ExternalDisplayPolicy.touchScreenFlags(
             from: .screens([false]), gameViewCount: 2
         ) == [false, false])
-    }
-
-    /// A skin that names no screen leaves one main view holding the whole
-    /// picture, and that one takes no touch input, so it may go.
-    @Test func releasesTheMainViewWhenTheSkinNamesNoScreen() {
-        #expect(ExternalDisplayPolicy.touchScreenFlags(
-            from: .singleMainView, gameViewCount: 1
-        ) == [false])
     }
 
     /// One touch screen among several is enough to keep them all.

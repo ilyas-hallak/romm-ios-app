@@ -84,9 +84,17 @@ final class RommGameViewController: GameViewController {
     /// Asks the skin about its screens. The traits arrive with the first layout
     /// pass, and a skin may well name no screen at all for the ones it gets.
     private var skinScreens: ExternalDisplayPolicy.SkinScreens {
-        guard let traits = controllerView?.controllerSkinTraits else { return .unknown }
-        guard let screens = controllerView?.controllerSkin?.screens(for: traits)
-        else { return .singleMainView }
+        guard let traits = controllerView?.controllerSkinTraits,
+              let skin = controllerView?.controllerSkin
+        else { return .unknown }
+
+        guard let screens = skin.screens(for: traits), !screens.isEmpty else {
+            // Nothing named, so ask what the skin puts on the picture instead.
+            // A touch item means the picture carries a touch screen, even though
+            // no screen says so.
+            let items = skin.items(for: traits) ?? []
+            return .noneNamed(touches: items.contains { $0.kind == .touchScreen })
+        }
         return .screens(screens.map(\.isTouchScreen))
     }
 

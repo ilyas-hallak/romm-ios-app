@@ -58,9 +58,12 @@ enum ExternalDisplayPolicy {
         /// No traits yet, so the skin has not been asked. The case until the
         /// first layout pass.
         case unknown
-        /// The skin names no screen for these traits. DeltaCore then draws the
-        /// game into a single main view, which never takes touch input.
-        case singleMainView
+        /// The skin names no screen for these traits, so DeltaCore draws the
+        /// whole picture into one view. `touches` carries what that view is
+        /// worth keeping for: a skin that still puts touch input on the picture
+        /// is drawing a touch screen into it, which on the DS is the lower
+        /// screen the player taps on.
+        case noneNamed(touches: Bool)
         /// One entry per screen, true where that screen is a touch screen.
         case screens([Bool])
     }
@@ -76,10 +79,11 @@ enum ExternalDisplayPolicy {
             // rather than hide the one the player taps on.
             return [Bool](repeating: true, count: gameViewCount)
 
-        case .singleMainView:
-            // One view holding the whole picture and no touch input, so there is
-            // nothing here that has to survive.
-            return [Bool](repeating: false, count: gameViewCount)
+        case .noneNamed(let touches):
+            // One view holding the whole picture, so it goes or stays as a
+            // whole. It stays whenever the skin expects a touch on it, because
+            // the screen being touched is then part of that same picture.
+            return [Bool](repeating: touches, count: gameViewCount)
 
         case .screens(let flags):
             guard flags.count == gameViewCount else {
