@@ -201,9 +201,7 @@ class RomsRepository: PRomsRepository {
                 }
             }
             
-            // If we can't check favorites, assume false rather than throwing
-            // This prevents crashes in the UI
-            return false
+            throw error
         }
     }
     

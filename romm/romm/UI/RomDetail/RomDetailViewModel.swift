@@ -122,11 +122,18 @@ class RomDetailViewModel {
             async let favoriteStatusTask = checkRomFavoriteStatusUseCase.execute(romId: romId)
             async let collectionsTask = getCollectionsUseCase.execute()
             
-            let (details, favoriteStatus, collections) = try await (detailsTask, favoriteStatusTask, collectionsTask)
-            
+            let (details, collections) = try await (detailsTask, collectionsTask)
+
             romDetails = details
-            actualFavoriteStatus = favoriteStatus
-            
+
+            // A failed check shouldn't read as "not favourite": keep the last known
+            // status instead of overwriting it with a wrong default.
+            do {
+                actualFavoriteStatus = try await favoriteStatusTask
+            } catch {
+                logger.error("Error checking favorite status, keeping last known value: \(error)")
+            }
+
             // Store original ROM details with siblings if this is the first load
             if originalRomDetails == nil {
                 originalRomDetails = details
@@ -142,7 +149,7 @@ class RomDetailViewModel {
 
             isLoading = false
 
-            logger.info("Loaded ROM details for \(details.name) - Favorite: \(favoriteStatus), Collections: \(romCollectionsCount), Emulator: \(canPlayEmulator)")
+            logger.info("Loaded ROM details for \(details.name) - Favorite: \(actualFavoriteStatus), Collections: \(romCollectionsCount), Emulator: \(canPlayEmulator)")
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
