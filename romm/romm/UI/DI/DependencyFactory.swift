@@ -101,6 +101,8 @@ protocol PDependencyFactory {
     func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase
     func makeRecordSyncUseCase() -> PRecordSyncUseCase
     func makeGetLastSyncUseCase() -> PGetLastSyncUseCase
+    func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase
+    func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase
 
     // Local ROM Use Cases
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
@@ -135,6 +137,7 @@ protocol PDependencyFactory {
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
     var rumblePreference: PRumblePreference { get }
+    var emulatorBezelPreference: PEmulatorBezelPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
     var externalDisplayDiagnostics: PExternalDisplayDiagnostics { get }
     var screenBrightness: PScreenBrightness { get }
@@ -436,6 +439,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
+    lazy var emulatorBezelPreference: PEmulatorBezelPreference = UserDefaultsEmulatorBezelPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
     lazy var externalDisplayDiagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
@@ -482,6 +486,7 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
     lazy var cloudSaveSyncStore: PCloudSaveSyncStore = CloudSaveSyncSettings.shared
+    lazy var saveSyncOutcomeStore: PSaveSyncOutcomeStore = CloudSaveSyncSettings.shared
     lazy var savesRepository: PSavesRepository = SavesRepository(apiClient: apiClient)
     lazy var statesRepository: PStatesRepository = StatesRepository(apiClient: apiClient)
     lazy var fileSystemService: PFileSystemService = DefaultFileSystemService()
@@ -564,8 +569,17 @@ class DefaultDependencyFactory: PDependencyFactory {
             updateStateUseCase: makeUpdateStateUseCase(),
             downloadStateUseCase: makeDownloadStateUseCase(),
             completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
-            externalSaveFolderStore: externalSaveFolderStore
+            externalSaveFolderStore: externalSaveFolderStore,
+            recordRunUseCase: makeRecordSaveSyncRunUseCase()
         )
+    }
+
+    func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase {
+        RecordSaveSyncRunUseCase(store: saveSyncOutcomeStore)
+    }
+
+    func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase {
+        GetLastSaveSyncRunUseCase(store: saveSyncOutcomeStore)
     }
 
     // MARK: - Save/State Sync Use Cases

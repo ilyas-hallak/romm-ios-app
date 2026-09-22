@@ -51,4 +51,12 @@ struct PlatformIconTests {
     @Test func unknownSlugFallsBackToDefault() {
         #expect(PlatformIcon.assetNameCandidates(for: "totally-unknown-platform").last == "default")
     }
+
+    /// Hits the asset catalog, unlike the candidate tests above.
+    @MainActor
+    @Test func hasIconOnlyForSlugsTheCatalogCovers() {
+        #expect(PlatformIcon.hasIcon(for: "snes"))
+        #expect(PlatformIcon.hasIcon(for: "totally-unknown-platform") == false)
+        #expect(PlatformIcon.hasIcon(for: nil) == false)
+    }
 }

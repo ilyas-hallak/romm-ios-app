@@ -20,6 +20,7 @@ private final class FakeSyncDeviceRepository: PSyncDeviceRepository, @unchecked 
     var deviceIdToReturn: String?
     func syncAPIAvailability() async -> SyncAPIAvailability { .available }
     func deviceId() async -> String? { deviceIdToReturn }
+    func forgetDevice() { deviceIdToReturn = nil }
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
 }
 

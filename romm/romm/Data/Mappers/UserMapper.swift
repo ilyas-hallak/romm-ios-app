@@ -21,6 +21,7 @@ struct UserMapper {
             lastLogin: apiUser.lastLogin,
             lastActive: apiUser.lastActive,
             createdAt: apiUser.createdAt,
+            updatedAt: apiUser.updatedAt,
             retroAchievementsUsername: apiUser.raUsername,
             retroAchievementsProgression: (apiUser.raProgression?.results ?? []).compactMap { progression in
                 guard let gameId = progression.romRaId else { return nil }

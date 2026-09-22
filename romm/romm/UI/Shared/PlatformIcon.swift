@@ -101,6 +101,12 @@ enum PlatformIcon {
         return candidates.filter { seen.insert($0).inserted }
     }
 
+    /// Whether the catalog holds a real icon for this slug, so a caller that uses the icon as
+    /// decoration can leave the generic placeholder out instead of showing a meaningless one.
+    @MainActor static func hasIcon(for slug: String?) -> Bool {
+        assetName(for: slug) != placeholder
+    }
+
     /// The first candidate that the asset catalog actually holds, `"default"` if none of them do.
     @MainActor static func assetName(for slug: String?) -> String {
         let cacheKey = slug?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""

@@ -18,6 +18,10 @@ class EmulatorViewModel {
     var errorMessage: String?
     var emulatorURL: URL?
 
+    /// Read once per session, so the frame cannot appear or vanish while a game
+    /// is running. A change applies the next time a game is started.
+    let showsBezel: Bool
+
     // Dependencies
     private let rom: Rom
     private let tokenProvider: PTokenProvider
@@ -25,10 +29,12 @@ class EmulatorViewModel {
 
     init(
         rom: Rom,
-        tokenProvider: PTokenProvider = TokenProvider()
+        tokenProvider: PTokenProvider = TokenProvider(),
+        bezelPreference: PEmulatorBezelPreference
     ) {
         self.rom = rom
         self.tokenProvider = tokenProvider
+        self.showsBezel = bezelPreference.isEnabled
     }
 
     func startEmulator() {

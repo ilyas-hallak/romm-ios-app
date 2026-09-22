@@ -42,6 +42,12 @@ class AppData: ObservableObject {
 
     init() {}
 
+    /// The name to show for the signed in account. `/api/users/me` and the
+    /// stored setup config carry the same login, so either one will do.
+    var displayUsername: String {
+        currentUser?.username ?? currentConfiguration?.username ?? String(localized: "Signed in")
+    }
+
     /// Kick off the cover-fly animation from the given global source frame.
     func launchDownloadFlight(coverURL: String?, from start: CGRect, tabBarMinimized: Bool) {
         guard start != .zero else { return }

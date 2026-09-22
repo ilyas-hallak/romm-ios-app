@@ -20,6 +20,11 @@ protocol PSyncDeviceRepository {
     /// is too old or registration fails, so callers can fall back.
     func deviceId() async -> String?
 
+    /// Drops the stored registration, so the next ``deviceId()`` registers
+    /// again. For the case where the server no longer knows this device, which
+    /// it answers with a 404 and which nothing else here recovers from.
+    func forgetDevice()
+
     /// Closes out a sync session opened by `negotiate`, so the server's own
     /// bookkeeping reflects what actually happened. Best effort: callers should
     /// treat a thrown error as a log warning, not a run failure.
