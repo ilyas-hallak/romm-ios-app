@@ -52,8 +52,9 @@ class RomDetailViewModel {
     let externalPlay = ExternalPlayCoordinator()
 
     /// Shared, app-wide download queue. Downloads keep running after this screen
-    /// is dismissed; the queue is viewable from the Downloads tab.
-    let downloadQueue = DownloadQueueManager.shared
+    /// is dismissed; the queue is viewable from the Downloads tab. Defaults to
+    /// the app-wide instance; tests inject one built from fakes instead.
+    let downloadQueue: DownloadQueueManager
 
     /// Combined button state from on-disk status and the live queue.
     enum DownloadButtonState: Equatable {
@@ -96,7 +97,11 @@ class RomDetailViewModel {
     private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
     private let getROMShareFilesUseCase: PGetROMShareFilesUseCase
 
-    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+    init(
+        factory: PDependencyFactory = DefaultDependencyFactory.shared,
+        downloadQueue: DownloadQueueManager = .shared
+    ) {
+        self.downloadQueue = downloadQueue
         self.apiClient = factory.apiClient
         self.getRomDetailsUseCase = factory.makeGetRomDetailsUseCase()
         self.toggleRomFavoriteUseCase = factory.makeToggleRomFavoriteUseCase()
@@ -425,6 +430,31 @@ class RomDetailViewModel {
     /// cancelled row behind, which the Downloads tab shows until it is cleared.
     func cancelDownload(romId: Int) {
         downloadQueue.cancel(id: romId)
+    }
+
+    /// What the download button's tap should do next, and whether the view
+    /// still owes the flight animation. That animation needs view geometry
+    /// (the button's frame, the tab bar's state), so the view model only says
+    /// whether it started, never how it looks.
+    enum DownloadButtonTapResult: Equatable {
+        case startedDownload
+        case ignored
+    }
+
+    /// Runs a button tap through the same decision its state came from: a
+    /// queued or running download is cancelled, a finished one is left alone,
+    /// anything else starts (or retries) the download.
+    func downloadButtonTapped(rom: Rom) -> DownloadButtonTapResult {
+        switch downloadButtonState(forRomId: rom.id) {
+        case .queued, .downloading:
+            cancelDownload(romId: rom.id)
+            return .ignored
+        case .downloaded:
+            return .ignored
+        case .idle, .failed:
+            downloadROM(rom: rom)
+            return .startedDownload
+        }
     }
 
     /// Prepares the downloaded ROM files for the iOS share sheet ("Open In…").

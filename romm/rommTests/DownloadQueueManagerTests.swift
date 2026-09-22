@@ -2,35 +2,6 @@ import Testing
 import Foundation
 @testable import romm
 
-/// The download queue with no file system behind it: every job lives in memory.
-private final class QueueJobStore: PDownloadJobStore, @unchecked Sendable {
-    private var jobs: [DownloadJob] = []
-
-    func allJobs() -> [DownloadJob] { jobs }
-    func job(id: UUID) -> DownloadJob? { jobs.first { $0.id == id } }
-    func job(romId: Int) -> DownloadJob? { jobs.first { $0.romId == romId } }
-
-    func add(_ job: DownloadJob) {
-        jobs.removeAll { $0.id == job.id }
-        jobs.append(job)
-    }
-
-    func replace(_ job: DownloadJob) {
-        guard let index = jobs.firstIndex(where: { $0.id == job.id }) else { return }
-        jobs[index] = job
-    }
-
-    func updateFile(jobId: UUID, fileName: String, _ mutate: (inout DownloadJobFile) -> Void) {
-        guard let jobIndex = jobs.firstIndex(where: { $0.id == jobId }),
-              let fileIndex = jobs[jobIndex].files.firstIndex(where: { $0.fileName == fileName }) else { return }
-        mutate(&jobs[jobIndex].files[fileIndex])
-    }
-
-    func remove(jobId: UUID) {
-        jobs.removeAll { $0.id == jobId }
-    }
-}
-
 /// Prepares and finishes downloads without touching disk, and records what it
 /// was asked to give back.
 private final class QueueFinalizer: PROMDownloadFinalizer, @unchecked Sendable {
@@ -116,13 +87,6 @@ private final class QueueFileList: PROMFileListProvider, @unchecked Sendable {
         askedForRomIds.append(rom.id)
         if let error { throw error }
         return files
-    }
-}
-
-/// Hands out a request for any download path, so nothing reaches the network.
-private final class QueueRequestAPIClient: StubRommAPIClient {
-    override func makeDownloadRequest(path: String) throws -> URLRequest {
-        URLRequest(url: URL(string: "https://romm.invalid/\(path)")!)
     }
 }
 
@@ -215,11 +179,11 @@ struct DownloadQueueManagerTests {
             transferClient: client,
             store: store,
             finalizer: finalizer,
-            apiClient: QueueRequestAPIClient(),
+            apiClient: DownloadRequestAPIClient(),
             romRepository: QueueROMs()
         )
         let manager = DownloadQueueManager(
-            apiClient: QueueRequestAPIClient(),
+            apiClient: DownloadRequestAPIClient(),
             transferClient: client,
             coordinator: coordinator,
             fileListProvider: fileList,
@@ -246,32 +210,6 @@ struct DownloadQueueManagerTests {
             fileName: name,
             fileSizeBytes: size,
             fileExtension: (name as NSString).pathExtension
-        )
-    }
-
-    private func job(
-        romId: Int = 7,
-        name: String = "Pokemon Red",
-        state: DownloadJobState,
-        expectedSizeBytes: Int64 = 100,
-        receivedBytes: Int64 = 0,
-        errorMessage: String? = nil
-    ) -> DownloadJob {
-        DownloadJob(
-            romId: romId,
-            rom: DownloadJobRomSnapshot(id: romId, name: name, platformId: 3, platformSlug: "gb"),
-            platformName: "Game Boy",
-            romDirectoryPath: "Game Boy/\(name)",
-            state: state,
-            files: [
-                DownloadJobFile(
-                    fileName: "red.gb",
-                    expectedSizeBytes: expectedSizeBytes,
-                    state: state == .failed ? .failed : .running,
-                    receivedBytes: receivedBytes
-                )
-            ],
-            errorMessage: errorMessage
         )
     }
 
