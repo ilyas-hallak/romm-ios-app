@@ -30,7 +30,7 @@ private final class FakeLocalROMs: PLocalROMRepository, @unchecked Sendable {
 struct RomDetailViewModelFavouriteTests {
 
     @Test func keepsLastKnownStatusWhenSameRomCheckFails() async throws {
-        let romsRepository = FakeRomsRepositoryForFavouriteTests()
+        let romsRepository = FavouriteRomsRepository()
         romsRepository.detailsById[1] = makeRomDetails(id: 1)
         romsRepository.favoriteStatusById[1] = true
 
@@ -48,7 +48,7 @@ struct RomDetailViewModelFavouriteTests {
     }
 
     @Test func defaultsToFalseWhenADifferentRomCheckFails() async throws {
-        let romsRepository = FakeRomsRepositoryForFavouriteTests()
+        let romsRepository = FavouriteRomsRepository()
         romsRepository.detailsById[1] = makeRomDetails(id: 1)
         romsRepository.detailsById[2] = makeRomDetails(id: 2)
         romsRepository.favoriteStatusById[1] = true
@@ -79,14 +79,14 @@ private func makeRomDetails(id: Int) -> RomDetails {
 /// Minimal `PRomsRepository` double for exercising `RomDetailViewModel.loadRomDetails`.
 /// Serves canned `RomDetails` per ROM id and lets a test fail the favourite lookup for
 /// specific ids, independent of the ROM details and collections calls.
-final class FakeRomsRepositoryForFavouriteTests: PRomsRepository {
+private final class FavouriteRomsRepository: PRomsRepository {
     var detailsById: [Int: RomDetails] = [:]
     var favoriteStatusById: [Int: Bool] = [:]
     var failFavoriteCheckForIds: Set<Int> = []
 
     func getRomDetails(id: Int) async throws -> RomDetails {
         guard let details = detailsById[id] else {
-            fatalError("FakeRomsRepositoryForFavouriteTests: no fixture for rom \(id)")
+            fatalError("FavouriteRomsRepository: no fixture for rom \(id)")
         }
         return details
     }

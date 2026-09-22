@@ -22,10 +22,8 @@ class RomDetailViewModel {
     var isLoading: Bool = false
     var errorMessage: String?
     var actualFavoriteStatus: Bool = false // True favorite status from Collections API
-    /// The ROM `actualFavoriteStatus` was last successfully determined for. Lets a failed
-    /// favourite check tell whether the current value is still relevant, or belongs to a
-    /// ROM we already navigated away from.
-    private var actualFavoriteStatusRomId: Int? = nil
+    /// The ROM `actualFavoriteStatus` belongs to, so a failed check never reuses another ROM's value.
+    private var actualFavoriteStatusRomId: Int?
     var manual: Manual?
     var manualPDFData: Data?
     var isLoadingManual: Bool = false
@@ -136,9 +134,7 @@ class RomDetailViewModel {
             romDetails = details
 
             // A failed check shouldn't read as "not favourite": keep the last known
-            // status instead of overwriting it with a wrong default, but only when
-            // that value was actually determined for this same ROM. Switching to a
-            // sibling has no last known value to fall back on, so default to false.
+            // status, but only if it belongs to this ROM and not to a sibling.
             do {
                 actualFavoriteStatus = try await favoriteStatusTask
                 actualFavoriteStatusRomId = romId
