@@ -219,6 +219,7 @@ struct DownloadQueueManagerTests {
             romRepository: QueueROMs()
         )
         let manager = DownloadQueueManager(
+            apiClient: QueueRequestAPIClient(),
             transferClient: client,
             coordinator: coordinator,
             fileListProvider: fileList,
