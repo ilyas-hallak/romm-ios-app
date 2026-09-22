@@ -480,25 +480,18 @@ struct RomDetailView: View {
             let downloadState = viewModel.downloadButtonState(forRomId: currentSelectedRom.id)
             HStack(spacing: 12) {
                 Button(action: {
-                    // While a download runs this button is the way out of it,
-                    // rather than a second button crowding the row.
-                    switch downloadState {
-                    case .queued, .downloading:
-                        viewModel.cancelDownload(romId: currentSelectedRom.id)
-                        return
-                    case .downloaded:
-                        return
-                    case .idle, .failed:
-                        break
+                    // The view model decides whether this tap cancels, is
+                    // ignored, or starts a download; only the flight animation
+                    // (needs this view's geometry) stays here.
+                    if viewModel.downloadButtonTapped(rom: currentSelectedRom) == .startedDownload {
+                        appData.launchDownloadFlight(
+                            coverURL: currentSelectedRom.listCoverURL,
+                            from: downloadButtonFrame,
+                            // No public API exposes the tab-bar's minimized state, so
+                            // derive it from the live scroll offset (see onScrollGeometryChange).
+                            tabBarMinimized: tabBarMinimized
+                        )
                     }
-                    appData.launchDownloadFlight(
-                        coverURL: currentSelectedRom.listCoverURL,
-                        from: downloadButtonFrame,
-                        // No public API exposes the tab-bar's minimized state, so
-                        // derive it from the live scroll offset (see onScrollGeometryChange).
-                        tabBarMinimized: tabBarMinimized
-                    )
-                    viewModel.downloadROM(rom: currentSelectedRom)
                 }) {
                     HStack(spacing: 8) {
                         switch downloadState {
