@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // A previous run may have been killed while the screen was blanked for
         // TV play, which would leave the panel dark at brightness 0.
         PhoneScreenBlanker.shared.recoverIfNeeded()
+        // A phone set up once keeps taking a second pad, without the player
+        // having to walk back into Settings for it.
+        SecondControllerManager.shared.startIfEnabled()
         // Downloads keep transferring while the app is gone, so the queue has to
         // be reconciled with what the session actually still holds. This also
         // runs when the app was only relaunched to be handed session events,

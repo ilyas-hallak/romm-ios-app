@@ -258,6 +258,10 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// outlive the core it renders from.
     private var externalRenderTarget: DeltaCoreExternalRenderTarget?
 
+    /// The phone on the network that plays as the second player, while one is
+    /// connected. Held strongly because DeltaCore keeps its controllers weakly.
+    private var remoteController: RemoteGameController?
+
     // MARK: - GameViewControllerDelegate
 
     func gameViewController(_ gameViewController: GameViewController, handleMenuInputFrom gameController: GameController) {
@@ -365,6 +369,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             // ring switch muting a console the user deliberately started.
             self.emulatorCore?.audioManager.respectsSilentMode = false
             self.attachExternalControllers()
+            // After the core is up: the pad needs something to send its input
+            // to, and one that joined before the game started is picked up here.
+            SecondControllerManager.shared.setInput(self)
             self.observeControllerConnections()
             self.observeAudioSessionChanges()
             self.recheckOutputVolumeAfterStart()
@@ -403,6 +410,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         // with an in-flight frame and crash.
         viewController.pauseEmulation()
         flushBattery()
+        SecondControllerManager.shared.setInput(nil)
         detachExternalControllers()
         // Before `core.stop()`: the core must not be torn down while a view of
         // ours is still registered as one of its render targets.
@@ -793,6 +801,44 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             try? saveStates.writeBattery(romId: romId, data: data)
             cloudSync?.pushBattery(data: data)
         }
+    }
+}
+
+// MARK: - Second player over the network
+
+extension NativeEmulatorSession: PSecondPlayerInput {
+
+    func setSecondPlayerConnected(_ connected: Bool) {
+        if connected {
+            attachRemoteController()
+        } else {
+            detachRemoteController()
+        }
+    }
+
+    func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool) {
+        remoteController?.set(button, pressed: pressed)
+    }
+
+    private func attachRemoteController() {
+        guard remoteController == nil, let core = emulatorCore else { return }
+        let controller = RemoteGameController(
+            name: SecondControllerManager.shared.padName ?? "Remote pad",
+            playerIndex: Self.remotePadPlayer
+        )
+        // Only the core, not the game view controller: the menu input belongs to
+        // whoever holds the phone the game runs on.
+        controller.addReceiver(core, inputMapping: controller.defaultInputMapping)
+        remoteController = controller
+    }
+
+    private func detachRemoteController() {
+        guard let controller = remoteController else { return }
+        controller.releaseAll()
+        if let core = emulatorCore {
+            controller.removeReceiver(core)
+        }
+        remoteController = nil
     }
 }
 #endif
