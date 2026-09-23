@@ -262,12 +262,6 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// connected. Held strongly because DeltaCore keeps its controllers weakly.
     private var remoteController: RemoteGameController?
 
-    /// Player the remote pad takes. The first one belongs to the phone the game
-    /// runs on, through its own skin. A second gamepad takes the same player,
-    /// so the two would move as one, which is for whoever set both up to sort
-    /// out.
-    private static let remotePadPlayer = 1
-
     // MARK: - GameViewControllerDelegate
 
     func gameViewController(_ gameViewController: GameViewController, handleMenuInputFrom gameController: GameController) {

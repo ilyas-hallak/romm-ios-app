@@ -31,7 +31,12 @@ final class RemoteControllerClientService: PRemoteControllerClientService {
             MainActor.assumeIsolated { self?.updateHosts(from: results) }
         }
         browser.stateUpdateHandler = { [weak self] state in
-            guard case .failed(let error) = state else { return }
+            // Waiting: see the connection below, same permission case.
+            let error: NWError
+            switch state {
+            case .failed(let failure), .waiting(let failure): error = failure
+            default: return
+            }
             MainActor.assumeIsolated {
                 self?.onStateChanged?(.failed(message: error.localizedDescription))
             }
@@ -63,7 +68,10 @@ final class RemoteControllerClientService: PRemoteControllerClientService {
                 case .ready:
                     self.write(.hello(padName: padName))
                     self.onStateChanged?(.connected(hostName: host.name))
-                case .failed(let error):
+                // Waiting is where a denied local network permission ends up,
+                // it would otherwise sit on "connecting" for good.
+                case .failed(let error), .waiting(let error):
+                    connection.cancel()
                     self.connection = nil
                     self.onStateChanged?(.failed(message: error.localizedDescription))
                 case .cancelled:

@@ -42,12 +42,6 @@ final class LibretroSession: NSObject {
     /// Whether a phone on the network is playing as the second player.
     private var hasRemotePad = false
 
-    /// Player the remote pad drives. The first one is the phone the game runs
-    /// on, through its own touch controls. A second gamepad takes the same
-    /// player, so the two would move as one, which is for whoever set both up
-    /// to sort out.
-    private static let remotePadPlayer = 1
-
     init(
         gameURL: URL,
         core: LibretroCore,

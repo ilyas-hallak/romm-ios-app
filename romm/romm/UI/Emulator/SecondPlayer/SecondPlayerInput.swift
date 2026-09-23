@@ -9,3 +9,10 @@ protocol PSecondPlayerInput: AnyObject {
     func setSecondPlayerConnected(_ connected: Bool)
     func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool)
 }
+
+extension PSecondPlayerInput {
+    /// Player the remote pad drives. The first one belongs to the phone the
+    /// game runs on. A second gamepad takes the same player, so the two would
+    /// move as one, which is for whoever set both up to sort out.
+    static var remotePadPlayer: Int { 1 }
+}

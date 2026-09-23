@@ -106,7 +106,6 @@ struct LibretroPlayerPortTests {
 
 @MainActor
 private final class FakeRemoteControllerHostService: PRemoteControllerHostService {
-    private(set) var connectedPadName: String?
     var onButton: ((RemoteGamepadButton, Bool) -> Void)?
     var onPadChanged: ((String?) -> Void)?
     private(set) var advertisedName: String?
@@ -115,12 +114,10 @@ private final class FakeRemoteControllerHostService: PRemoteControllerHostServic
     func stopAdvertising() { advertisedName = nil }
 
     func simulatePadJoined(_ name: String) {
-        connectedPadName = name
         onPadChanged?(name)
     }
 
     func simulatePadLeft() {
-        connectedPadName = nil
         onPadChanged?(nil)
     }
 }

@@ -10,7 +10,7 @@ import Network
 @MainActor
 final class RemoteControllerHostService: PRemoteControllerHostService {
 
-    private(set) var connectedPadName: String?
+    private var connectedPadName: String?
     var onButton: ((RemoteGamepadButton, Bool) -> Void)?
     var onPadChanged: ((String?) -> Void)?
 
@@ -54,8 +54,9 @@ final class RemoteControllerHostService: PRemoteControllerHostService {
     // MARK: - One pad at a time
 
     private func accept(_ connection: NWConnection) {
-        self.connection?.cancel()
-        codec = RemoteControllerCodec()
+        // Leave the old pad properly, so buttons it still held are lifted
+        // before the new one takes over.
+        dropPad()
         self.connection = connection
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
