@@ -157,8 +157,11 @@ extension RommAPIClient {
                     throw APIClientError.invalidResponse(200, "Received HTML instead of PDF - authentication may have failed")
                 }
                 return data
-            case 401, 403:
+            case 401:
                 throw APIClientError.authenticationRequired
+            case 403:
+                let msg = String(data: data, encoding: .utf8) ?? "Forbidden"
+                throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
             default:
                 let msg = String(data: data, encoding: .utf8) ?? "PDF download failed"
                 logger.error("PDF download failed (\(httpResponse.statusCode)): \(msg)")

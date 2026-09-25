@@ -55,7 +55,7 @@ final class BackgroundDownloadSession: PBackgroundTransferClient {
         let delegate = BackgroundDownloadDelegate()
         self.delegate = delegate
 
-        let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
+        let configuration = URLSessionConfiguration.background(withIdentifier: identifier).withoutCookies()
         // Lets the system relaunch the app in the background to hand over the
         // events of transfers that finished while the app was gone.
         configuration.sessionSendsLaunchEvents = true

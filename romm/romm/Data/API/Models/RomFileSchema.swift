@@ -17,13 +17,13 @@ public struct RomFileSchema: Codable, JSONEncodable, Hashable {
     public var fullPath: String
     public var createdAt: Date
     public var updatedAt: Date
-    public var lastModified: Date
+    public var lastModified: Date?
     public var crcHash: String?
     public var md5Hash: String?
     public var sha1Hash: String?
     public var category: RomFileCategory?
 
-    public init(id: Int, romId: Int, fileName: String, filePath: String, fileSizeBytes: Int, fullPath: String, createdAt: Date, updatedAt: Date, lastModified: Date, crcHash: String?, md5Hash: String?, sha1Hash: String?, category: RomFileCategory?) {
+    public init(id: Int, romId: Int, fileName: String, filePath: String, fileSizeBytes: Int, fullPath: String, createdAt: Date, updatedAt: Date, lastModified: Date?, crcHash: String?, md5Hash: String?, sha1Hash: String?, category: RomFileCategory?) {
         self.id = id
         self.romId = romId
         self.fileName = fileName
