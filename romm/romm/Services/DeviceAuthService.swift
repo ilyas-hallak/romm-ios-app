@@ -61,7 +61,7 @@ final class DeviceAuthService {
 
     private func makeSession() -> URLSession {
         URLSession(
-            configuration: .default,
+            configuration: .default.withoutCookies(),
             delegate: PrivateNetworkURLSessionDelegate(),
             delegateQueue: nil
         )

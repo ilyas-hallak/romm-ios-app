@@ -159,6 +159,19 @@ enum APIClientError: LocalizedError {
     }
 }
 
+// MARK: - Cookie-free session configuration
+
+extension URLSessionConfiguration {
+    // We authenticate by header only. Since RomM 5.3 a romm_session cookie next to
+    // that header, e.g. one the web emulator left behind, fails the CSRF check with 403.
+    func withoutCookies() -> URLSessionConfiguration {
+        httpCookieStorage = nil
+        httpShouldSetCookies = false
+        httpCookieAcceptPolicy = .never
+        return self
+    }
+}
+
 // MARK: - Core Client
 
 class RommAPIClient: PRommAPIClient {
@@ -176,7 +189,7 @@ class RommAPIClient: PRommAPIClient {
         if let urlSession = urlSession {
             self.urlSession = urlSession
         } else {
-            let configuration = URLSessionConfiguration.default
+            let configuration = URLSessionConfiguration.default.withoutCookies()
             configuration.timeoutIntervalForRequest = 30.0
             configuration.timeoutIntervalForResource = 60 * 60
             configuration.waitsForConnectivity = true
@@ -255,14 +268,8 @@ class RommAPIClient: PRommAPIClient {
                     throw APIClientError.cloudflareProtection(msg)
                 }
 
-                // For client token auth, 403 means token was revoked/invalid
-                if tokenProvider.getAuthMethod() == .clientToken {
-                    logger.warning("Client token rejected (403) - session expired")
-                    NotificationCenter.default.post(name: .sessionExpired, object: nil)
-                    throw APIClientError.authenticationRequired
-                }
-
-                // Regular 403 error
+                // 403 is a regular error, never a logout trigger. Only 401 means the
+                // credentials themselves are rejected.
                 logger.error("Forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
             case 409:
@@ -524,12 +531,8 @@ class RommAPIClient: PRommAPIClient {
                     throw APIClientError.cloudflareProtection(msg)
                 }
 
-                if tokenProvider.getAuthMethod() == .clientToken {
-                    logger.warning("Client token rejected (403) on multipart - session expired")
-                    NotificationCenter.default.post(name: .sessionExpired, object: nil)
-                    throw APIClientError.authenticationRequired
-                }
-
+                // 403 is a regular error, never a logout trigger. Only 401 means the
+                // credentials themselves are rejected.
                 logger.error("Multipart forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
             case 409:

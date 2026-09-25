@@ -45,6 +45,17 @@ struct HeartbeatRepositoryTests {
         // "4.8.0-alpha.1" → "4.8.0" → kompatibel
         #expect(repo.isVersionCompatible("4.8.0-alpha.1") == true)
     }
+
+    @Test func laterPatchOfMaxMinorIsCompatible() {
+        let repo = HeartbeatRepository(apiClient: FakeAPIClient())
+        #expect(repo.isVersionCompatible("5.3.1") == true)
+        #expect(repo.isVersionCompatible("5.3.9") == true)
+    }
+
+    @Test func nextMinorAboveMaxIsNotCompatible() {
+        let repo = HeartbeatRepository(apiClient: FakeAPIClient())
+        #expect(repo.isVersionCompatible("5.4.0") == false)
+    }
 }
 
 struct ConnectionLogFormatterTests {

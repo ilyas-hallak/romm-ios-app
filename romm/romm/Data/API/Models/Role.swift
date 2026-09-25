@@ -8,7 +8,15 @@
 import Foundation
 
 public enum Role: String, Codable, CaseIterable {
+    // viewer/editor are only sent by servers older than 5.2, which still had
+    // the three-way split. 5.2+ collapsed everything non-admin into "user".
     case viewer = "viewer"
     case editor = "editor"
+    case user = "user"
     case admin = "admin"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = Role(rawValue: raw) ?? .user
+    }
 }
