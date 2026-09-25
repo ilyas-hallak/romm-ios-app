@@ -4,6 +4,31 @@ All builds of the RomM iOS app, newest first.
 
 ## Version 1.0
 
+### Build 54 (2026-09-25)
+
+**New**
+- With a TV attached, the phone can now act as a pure controller.
+The game shows only on the TV, the phone keeps just the touch controls and stays in landscape.
+It is off by default, turn on Phone as Controller in the in-game menu or in Settings under Play on TV.
+On the DS the touch screen stays on the phone, since that is where you tap.
+- The web emulator can run inside an optional bezel with the platform's icon.
+The switch is in Settings under Emulator.
+- Settings now live behind your avatar on Home.
+The account holds the server, Save Sync, Settings, Server Statistics and Help, and the avatar shows a badge when the last save sync did not work.
+- RomM 5.3 servers are supported.
+
+**Fixed**
+- A 403 from the server signed you out, now only an expired session does.
+- A failed favourite check showed the game as not favourite.
+- The favourite status of one ROM could carry over to another version of the same game.
+
+**Known issues**
+- PS1, PC Engine and Master System can still crash when audio resumes after a call, unplugged headphones, or coming back from the background.
+- N64 can exit on its own in some games.
+- With a physical controller you cannot reach the save and load menu yet.
+- Handing a ROM to Manic EMU or Provenance only works for systems the built-in engines know, and disc based games cannot be handed over at all.
+- Save and state files cannot be downloaded from a server over plain http.
+
 ### Build 53 (2026-09-18)
 
 **New**
