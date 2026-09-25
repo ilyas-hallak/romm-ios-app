@@ -23,6 +23,12 @@ end
 DELTA_FRAMEWORK = /DeltaCore/
 DELTA_ASSETS = ["*.deltaskin", "*.deltamapping"].freeze
 
+# The App Store build ships no in-app engine at all, so the libretro cores,
+# PPSSPP's asset bundle and the EmulatorJS web player have no business being
+# in that .app either. Same 4.3(a) risk as the Delta cores above.
+LIBRETRO_FRAMEWORK = /libretro/
+NO_ENGINE_ITEMS = ["PPSSPPAssets", "emulator.html"].freeze
+
 # The signing team is no longer stored in the project file, it comes from a
 # gitignored Signing.xcconfig that a release worktree does not have. So the
 # build has to be told the team explicitly. Override with IOS_DEVELOPMENT_TEAM.
@@ -49,6 +55,8 @@ def verify_ipa!(ipa_path, expect_delta_cores:)
     frameworks = Dir.glob(File.join(app, "Frameworks", "*")).map { |f| File.basename(f) }
     delta_frameworks = frameworks.grep(DELTA_FRAMEWORK)
     delta_assets = DELTA_ASSETS.flat_map { |g| Dir.glob(File.join(app, "**", g)) }
+    libretro_frameworks = frameworks.grep(LIBRETRO_FRAMEWORK)
+    no_engine_items = NO_ENGINE_ITEMS.flat_map { |name| Dir.glob(File.join(app, "**", name)) }
 
     UI.message("#{frameworks.count} embedded frameworks, #{delta_frameworks.count} of them Delta")
 
@@ -69,6 +77,16 @@ def verify_ipa!(ipa_path, expect_delta_cores:)
       unless delta_assets.empty?
         names = delta_assets.map { |f| File.basename(f) }.uniq
         UI.user_error!("App Store build still ships Delta assets: #{names.join(', ')}")
+      end
+      unless libretro_frameworks.empty?
+        UI.user_error!(
+          "App Store build still embeds libretro cores: #{libretro_frameworks.join(', ')}. " \
+          "Refusing to upload, this is the 4.3(a) rejection all over again."
+        )
+      end
+      unless no_engine_items.empty?
+        names = no_engine_items.map { |f| File.basename(f) }.uniq
+        UI.user_error!("App Store build still ships in-app engine assets: #{names.join(', ')}")
       end
 
       # Frameworks and assets are not the whole story. A leftover credit line

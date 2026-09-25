@@ -11,16 +11,16 @@ enum LaunchDecision: Identifiable {
     case web(rom: Rom)
     #if !APP_STORE
     case native(rom: Rom, gameType: DeltaGameType)
-    #endif
     case libretro(rom: Rom, core: LibretroCore)
+    #endif
 
     var id: String {
         switch self {
         case .web(let rom): return "web-\(rom.id)"
         #if !APP_STORE
         case .native(let rom, _): return "native-\(rom.id)"
-        #endif
         case .libretro(let rom, _): return "libretro-\(rom.id)"
+        #endif
         }
     }
 
@@ -31,8 +31,6 @@ enum LaunchDecision: Identifiable {
         case .web: return false
         #if !APP_STORE
         case .native, .libretro: return true
-        #else
-        case .libretro: return true
         #endif
         }
     }
@@ -147,12 +145,9 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             return .success(.web(rom: rom))
         #else
         case .auto:
-            // No Delta cores in this build: the only on-device engine is
-            // libretro, so this is where it is tried, falling back to web
-            // when the platform has no libretro core either.
-            if let core = PlatformSlugToLibretroCore.map(platformSlug) {
-                return .success(.libretro(rom: rom, core: core))
-            }
+            // No on-device engine ships in this build. Play always hands the
+            // ROM to an external app before this point is reached (see
+            // ExternalPlayCoordinator); this is just the inert fallback.
             if AppFeatures.webEmulatorEnabled {
                 return .success(.web(rom: rom))
             }

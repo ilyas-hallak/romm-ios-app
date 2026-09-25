@@ -35,10 +35,12 @@ private enum PlayChoice: Hashable {
 
 struct EmulatorEngineSettingsView: View {
     @State private var playChoice: PlayChoice
+    #if !APP_STORE
     @State private var menuShortcut: EmulatorMenuShortcut
     @State private var swapFaceButtons: Bool
     @State private var rumbleEnabled: Bool
     @State private var bezelEnabled: Bool
+    #endif
     @State private var installedEmulators: [ExternalEmulatorID] = []
     /// Apps the user has been through the assistant for, the only ones offered
     /// as a Play target.
@@ -46,14 +48,16 @@ struct EmulatorEngineSettingsView: View {
     @State private var isAddingEmulator = false
     private let setupStore: PExternalEmulatorSetupStore
     private let preference: PEmulatorEnginePreference
+    #if !APP_STORE
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference
     private let faceButtonPreference: PGamepadFaceButtonPreference
     private let rumblePreference: PRumblePreference
     private let bezelPreference: PEmulatorBezelPreference
+    #endif
     private let playTargetPreference: PPlayTargetPreference
     private let externalAppLauncher: PExternalAppLauncher
 
-    #if DEBUG
+    #if !APP_STORE && DEBUG
     @State private var simulateController = EmulatorControllerState.simulateConnected
     /// Kept in @State so the engine survives body recomputations. The view is
     /// MainActor-isolated (SWIFT_DEFAULT_ACTOR_ISOLATION), so building the
@@ -67,17 +71,21 @@ struct EmulatorEngineSettingsView: View {
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.preference = factory.enginePreference
+        #if !APP_STORE
         self.menuShortcutPreference = factory.emulatorMenuShortcutPreference
         self.faceButtonPreference = factory.gamepadFaceButtonPreference
         self.rumblePreference = factory.rumblePreference
         self.bezelPreference = factory.emulatorBezelPreference
+        #endif
         self.playTargetPreference = factory.playTargetPreference
         self.externalAppLauncher = factory.externalAppLauncher
         self.setupStore = factory.externalEmulatorSetupStore
+        #if !APP_STORE
         _menuShortcut = State(wrappedValue: factory.emulatorMenuShortcutPreference.current)
         _swapFaceButtons = State(wrappedValue: factory.gamepadFaceButtonPreference.isSwapped)
         _rumbleEnabled = State(wrappedValue: factory.rumblePreference.isEnabled)
         _bezelEnabled = State(wrappedValue: factory.emulatorBezelPreference.isEnabled)
+        #endif
         _playChoice = State(wrappedValue: PlayChoice(
             engine: factory.enginePreference.current,
             target: factory.playTargetPreference.current
@@ -88,6 +96,11 @@ struct EmulatorEngineSettingsView: View {
         Form {
             playWithSection
             emulatorAppsSection
+
+            // These all steer an in-app engine session (on-screen controls, a
+            // physical controller's menu shortcut, face-button mapping, rumble),
+            // none of which exists once Play only hands ROMs to another app.
+            #if !APP_STORE
             bezelSection
 
             Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it, handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
@@ -124,24 +137,29 @@ struct EmulatorEngineSettingsView: View {
 
             rumbleTestSection
             #endif
+            #endif
         }
         .navigationTitle("Emulator")
         .onAppear {
             refreshInstalledEmulators()
+            #if !APP_STORE
             // The in-game menu writes these two as well, so re-read them.
             menuShortcut = menuShortcutPreference.current
             swapFaceButtons = faceButtonPreference.isSwapped
             #if DEBUG
             refreshRumbleDiagnostics()
             #endif
+            #endif
         }
-        #if DEBUG
+        #if !APP_STORE && DEBUG
         .onDisappear { stopRumbleTest() }
         #endif
+        #if !APP_STORE
         .onChange(of: menuShortcut) { _, new in menuShortcutPreference.current = new }
         .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
         .onChange(of: rumbleEnabled) { _, new in rumblePreference.isEnabled = new }
         .onChange(of: bezelEnabled) { _, new in bezelPreference.isEnabled = new }
+        #endif
         .onChange(of: playChoice) { _, new in apply(new) }
         .sheet(isPresented: $isAddingEmulator) {
             ExternalEmulatorSetupView {
@@ -181,6 +199,7 @@ struct EmulatorEngineSettingsView: View {
                 } label: {
                     playWithRow(showsChevron: true)
                 }
+                .tint(.primary)
             } else {
                 // Nothing to choose between and nothing to add, so a menu would
                 // only look broken.
@@ -251,6 +270,7 @@ struct EmulatorEngineSettingsView: View {
         }
     }
 
+    #if !APP_STORE
     /// Only shown where the web emulator can actually run, it is the one engine
     /// the frame applies to. The native engines get their look from a controller
     /// skin instead.
@@ -265,6 +285,7 @@ struct EmulatorEngineSettingsView: View {
             }
         }
     }
+    #endif
 
     private var choices: [PlayChoice] {
         #if !APP_STORE
@@ -272,9 +293,9 @@ struct EmulatorEngineSettingsView: View {
             ? [.builtIn(.web), .builtIn(.native)]
             : [.builtIn(.native)]
         #else
-        var choices: [PlayChoice] = AppFeatures.webEmulatorEnabled
-            ? [.builtIn(.web), .builtIn(.auto)]
-            : [.builtIn(.auto)]
+        // No in-app engine ships in this build, so the only choices are the
+        // external apps below.
+        var choices: [PlayChoice] = []
         #endif
         choices += pickableEmulators.map { .external($0) }
         return choices
@@ -283,11 +304,14 @@ struct EmulatorEngineSettingsView: View {
     private func label(for choice: PlayChoice) -> String {
         switch choice {
         case .builtIn(let engine):
-            guard AppFeatures.webEmulatorEnabled else { return "Built-in emulator" }
-            #if !APP_STORE
-            return engine == .web ? "Web (EmulatorJS)" : "Native (DeltaCore, etc.)"
+            #if APP_STORE
+            // Not offered by `choices`, but a freshly installed app still
+            // defaults its stored Play target to `.builtIn`, so this has to
+            // read as "nothing chosen yet" rather than a phantom engine.
+            return "None"
             #else
-            return engine == .web ? "Web (EmulatorJS)" : "Native (libretro)"
+            guard AppFeatures.webEmulatorEnabled else { return "Built-in emulator" }
+            return engine == .web ? "Web (EmulatorJS)" : "Native (DeltaCore, etc.)"
             #endif
         case .external(let id):
             return "External: \(id.emulator.displayName)"
@@ -296,7 +320,11 @@ struct EmulatorEngineSettingsView: View {
 
     private var footerText: String {
         guard !pickableEmulators.isEmpty else {
+            #if APP_STORE
+            return "Install \(supportedEmulatorNames) to play ROMs there."
+            #else
             return "Install \(supportedEmulatorNames) to play ROMs there instead of on this device."
+            #endif
         }
         return "An external app is handed the ROM once through the system menu, then opens it directly. Save states are not shared between apps."
     }
@@ -323,15 +351,12 @@ struct EmulatorEngineSettingsView: View {
 
     /// Every app Play can hand a ROM to, for the "nothing installed yet" hint.
     ///
-    /// The sentence around the list is English, so the joiner has to be too. The
-    /// localized formatter takes the device language and turned "RetroArch,
-    /// Delta and Manic EMU" into "... Delta und Manic EMU" on a German device.
+    /// Joined by hand: any one of them is enough, and ListFormatter only knows
+    /// "and". It would also follow the device language inside an English sentence.
     private var supportedEmulatorNames: String {
-        let formatter = ListFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        return formatter.string(
-            from: ExternalEmulatorID.allCases.map { $0.emulator.displayName }
-        ) ?? ExternalEmulatorID.allCases.map { $0.emulator.displayName }.joined(separator: ", ")
+        let names = ExternalEmulatorID.allCases.map { $0.emulator.displayName }
+        guard let last = names.last, names.count > 1 else { return names.first ?? "" }
+        return names.dropLast().joined(separator: ", ") + " or " + last
     }
 
     private func refreshInstalledEmulators() {
@@ -339,7 +364,7 @@ struct EmulatorEngineSettingsView: View {
         configuredEmulators = setupStore.configuredEmulators()
     }
 
-    #if DEBUG
+    #if !APP_STORE && DEBUG
 
     // MARK: - Rumble test
 

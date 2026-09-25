@@ -20,7 +20,9 @@ struct LicensesView: View {
             }
             #endif
 
-            // These ship in every build, so they are listed unconditionally.
+            // The App Store build ships no libretro cores, so it has nothing to
+            // attribute here.
+            #if !APP_STORE
             Section(header: Text("Emulator Cores")) {
                 entry(
                     "PCSX ReARMed",
@@ -54,6 +56,7 @@ struct LicensesView: View {
                     url: "https://github.com/libretro/Genesis-Plus-GX"
                 )
             }
+            #endif
 
             Section(header: Text("Libraries")) {
                 entry(
