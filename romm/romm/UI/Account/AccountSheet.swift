@@ -184,11 +184,14 @@ struct AccountSheet: View {
                 row(icon: "questionmark.circle", title: String(localized: "Help"))
             }
 
+            // The changelog is not bundled there, the App Store has its own notes.
+            #if !APP_STORE
             Button {
                 showingVersionHistory = true
             } label: {
                 row(icon: "clock.arrow.circlepath", title: String(localized: "Version History"))
             }
+            #endif
         }
     }
 

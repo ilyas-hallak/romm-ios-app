@@ -118,20 +118,29 @@ protocol PDependencyFactory {
     func makeCheckEmulatorSupportUseCase() -> PCheckEmulatorSupportUseCase
     func makeLaunchEmulatorUseCase() -> PLaunchEmulatorUseCase
     func makeGetDownloadedROMUseCase() -> PGetDownloadedROMUseCase
+    #if !APP_STORE
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase
+    #endif
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase
+    #if !APP_STORE
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase
+    #endif
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase
     var externalSaveFolderStore: PExternalSaveFolderStore { get }
     var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
+    #if !APP_STORE
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
     @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
+    #endif
     @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner
+    #if !APP_STORE
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
+    #endif
 
     // Emulator Engine
     var enginePreference: PEmulatorEnginePreference { get }
+    #if !APP_STORE
     var libretroAspectRatioPreference: PLibretroAspectRatioPreference { get }
     var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference { get }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
@@ -141,9 +150,12 @@ protocol PDependencyFactory {
     var externalDisplayPreference: PExternalDisplayPreference { get }
     var externalDisplayDiagnostics: PExternalDisplayDiagnostics { get }
     var screenBrightness: PScreenBrightness { get }
+    #endif
 
     func makePlatformEngineSupport() -> PPlatformEngineSupport
+    #if !APP_STORE
     func makeControllerSkinsUseCase() -> PControllerSkinsUseCase
+    #endif
 
     // External emulator apps
     var playTargetPreference: PPlayTargetPreference { get }
@@ -434,6 +446,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
+    #if !APP_STORE
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = UserDefaultsLibretroAspectRatioPreferenceStore()
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = UserDefaultsEmulatorScreenPositionPreferenceStore()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
@@ -443,6 +456,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
     lazy var externalDisplayDiagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
+    #endif
 
     // MARK: - External Emulator Apps
 
@@ -452,11 +466,10 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     // MARK: - Controller Skins
 
+    // No screen to pick one from and nothing left that reads a .deltaskin file,
+    // so the whole subsystem is unreachable once Play only hands ROMs to another app.
     #if !APP_STORE
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
-    #else
-    private lazy var controllerSkinInspector: PControllerSkinInspector = NoOpControllerSkinInspector()
-    #endif
     private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)
     private lazy var controllerSkinDownloader: PControllerSkinDownloader = ControllerSkinDownloadService()
     private lazy var controllerSkinPreference: PControllerSkinPreference = UserDefaultsControllerSkinPreferenceStore()
@@ -470,6 +483,7 @@ class DefaultDependencyFactory: PDependencyFactory {
             linkParser: controllerSkinLinkParser
         )
     }
+    #endif
 
     func makePlatformEngineSupport() -> PPlatformEngineSupport {
         PlatformEngineSupport()
@@ -500,17 +514,21 @@ class DefaultDependencyFactory: PDependencyFactory {
         GetDownloadedROMUseCase(localROMRepository: localROMRepository)
     }
 
+    #if !APP_STORE
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase {
         ResolveROMFileUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
+    #endif
 
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase {
         ResolveExternalGameIdentifierUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
 
+    #if !APP_STORE
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase {
         EmulatorSaveStatesUseCase(saveStore: saveStore)
     }
+    #endif
 
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
         SyncPreviewUseCase(
@@ -535,6 +553,7 @@ class DefaultDependencyFactory: PDependencyFactory {
         )
     }
 
+    #if !APP_STORE
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
@@ -556,6 +575,7 @@ class DefaultDependencyFactory: PDependencyFactory {
             syncDevice: syncDeviceRepository
         )
     }
+    #endif
 
     @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner {
         SaveSyncRunner(
@@ -661,6 +681,7 @@ class DefaultDependencyFactory: PDependencyFactory {
         ShareROMViewModel(getShareFilesUseCase: makeGetROMShareFilesUseCase())
     }
 
+    #if !APP_STORE
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel {
         LibretroEmulatorViewModel(
             rom: rom,
@@ -675,6 +696,7 @@ class DefaultDependencyFactory: PDependencyFactory {
             factory: self
         )
     }
+    #endif
 
     // MARK: - SFTP ViewModels
     

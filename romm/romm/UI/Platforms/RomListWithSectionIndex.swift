@@ -566,7 +566,7 @@ struct RomTableView: View {
                                     } else {
                                         Text("—")
                                             .font(.caption)
-                                            .foregroundColor(.accent)
+                                            .foregroundColor(.accentColor)
                                     }
                                 }
                                 .frame(width: 80, alignment: .center)
@@ -580,7 +580,7 @@ struct RomTableView: View {
                                     } else {
                                         Text("—")
                                             .font(.caption)
-                                            .foregroundColor(.accent)
+                                            .foregroundColor(.accentColor)
                                     }
                                 }
                                 .frame(width: 100, alignment: .center)
@@ -625,7 +625,7 @@ struct RomTableView: View {
                                     } else {
                                         Text("—")
                                             .font(.caption)
-                                            .foregroundColor(.accent)
+                                            .foregroundColor(.accentColor)
                                     }
                                 }
                                 .frame(width: 120, alignment: .center)
@@ -642,7 +642,7 @@ struct RomTableView: View {
                                     } else {
                                         Text("—")
                                             .font(.caption)
-                                            .foregroundColor(.accent)
+                                            .foregroundColor(.accentColor)
                                     }
                                 }
                                 .frame(width: 120, alignment: .center)
