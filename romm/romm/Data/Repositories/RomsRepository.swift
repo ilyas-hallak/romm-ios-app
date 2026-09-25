@@ -150,9 +150,9 @@ class RomsRepository: PRomsRepository {
             // For other errors, provide more context
             if error.localizedDescription.contains("The Internet connection appears to be offline") {
                 logger.error("❌ Network connectivity issue")
-            } else if error.localizedDescription.contains("401") {
+            } else if case APIClientError.authenticationRequired = error {
                 logger.error("❌ Authentication issue")
-            } else if error.localizedDescription.contains("403") {
+            } else if case APIClientError.invalidResponse(403, _) = error {
                 logger.error("❌ Forbidden (server error)")
             }
             

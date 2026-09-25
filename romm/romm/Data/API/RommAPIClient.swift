@@ -159,19 +159,6 @@ enum APIClientError: LocalizedError {
     }
 }
 
-// MARK: - Cookie-free session configuration
-
-extension URLSessionConfiguration {
-    // We authenticate by header only. Since RomM 5.3 a romm_session cookie next to
-    // that header, e.g. one the web emulator left behind, fails the CSRF check with 403.
-    func withoutCookies() -> URLSessionConfiguration {
-        httpCookieStorage = nil
-        httpShouldSetCookies = false
-        httpCookieAcceptPolicy = .never
-        return self
-    }
-}
-
 // MARK: - Core Client
 
 class RommAPIClient: PRommAPIClient {
@@ -257,7 +244,7 @@ class RommAPIClient: PRommAPIClient {
                 return data
             case 401:
                 logger.warning("Authentication failed - invalid credentials")
-                NotificationCenter.default.post(name: .sessionExpired, object: nil)
+                NotificationCenter.default.post(name: .sessionExpired, object: self)
                 throw APIClientError.authenticationRequired
             case 403:
                 let msg = String(data: data, encoding: .utf8) ?? "Forbidden"
@@ -457,7 +444,7 @@ class RommAPIClient: PRommAPIClient {
         case 401:
             try? FileManager.default.removeItem(at: tempURL)
             logger.warning("Authentication failed during download")
-            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            NotificationCenter.default.post(name: .sessionExpired, object: self)
             throw APIClientError.authenticationRequired
 
         case 400...599:
@@ -521,7 +508,7 @@ class RommAPIClient: PRommAPIClient {
                 return data
             case 401:
                 logger.warning("Authentication failed for multipart request")
-                NotificationCenter.default.post(name: .sessionExpired, object: nil)
+                NotificationCenter.default.post(name: .sessionExpired, object: self)
                 throw APIClientError.authenticationRequired
             case 403:
                 let msg = String(data: data, encoding: .utf8) ?? "Forbidden"
@@ -586,7 +573,7 @@ class RommAPIClient: PRommAPIClient {
         switch http.statusCode {
         case 200...299: return data
         case 401:
-            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            NotificationCenter.default.post(name: .sessionExpired, object: self)
             throw APIClientError.authenticationRequired
         default:
             let msg = String(data: data.prefix(500), encoding: .utf8) ?? "Error"

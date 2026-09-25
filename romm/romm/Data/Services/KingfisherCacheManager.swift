@@ -172,8 +172,9 @@ class KingfisherCacheManager: ObservableObject {
         didConfigureDownloaderSession = true
 
         // `.ephemeral` is Kingfisher's own default, the downloader must not use a persistent
-        // URL cache next to the image cache.
-        let configuration = URLSessionConfiguration.ephemeral
+        // URL cache next to the image cache. Cover requests carry the same auth header as the
+        // API client, so they need the same cookie-free configuration to pass 5.3's CSRF check.
+        let configuration = URLSessionConfiguration.ephemeral.withoutCookies()
         configuration.httpMaximumConnectionsPerHost = Self.maxConnectionsPerHost
         configuration.timeoutIntervalForRequest = Self.downloadTimeout
         ImageDownloader.default.sessionConfiguration = configuration

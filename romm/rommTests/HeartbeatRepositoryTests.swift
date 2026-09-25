@@ -50,6 +50,8 @@ struct HeartbeatRepositoryTests {
         let repo = HeartbeatRepository(apiClient: FakeAPIClient())
         #expect(repo.isVersionCompatible("5.3.1") == true)
         #expect(repo.isVersionCompatible("5.3.9") == true)
+        #expect(repo.isVersionCompatible("5.3.0-beta") == true)
+        #expect(repo.isVersionCompatible("5.3.5-rc.1") == true)
     }
 
     @Test func nextMinorAboveMaxIsNotCompatible() {
