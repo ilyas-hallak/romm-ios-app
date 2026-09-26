@@ -29,6 +29,10 @@ enum SaveStorePaths {
         statesDir(root: root, romId: romId).appendingPathComponent("\(slot).png")
     }
 
+    static func stateBaselineURL(root: URL, romId: Int, slot: Int) -> URL {
+        statesDir(root: root, romId: romId).appendingPathComponent("\(slot).baseline.json")
+    }
+
     static func undoSaveStateURL(root: URL, romId: Int, slot: Int) -> URL {
         statesDir(root: root, romId: romId).appendingPathComponent("\(slot).dltastate.undo")
     }
