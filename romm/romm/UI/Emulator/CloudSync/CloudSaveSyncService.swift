@@ -40,7 +40,9 @@ final class CloudSaveSyncService {
     /// it in place is only safe while the server still agrees (see
     /// `batteryTarget`).
     private var serverBatteryUpdatedAt: Date?
-    private var serverStateIdBySlot: [Int: Int] = [:]
+    /// Routes every state slot through the same decision logic `SaveSyncRunner`
+    /// uses, so the two never grow different ideas of "changed".
+    private let stateSyncCoordinator: StateSyncCoordinator
 
     init(
         config: Config,
@@ -74,6 +76,13 @@ final class CloudSaveSyncService {
         self.recordSyncUseCase = recordSyncUseCase ?? RecordSyncUseCase(store: CloudSaveSyncSettings.shared)
         self.apiClient = apiClient
         self.syncDevice = syncDevice
+        self.stateSyncCoordinator = StateSyncCoordinator(
+            saveStore: saveStore,
+            listStatesUseCase: listStatesUseCase,
+            uploadStateUseCase: uploadStateUseCase,
+            updateStateUseCase: updateStateUseCase,
+            downloadStateUseCase: downloadStateUseCase
+        )
     }
 
     var isEnabled: Bool { settings.isEnabled }
@@ -267,30 +276,16 @@ final class CloudSaveSyncService {
     }
 
     private func pullStates() async {
-        do {
-            let states = try await listStatesUseCase.execute(romId: config.romId)
-
-            let (slotByStateId, overflow) = StateSlots.assign(states.map {
-                StateSlots.Candidate(id: $0.id, fileName: $0.fileName, updatedAt: $0.updatedAt)
-            })
-            if overflow > 0 {
-                logger.warning("\(overflow) server state(s) skipped: no free slot (max 21)")
+        let outcomes = await stateSyncCoordinator.syncStates(romId: config.romId, mode: .pullOnly)
+        for outcome in outcomes {
+            switch outcome {
+            case .downloaded:
+                logger.info("State pulled")
+            case .failed(let message):
+                logger.error(message)
+            case .uploaded, .skipped, .recordedBaseline:
+                break
             }
-
-            for s in states {
-                guard let slot = slotByStateId[s.id] else { continue }
-                serverStateIdBySlot[slot] = s.id
-
-                let localMTime = saveStore.stateModifiedAt(romId: config.romId, slot: slot)
-                if let localMTime, localMTime >= s.updatedAt { continue }
-
-                let data = try await downloadStateUseCase.execute(id: s.id)
-                try saveStore.writeState(romId: config.romId, slot: slot, data: data)
-                try? saveStore.setStateModifiedAt(romId: config.romId, slot: slot, date: s.updatedAt)
-                logger.info("State slot \(slot) pulled (\(data.count) bytes)")
-            }
-        } catch {
-            logger.error("States pull failed: \(error.localizedDescription)")
         }
     }
 
@@ -350,42 +345,27 @@ final class CloudSaveSyncService {
         }
     }
 
-    func pushState(slot: Int, data: Data, thumbnail: Data?) {
+    /// The state (and thumbnail, if captured) is already written to disk by
+    /// the caller before this is invoked, so this only has to trigger a sync
+    /// for the slot; the coordinator re-reads it from disk itself.
+    func pushState(slot: Int) {
         guard isEnabled else { return }
-        Task { await self.pushStateAsync(slot: slot, data: data, thumbnail: thumbnail) }
+        Task { await self.pushStateAsync(slot: slot) }
     }
 
-    /// Does the actual state upload/update `pushState` fires and forgets.
-    /// Split out, and awaitable, so it can be driven directly (e.g. by tests)
-    /// instead of only observed indirectly through its side effects.
-    func pushStateAsync(slot: Int, data: Data, thumbnail: Data?) async {
-        let cfg = config
-        let fileName = StateSlots.fileName(slot: slot)
-        let serverId = serverStateIdBySlot[slot]
-        do {
-            let result: StateSchema
-            if let serverId {
-                result = try await updateStateUseCase.execute(
-                    id: serverId,
-                    emulator: cfg.emulator,
-                    fileName: fileName,
-                    fileData: data,
-                    screenshotData: thumbnail
-                )
-            } else {
-                result = try await uploadStateUseCase.execute(
-                    romId: cfg.romId,
-                    emulator: cfg.emulator,
-                    fileName: fileName,
-                    fileData: data,
-                    screenshotData: thumbnail
-                )
-            }
-            recordStateId(slot: slot, id: result.id)
+    /// Does the actual state sync `pushState` fires and forgets. Split out,
+    /// and awaitable, so it can be driven directly (e.g. by tests) instead of
+    /// only observed indirectly through its side effects.
+    func pushStateAsync(slot: Int) async {
+        let outcome = await stateSyncCoordinator.syncSlot(romId: config.romId, slot: slot, emulator: config.emulator)
+        switch outcome {
+        case .uploaded, .downloaded:
             recordAutoSync()
-            logger.info("State slot \(slot) pushed id=\(result.id)")
-        } catch {
-            logger.error("State slot \(slot) push failed: \(error.localizedDescription)")
+            logger.info("State slot \(slot) synced")
+        case .failed(let message):
+            logger.error(message)
+        case .skipped, .recordedBaseline:
+            break
         }
     }
 
@@ -443,6 +423,5 @@ final class CloudSaveSyncService {
         serverBatteryId = save.id
         serverBatteryUpdatedAt = save.updatedAt
     }
-    private func recordStateId(slot: Int, id: Int) { serverStateIdBySlot[slot] = id }
     private func recordAutoSync() { recordSyncUseCase.execute(romId: config.romId, trigger: .automatic) }
 }

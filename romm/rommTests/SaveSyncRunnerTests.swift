@@ -703,6 +703,10 @@ struct SaveSyncRunnerTests {
         fakes.listStates.statesByRomId[5] = [
             FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: serverTime)
         ]
+        // No baseline exists yet (a migration from before baselines existed),
+        // so the runner has to fetch the server's bytes to compare before it
+        // can trust the "local is newer" call.
+        fakes.downloadState.dataForId[30] = Data([0xBB])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
@@ -738,7 +742,9 @@ struct SaveSyncRunnerTests {
     }
 
     /// Identical timestamps on both sides mean nothing changed since the last
-    /// sync: no upload, no download, nothing in the report.
+    /// sync: no upload, no download. With no baseline yet, the runner still
+    /// has to fetch the server's bytes once to be sure, but once they turn
+    /// out identical it only records a baseline, it does not transfer anything.
     @Test func stateSyncTakesNoActionWhenBothSidesShareTheSameTimestamp() async throws {
         let store = makeStore()
         try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
@@ -748,16 +754,16 @@ struct SaveSyncRunnerTests {
         fakes.listStates.statesByRomId[5] = [
             FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: sharedTime)
         ]
+        fakes.downloadState.dataForId[30] = Data([0xAA])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
 
         #expect(report.uploaded == 0)
         #expect(report.downloaded == 0)
-        #expect(report.skipped == 0)
         #expect(report.failed == 0)
         #expect(fakes.updateState.calls.isEmpty)
-        #expect(fakes.downloadState.requestedIds.isEmpty)
+        #expect(fakes.downloadState.requestedIds == [30])
     }
 
     /// The update call itself can fail (network, server-side conflict, ...);
@@ -773,6 +779,7 @@ struct SaveSyncRunnerTests {
         fakes.listStates.statesByRomId[5] = [
             FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: serverTime)
         ]
+        fakes.downloadState.dataForId[30] = Data([0xBB])
         fakes.updateState.errorForId[30] = URLError(.timedOut)
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
@@ -801,13 +808,13 @@ struct SaveSyncRunnerTests {
                 id: 30, romId: 5, fileName: "Chrono Trigger [2026-05-06].state", updatedAt: serverTime
             )
         ]
+        fakes.downloadState.dataForId[30] = Data([0xBB])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
 
         #expect(fakes.updateState.calls.isEmpty)
         #expect(fakes.uploadState.calls.isEmpty)
-        #expect(fakes.downloadState.requestedIds.isEmpty)
         #expect(report.uploaded == 0)
         #expect(report.downloaded == 0)
         #expect(report.failed == 0)
@@ -834,6 +841,95 @@ struct SaveSyncRunnerTests {
 
         #expect(report.downloaded == 1)
         #expect(try store.readState(romId: 5, slot: 0) == Data([0xCC]))
+    }
+
+    // MARK: - Save states, baseline-driven regression coverage
+
+    /// The real bug report: a state saved locally after the last sync, whose
+    /// fire-and-forget push never reached the server (app closed, network
+    /// hiccup, ...), while something unrelated later touched the server row
+    /// and bumped its `updated_at` without changing its bytes. A
+    /// timestamp-only compare would call the server "newer" and clobber the
+    /// newer local save with the stale server content; the baseline must
+    /// keep the local bytes and push them instead.
+    @Test func stateSyncKeepsANeverPushedLocalSaveWhenTheServerRowIsOnlyTouched() async throws {
+        let store = makeStore()
+        let oldContent = Data([0x01])
+        let baselineTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.writeStateBaseline(romId: 5, slot: 0, baseline: StateSyncBaseline(
+            serverId: 30, serverUpdatedAt: baselineTime, contentHash: SaveContentHash.of(oldContent)
+        ))
+        try store.writeState(romId: 5, slot: 0, data: Data([0xAA]))
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: baselineTime.addingTimeInterval(60))
+        let fakes = Fakes()
+        // The row itself is untouched content-wise, but its timestamp moved
+        // further ahead than the never-pushed local save's own mtime.
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: baselineTime.addingTimeInterval(3_600))
+        ]
+        fakes.downloadState.dataForId[30] = oldContent
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.uploaded == 1)
+        #expect(fakes.updateState.calls.first?.fileData == Data([0xAA]))
+        #expect(try store.readState(romId: 5, slot: 0) == Data([0xAA]))
+    }
+
+    /// A genuine two-sided-looking case that really is just the server
+    /// having moved on (another device saved a real, different state): the
+    /// download must still happen, and the slot it overwrites must be
+    /// recoverable through undo.
+    @Test func stateSyncDownloadsAGenuinelyNewerServerStateAndBacksUpForUndo() async throws {
+        let store = makeStore()
+        let oldContent = Data([0xAA])
+        let baselineTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.writeState(romId: 5, slot: 0, data: oldContent)
+        try store.setStateModifiedAt(romId: 5, slot: 0, date: baselineTime)
+        try store.writeStateBaseline(romId: 5, slot: 0, baseline: StateSyncBaseline(
+            serverId: 30, serverUpdatedAt: baselineTime, contentHash: SaveContentHash.of(oldContent)
+        ))
+        let fakes = Fakes()
+        let newContent = Data([0xBB])
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: baselineTime.addingTimeInterval(3_600))
+        ]
+        fakes.downloadState.dataForId[30] = newContent
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.downloaded == 1)
+        #expect(try store.readState(romId: 5, slot: 0) == newContent)
+        #expect(store.hasUndoSave(romId: 5, slot: 0))
+    }
+
+    /// Migration case: no baseline exists yet (the feature just shipped),
+    /// but local and server already hold identical bytes. Nothing should
+    /// transfer, only the baseline gets recorded so future runs can take the
+    /// fast, no-fetch path.
+    @Test func stateSyncRecordsBaselineWithoutTransferringWhenMigratingWithIdenticalContent() async throws {
+        let store = makeStore()
+        let content = Data([0xAA])
+        try store.writeState(romId: 5, slot: 0, data: content)
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let fakes = Fakes()
+        fakes.listStates.statesByRomId[5] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 5, fileName: "slot0.state", updatedAt: serverTime)
+        ]
+        fakes.downloadState.dataForId[30] = content
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+
+        #expect(report.uploaded == 0)
+        #expect(report.downloaded == 0)
+        #expect(fakes.updateState.calls.isEmpty)
+        #expect(fakes.uploadState.calls.isEmpty)
+        let baseline = try store.readStateBaseline(romId: 5, slot: 0)
+        #expect(baseline?.serverId == 30)
+        #expect(baseline?.contentHash == SaveContentHash.of(content))
     }
 
     // MARK: - External emulator apps
