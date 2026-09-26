@@ -30,6 +30,32 @@ extension RommAPIClient {
     /// nobody wonders whether the app is still doing anything.
     private static let setupTimeout: TimeInterval = 15
 
+    /// Separate from the shared session for the same reason as `setupSession`:
+    /// with `waitsForConnectivity` a request made offline can wait for an hour.
+    private static let reachabilitySession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral.withoutCookies()
+        configuration.timeoutIntervalForRequest = RommAPIClient.reachabilityTimeout
+        configuration.timeoutIntervalForResource = RommAPIClient.reachabilityTimeout
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration, delegate: reachabilityDelegate, delegateQueue: nil)
+    }()
+    private static let reachabilityDelegate = PrivateNetworkURLSessionDelegate()
+    private static let reachabilityTimeout: TimeInterval = 4
+
+    func isServerReachable() async -> Bool {
+        guard let url = try? buildURL(path: "api/heartbeat") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = Self.reachabilityTimeout
+        do {
+            // Any HTTP answer means the server is there, even an error status.
+            let (_, response) = try await Self.reachabilitySession.data(for: request)
+            return response is HTTPURLResponse
+        } catch {
+            logger.info("Server not reachable: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     func getHeartbeat() async throws -> HeartbeatResponse {
         return try await get("api/heartbeat", responseType: HeartbeatResponse.self)
     }

@@ -300,6 +300,28 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.downloadState.requestedIds == [30])
     }
 
+    // MARK: - Unreachable server
+
+    /// Offline or with the server down, the launch must not wait on the
+    /// pull (issue #178), so nothing is fetched or recorded as synced.
+    @Test func pullIsSkippedWhenTheServerIsNotReachable() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 42, romId: 1, fileName: "battery.sav", updatedAt: Date())
+        ]
+        let apiClient = NegotiateFailingAPIClient()
+        apiClient.isReachable = false
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: apiClient)
+        await service.pullBeforeLaunch()
+
+        #expect(fakes.listSaves.requestedRomIds.isEmpty)
+        #expect(fakes.downloadSave.calls.isEmpty)
+        #expect(fakes.recordSync.calls.isEmpty)
+    }
+
     // MARK: - Push battery
 
     /// Every push carries this device's id, the fixed `battery` slot, and

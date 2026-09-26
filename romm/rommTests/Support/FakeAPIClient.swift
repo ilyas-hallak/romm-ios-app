@@ -88,6 +88,8 @@ final class FakeAPIClient: PRommAPIClient {
         return heartbeatToReturn
     }
 
+    func isServerReachable() async -> Bool { true }
+
     // MARK: - Unused
 
     func makeRequest<T: Codable>(path: String, method: HTTPMethod, body: Data?, responseType: T.Type) async throws -> T { fatalError("not used in these tests") }

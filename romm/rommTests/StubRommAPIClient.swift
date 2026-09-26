@@ -46,6 +46,8 @@ class StubRommAPIClient: PRommAPIClient {
     func downloadFirmwareContent(id: Int, fileName: String) async throws -> Data { fatalError("downloadFirmwareContent not stubbed") }
     func getHeartbeat() async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
     func getHeartbeat(from serverURL: String) async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
+    var isReachable = true
+    func isServerReachable() async -> Bool { isReachable }
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema { fatalError("updateRomLastPlayed not stubbed") }
     func makeDownloadRequest(path: String) throws -> URLRequest { fatalError("makeDownloadRequest not stubbed") }
 

@@ -37,6 +37,7 @@ final class LibretroSession: NSObject {
     private let controllerInput: LibretroControllerInput
     /// The controller currently wired to the input bridge, if any.
     private var attachedController: GCController?
+    private var isStopped = false
 
     init(
         gameURL: URL,
@@ -124,6 +125,8 @@ final class LibretroSession: NSObject {
         Task { [weak self] in
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
+            // The player may have quit while the pull was still running.
+            guard !self.isStopped else { return }
             self.stageBatteryForCore()
             self.startCore()
             guard let slot = resumeSlot else { return }
@@ -323,6 +326,7 @@ final class LibretroSession: NSObject {
 
 
     func stop() {
+        isStopped = true
         // Detach the physical controller before tearing down the frontend so
         // clearAllButtons() runs while the frontend is still live.
         controllerInput.detach(from: attachedController)
