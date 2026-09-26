@@ -88,8 +88,14 @@ final class CloudSaveSyncService {
     /// on the proven list-based pull as the authority; a successful negotiate
     /// owns the battery decision, otherwise we fall back to the legacy pull.
     /// Errors are swallowed and logged so a failed pull never blocks launch.
+    /// An unreachable server is skipped up front, since each of the calls
+    /// below would otherwise hold the launch until it times out.
     func pullBeforeLaunch() async {
         guard isEnabled else { return }
+        guard await apiClient.isServerReachable() else {
+            logger.info("Server not reachable, starting without a pull")
+            return
+        }
         let negotiated = await tryNegotiatedPull()
         if !negotiated {
             await pullBattery()

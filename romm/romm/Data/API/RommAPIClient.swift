@@ -81,6 +81,9 @@ protocol PRommAPIClient {
     // Heartbeat API Wrapper methods
     func getHeartbeat() async throws -> HeartbeatResponse
     func getHeartbeat(from serverURL: String) async throws -> HeartbeatResponse
+    /// Quick check with a few seconds budget, for work that must not wait on
+    /// a server that is down or a device that is offline.
+    func isServerReachable() async -> Bool
 
     // ROM user props
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema

@@ -254,6 +254,12 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     let viewController: GameViewController
 
+    private enum Phase { case launching, running, stopped }
+    /// The pull before launch can take a while. Until `start()` has set the
+    /// core up, `resume()` must not start it: DeltaCore would run a `.stopped`
+    /// core without controllers or the battery save (issue #178).
+    private var phase = Phase.launching
+
     /// Owned here so the display manager can hold it weakly: the target must not
     /// outlive the core it renders from.
     private var externalRenderTarget: DeltaCoreExternalRenderTarget?
@@ -351,6 +357,8 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         Task { [weak self] in
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
+            // The player may have quit while the pull was still running.
+            guard self.phase == .launching else { return }
             self.loadBatteryIfAvailable()
             // First: DeltaCore picks its output volume as the core comes up, and
             // would mute itself if another app still held the audio by then.
@@ -369,6 +377,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             self.observeAudioSessionChanges()
             self.recheckOutputVolumeAfterStart()
             self.registerExternalRenderTarget()
+            self.phase = .running
             guard let slot = resumeSlot else { return }
             try? await Task.sleep(nanoseconds: 600_000_000)
             self.viewController.pauseEmulation()
@@ -386,6 +395,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.pauseEmulation()
     }
     func resume() {
+        guard phase == .running else { return }
         viewController.resumeEmulation()
         // Controller may have (dis)connected while paused in the menu.
         updateOnScreenControlsVisibility()
@@ -397,6 +407,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     func stop() {
+        phase = .stopped
         setFastForwarding(false)
         // Pause the render thread before flushing battery — DeltaCore expects
         // the emulator to be paused around save(), otherwise the save can race
