@@ -125,6 +125,8 @@ end
 # Release notes ("What to Test"). Explicit override via TF_CHANGELOG, else the
 # recent git commit subjects. The label goes first, so both variants can be told
 # apart in the shared TestFlight build list.
+APPSTORE_LABEL = "[App Store] Companion only, no emulation"
+
 def release_notes(label)
   changelog = ENV["TF_CHANGELOG"].to_s.strip
   changelog = commit_subjects if changelog.empty?
@@ -225,11 +227,26 @@ platform :ios do
     verify_ipa!(path, expect_delta_cores: options[:expect_delta_cores] || false)
   end
 
+  desc "Upload an already built App Store .ipa after inspecting it again"
+  lane :upload_appstore do |options|
+    path = options[:ipa] ||
+      Dir.glob(File.join(project_dir, "build", "romm-AppStore-*.ipa")).max_by { |f| File.mtime(f) }
+    UI.user_error!("No .ipa given and none found in build/") if path.nil?
+    verify_ipa!(path, expect_delta_cores: false)
+    upload_to_testflight(
+      api_key: asc_api_key,
+      ipa: path,
+      changelog: release_notes(APPSTORE_LABEL),
+      distribute_external: false
+    )
+    UI.success("Uploaded #{File.basename(path)}")
+  end
+
   desc "Build and upload the App Store variant (without the Delta cores)"
   lane :appstore do |options|
     build_and_upload(
       scheme: "romm-AppStore",
-      label: "[App Store] Companion only, no emulation",
+      label: APPSTORE_LABEL,
       expect_delta_cores: false,
       skip_upload: options[:skip_upload]
     )
