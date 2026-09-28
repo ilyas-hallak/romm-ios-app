@@ -123,11 +123,15 @@ def next_build_number(api_key)
 end
 
 # Release notes ("What to Test"). Explicit override via TF_CHANGELOG, else the
-# recent git commit subjects.
-def release_notes
+# recent git commit subjects. The label goes first, so both variants can be told
+# apart in the shared TestFlight build list.
+def release_notes(label)
   changelog = ENV["TF_CHANGELOG"].to_s.strip
-  return changelog unless changelog.empty?
+  changelog = commit_subjects if changelog.empty?
+  [label, changelog].compact.reject(&:empty?).join("\n\n")
+end
 
+def commit_subjects
   begin
     changelog_from_git_commits(
       commits_count: 15,
@@ -139,7 +143,7 @@ def release_notes
   end
 end
 
-def build_and_upload(scheme:, expect_delta_cores:, skip_upload:)
+def build_and_upload(scheme:, label:, expect_delta_cores:, skip_upload:)
   api_key = asc_api_key
   build = next_build_number(api_key)
 
@@ -183,12 +187,10 @@ def build_and_upload(scheme:, expect_delta_cores:, skip_upload:)
     return
   end
 
-  changelog = release_notes
   upload_to_testflight(
     api_key: api_key,
-    changelog: changelog,
-    distribute_external: false,
-    skip_waiting_for_build_processing: changelog.to_s.strip.empty?
+    changelog: release_notes(label),
+    distribute_external: false
   )
 
   UI.success("Uploaded #{scheme} build #{build} 🚀")
@@ -208,6 +210,7 @@ platform :ios do
   lane :beta do |options|
     build_and_upload(
       scheme: "romm",
+      label: "[TestFlight] Full build with emulation",
       expect_delta_cores: true,
       skip_upload: options[:skip_upload]
     )
@@ -226,6 +229,7 @@ platform :ios do
   lane :appstore do |options|
     build_and_upload(
       scheme: "romm-AppStore",
+      label: "[App Store] Companion only, no emulation",
       expect_delta_cores: false,
       skip_upload: options[:skip_upload]
     )
