@@ -14,6 +14,8 @@ final class StateSyncCoordinator {
         case pullOnly
         /// Manual sync: both directions.
         case bidirectional
+        /// Right after a local save: never downloads, the player's save wins.
+        case pushOnly
     }
 
     enum SlotOutcome {
@@ -80,10 +82,10 @@ final class StateSyncCoordinator {
             states = try await listStatesUseCase.execute(romId: romId)
         } catch {
             // Treating this as "server has nothing" would upload a second row.
-            return .failed("ROM \(romId) slot \(slot): could not list server states (\(error.localizedDescription))")
+            return failed(romId, slot, "could not list server states (\(error.localizedDescription))")
         }
         let server = Self.assignSlots(states, warnOnOverflow: logger)[slot]
-        return await syncSlot(romId: romId, slot: slot, server: server, mode: .bidirectional, emulator: emulator)
+        return await syncSlot(romId: romId, slot: slot, server: server, mode: .pushOnly, emulator: emulator)
     }
 
     private static func assignSlots(_ states: [StateSchema], warnOnOverflow logger: Logger) -> [Int: StateSchema] {
@@ -117,10 +119,10 @@ final class StateSyncCoordinator {
         case .nothing:
             return .skipped
         case .upload:
-            guard mode == .bidirectional else { return .skipped }
+            guard mode != .pullOnly else { return .skipped }
             return await uploadOverServerRow(romId: romId, slot: slot, server: server, emulator: emulator)
         case .download:
-            guard let server else { return .skipped }
+            guard mode != .pushOnly, let server else { return .skipped }
             return await download(romId: romId, slot: slot, server: server)
         case .needsServerContent:
             guard let server, let local else { return .skipped }
@@ -143,7 +145,7 @@ final class StateSyncCoordinator {
         do {
             serverData = try await downloadStateUseCase.execute(id: server.id)
         } catch {
-            return .failed("ROM \(romId) slot \(slot): could not fetch server state to compare (\(error.localizedDescription))")
+            return failed(romId, slot, "could not fetch server state to compare (\(error.localizedDescription))")
         }
         let serverHash = SaveContentHash.of(serverData)
         let serverInfo = StateSyncDecision.ServerInfo(id: server.id, updatedAt: server.updatedAt, fileName: server.fileName)
@@ -158,9 +160,10 @@ final class StateSyncCoordinator {
             recordBaseline(romId: romId, slot: slot, server: server, contentHash: serverHash)
             return .recordedBaseline
         case .upload:
-            guard mode == .bidirectional else { return .skipped }
+            guard mode != .pullOnly else { return .skipped }
             return await uploadOverServerRow(romId: romId, slot: slot, server: server, emulator: emulator)
         case .download:
+            guard mode != .pushOnly else { return .skipped }
             return await applyDownload(romId: romId, slot: slot, server: server, data: serverData)
         }
     }
@@ -178,7 +181,7 @@ final class StateSyncCoordinator {
 
     private func upload(romId: Int, slot: Int, existing: StateSchema?, emulator: String?) async -> SlotOutcome {
         guard let data = try? saveStore.readState(romId: romId, slot: slot), !data.isEmpty else {
-            return .failed("ROM \(romId) slot \(slot): no local state to upload")
+            return failed(romId, slot, "no local state to upload")
         }
         let thumbnail = try? saveStore.readThumbnail(romId: romId, slot: slot)
         let fileName = StateSlots.fileName(slot: slot)
@@ -195,7 +198,7 @@ final class StateSyncCoordinator {
             }
             recordBaseline(romId: romId, slot: slot, server: result, contentHash: SaveContentHash.of(data))
         } catch {
-            return .failed("ROM \(romId) slot \(slot): state upload failed (\(error.localizedDescription))")
+            return failed(romId, slot, "state upload failed (\(error.localizedDescription))")
         }
         return .uploaded
     }
@@ -205,7 +208,7 @@ final class StateSyncCoordinator {
             let data = try await downloadStateUseCase.execute(id: server.id)
             return await applyDownload(romId: romId, slot: slot, server: server, data: data)
         } catch {
-            return .failed("ROM \(romId) slot \(slot): state download failed (\(error.localizedDescription))")
+            return failed(romId, slot, "state download failed (\(error.localizedDescription))")
         }
     }
 
@@ -221,9 +224,13 @@ final class StateSyncCoordinator {
             try? saveStore.deleteThumbnail(romId: romId, slot: slot)
             recordBaseline(romId: romId, slot: slot, server: server, contentHash: SaveContentHash.of(data))
         } catch {
-            return .failed("ROM \(romId) slot \(slot): state download failed (\(error.localizedDescription))")
+            return failed(romId, slot, "could not write downloaded state (\(error.localizedDescription))")
         }
         return .downloaded
+    }
+
+    private func failed(_ romId: Int, _ slot: Int, _ reason: String) -> SlotOutcome {
+        .failed("ROM \(romId) slot \(slot): \(reason)")
     }
 
     private func recordBaseline(romId: Int, slot: Int, server: StateSchema, contentHash: String) {

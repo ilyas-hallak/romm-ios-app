@@ -31,7 +31,12 @@ private final class UpdateStateSpy: PUpdateStateUseCase, @unchecked Sendable {
 }
 
 private final class DownloadStateStub: PDownloadStateUseCase, @unchecked Sendable {
-    func execute(id: Int) async throws -> Data { throw URLError(.fileDoesNotExist) }
+    var data: Data?
+
+    func execute(id: Int) async throws -> Data {
+        guard let data else { throw URLError(.fileDoesNotExist) }
+        return data
+    }
 }
 
 private func makeState(id: Int, fileName: String, updatedAt: Date) -> StateSchema {
@@ -47,6 +52,7 @@ struct StateSyncCoordinatorTests {
     private let listStates = ListStatesStub()
     private let uploadState = UploadStateSpy()
     private let updateState = UpdateStateSpy()
+    private let downloadState = DownloadStateStub()
     private let store: LocalSaveStoreRepository = {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("StateSyncCoordinatorTests-\(UUID().uuidString)", isDirectory: true)
@@ -60,7 +66,7 @@ struct StateSyncCoordinatorTests {
             listStatesUseCase: listStates,
             uploadStateUseCase: uploadState,
             updateStateUseCase: updateState,
-            downloadStateUseCase: DownloadStateStub()
+            downloadStateUseCase: downloadState
         )
     }
 
@@ -85,6 +91,48 @@ struct StateSyncCoordinatorTests {
         _ = await makeCoordinator().syncSlot(romId: 1, slot: 0, emulator: "delta-ios")
 
         #expect(updateState.emulators == ["delta-ios"])
+        #expect(uploadState.emulators.isEmpty)
+    }
+
+    /// Even when the server clock runs ahead and its differing content looks
+    /// newer, the save the player just made is not replaced.
+    @Test func pushAfterASaveNeverDownloadsOverIt() async throws {
+        let now = Date()
+        try store.writeStateBaseline(romId: 1, slot: 0, baseline: StateSyncBaseline(
+            serverId: 30, serverUpdatedAt: now.addingTimeInterval(-3_600), contentHash: SaveContentHash.of(Data([0x01]))
+        ))
+        try store.writeState(romId: 1, slot: 0, data: Data([0x02]))
+        listStates.states = [makeState(id: 30, fileName: "slot0.state", updatedAt: now.addingTimeInterval(3_600))]
+        downloadState.data = Data([0x03])
+
+        _ = await makeCoordinator().syncSlot(romId: 1, slot: 0, emulator: "delta-ios")
+
+        #expect(try store.readState(romId: 1, slot: 0) == Data([0x02]))
+    }
+
+    @Test func pullReplacesTheThumbnailOfAnOverwrittenState() async throws {
+        let now = Date()
+        try store.writeState(romId: 1, slot: 0, data: Data([0x01]))
+        try store.setStateModifiedAt(romId: 1, slot: 0, date: now.addingTimeInterval(-3_600))
+        try store.writeThumbnail(romId: 1, slot: 0, data: Data([0xFF]))
+        listStates.states = [makeState(id: 30, fileName: "slot0.state", updatedAt: now)]
+        downloadState.data = Data([0x02])
+
+        _ = await makeCoordinator().syncStates(romId: 1, mode: .pullOnly)
+
+        #expect(try store.readState(romId: 1, slot: 0) == Data([0x02]))
+        #expect(try store.readThumbnail(romId: 1, slot: 0) == nil)
+    }
+
+    @Test func failedCompareDownloadLeavesLocalStateAndBaselineAlone() async throws {
+        try store.writeState(romId: 1, slot: 0, data: Data([0x01]))
+        listStates.states = [makeState(id: 30, fileName: "slot0.state", updatedAt: Date())]
+
+        let outcomes = await makeCoordinator().syncStates(romId: 1, mode: .bidirectional)
+
+        guard case .failed = outcomes.first else { Issue.record("expected failure, got \(outcomes)"); return }
+        #expect(try store.readState(romId: 1, slot: 0) == Data([0x01]))
+        #expect(try store.readStateBaseline(romId: 1, slot: 0) == nil)
         #expect(uploadState.emulators.isEmpty)
     }
 

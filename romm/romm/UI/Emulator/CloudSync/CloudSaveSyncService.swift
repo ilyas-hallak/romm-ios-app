@@ -26,10 +26,6 @@ final class CloudSaveSyncService {
     private let updateSaveUseCase: PUpdateSaveUseCase
     private let downloadSaveUseCase: PDownloadSaveUseCase
     private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
-    private let listStatesUseCase: PListServerStatesUseCase
-    private let uploadStateUseCase: PUploadStateUseCase
-    private let updateStateUseCase: PUpdateStateUseCase
-    private let downloadStateUseCase: PDownloadStateUseCase
     private let settings: PCloudSaveSyncSettings
     private let recordSyncUseCase: PRecordSyncUseCase
     private let apiClient: PRommAPIClient
@@ -68,10 +64,6 @@ final class CloudSaveSyncService {
         self.updateSaveUseCase = updateSaveUseCase
         self.downloadSaveUseCase = downloadSaveUseCase
         self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
-        self.listStatesUseCase = listStatesUseCase
-        self.uploadStateUseCase = uploadStateUseCase
-        self.updateStateUseCase = updateStateUseCase
-        self.downloadStateUseCase = downloadStateUseCase
         self.settings = settings
         self.recordSyncUseCase = recordSyncUseCase ?? RecordSyncUseCase(store: CloudSaveSyncSettings.shared)
         self.apiClient = apiClient
