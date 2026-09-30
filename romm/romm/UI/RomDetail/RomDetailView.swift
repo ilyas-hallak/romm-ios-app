@@ -298,6 +298,7 @@ struct RomDetailView: View {
                     print(scrollOffset)
                 }
             }
+            #if !APP_STORE
             .fullScreenCover(item: $viewModel.launchDecision, onDismiss: {
                 viewModel.emulatorPresentationDidEnd()
                 pendingResumeSlot = nil
@@ -305,13 +306,8 @@ struct RomDetailView: View {
                 // A session may have written a new save state or battery save.
                 Task { await viewModel.loadRomDetails(romId: rom.id) }
             }) { decision in
-                #if !APP_STORE
                 EmulatorRouterView(decision: decision, resumeSlot: pendingResumeSlot)
                     .ignoresSafeArea()
-                #else
-                let _ = decision
-                EmptyView()
-                #endif
             }
             .sheet(isPresented: $showingPreLaunch, onDismiss: {
                 // Boot only once the sheet is fully gone. Presenting the emulator's
@@ -327,7 +323,6 @@ struct RomDetailView: View {
                 shouldLaunchAfterPreLaunch = false
                 viewModel.present(decision, rom: currentSelectedRom)
             }) {
-                #if !APP_STORE
                 PreLaunchSheet(
                     romName: currentSelectedRom.name,
                     romId: rom.id,
@@ -339,10 +334,8 @@ struct RomDetailView: View {
                 }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                #else
-                EmptyView()
-                #endif
             }
+            #endif
             .onAppear {
                 Task {
                     await viewModel.loadRomDetails(romId: rom.id)

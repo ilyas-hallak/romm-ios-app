@@ -125,6 +125,7 @@ end
 # Release notes ("What to Test"). Explicit override via TF_CHANGELOG, else the
 # recent git commit subjects. The label goes first, so both variants can be told
 # apart in the shared TestFlight build list.
+TESTFLIGHT_LABEL = "[TestFlight] Full build with emulation"
 APPSTORE_LABEL = "[App Store] Companion only, no emulation"
 
 def release_notes(label)
@@ -212,7 +213,7 @@ platform :ios do
   lane :beta do |options|
     build_and_upload(
       scheme: "romm",
-      label: "[TestFlight] Full build with emulation",
+      label: TESTFLIGHT_LABEL,
       expect_delta_cores: true,
       skip_upload: options[:skip_upload]
     )

@@ -90,21 +90,16 @@ struct PlatformROMsListView: View {
         .navigationDestination(item: $detailRom) { rom in
             RomDetailView(rom: rom.toRom())
         }
+        #if !APP_STORE
         .fullScreenCover(item: $launchDecision, onDismiss: {
             launchingRomId = nil
             pendingResumeSlot = nil
             OrientationLock.set(.portrait, rotateTo: .portrait)
         }) { decision in
-            #if !APP_STORE
             EmulatorRouterView(decision: decision, resumeSlot: pendingResumeSlot)
                 .ignoresSafeArea()
-            #else
-            let _ = decision
-            EmptyView()
-            #endif
         }
         .sheet(item: $romPendingLaunch) { pending in
-            #if !APP_STORE
             PreLaunchSheet(
                 romName: pending.rom.name,
                 romId: pending.rom.id,
@@ -116,10 +111,8 @@ struct PlatformROMsListView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            #else
-            EmptyView()
-            #endif
         }
+        #endif
         .confirmationDialog(
             "Delete ROM?",
             isPresented: Binding(
