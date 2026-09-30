@@ -19,6 +19,8 @@ final class SavesRepository: PSavesRepository {
             emulator: emulator,
             slot: slot,
             deviceId: nil,
+            sessionId: nil,
+            overwrite: false,
             fileName: fileName,
             fileData: fileData,
             screenshotData: screenshotData
@@ -30,6 +32,7 @@ final class SavesRepository: PSavesRepository {
         return try await apiClient.updateSave(
             id: id,
             emulator: emulator,
+            deviceId: nil,
             fileName: fileName,
             fileData: fileData,
             screenshotData: screenshotData
@@ -38,7 +41,7 @@ final class SavesRepository: PSavesRepository {
 
     func downloadSave(id: Int) async throws -> Data {
         logger.info("☁️ Downloading save id=\(id)")
-        return try await apiClient.downloadSave(id: id, deviceId: nil)
+        return try await apiClient.downloadSave(id: id, deviceId: nil, sessionId: nil, optimistic: true)
     }
 
     func deleteSaves(ids: [Int]) async throws {

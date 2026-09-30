@@ -57,16 +57,19 @@ struct SyncOverviewView: View {
     // MARK: - This device
 
     private func thisDeviceSection(_ preview: SyncPreview) -> some View {
-        Section {
+        // Not `reportedSaveCount`, which is every source together: another
+        // app's saves are counted on its own row further down.
+        let internalCount = preview.reportedCountsBySource[.internalStore] ?? 0
+        return Section {
             NavigationLink {
-                SyncPlanDetailView(preview: preview, romName: viewModel.displayName(forRom:))
+                SyncPlanDetailView(viewModel: viewModel)
             } label: {
                 sourceRow(
                     icon: "iphone",
                     title: String(localized: "This Device"),
-                    subtitle: preview.reportedSaveCount == 1
+                    subtitle: internalCount == 1
                         ? String(localized: "1 battery save reported")
-                        : String(localized: "\(preview.reportedSaveCount) battery saves reported"),
+                        : String(localized: "\(internalCount) battery saves reported"),
                     detail: preview.changeSummary ?? String(localized: "Up to date"),
                     isWarning: !preview.conflicts.isEmpty
                 )
@@ -76,10 +79,10 @@ struct SyncOverviewView: View {
         } header: {
             Text("RomM")
         } footer: {
-            // Said plainly: uploads still send no slot, so this is a preview of
-            // a change that has not been made yet.
-            Text("Nothing has been changed. This is what a sync would do once saves "
-                + "are uploaded under a slot. Registered as device \(preview.deviceId).")
+            // Nothing runs until the plan below is opened and "Sync Now" is
+            // tapped: this row alone only asks the server what would change.
+            Text("Nothing has been changed yet. Open this to review and run the "
+                + "sync. Registered as device \(preview.deviceId).")
         }
     }
 
@@ -98,14 +101,17 @@ struct SyncOverviewView: View {
         } header: {
             Text("Emulator Apps")
         } footer: {
-            Text("Read from the folder set up for each app in Settings › Emulator. "
-                + "Nothing is written to them, and they are not part of the plan above yet.")
+            Text("Read from and written to the folder set up for each app in "
+                + "Settings › Emulator. A file a sync replaces there is kept as a backup.")
         }
     }
 
     @ViewBuilder
     private func externalAppRow(_ emulator: ExternalEmulatorID) -> some View {
         let title = emulator.emulator.displayName
+        // Only meaningful once a preview is loaded: before that, there is
+        // nothing yet to report a count from.
+        let reportedCount = viewModel.preview?.reportedCountsBySource[.externalApp(emulator)] ?? 0
         if let scan = viewModel.externalScans[emulator] {
             NavigationLink {
                 ExternalScanDetailView(scan: scan, romName: viewModel.displayName(forRom:))
@@ -113,7 +119,7 @@ struct SyncOverviewView: View {
                 sourceRow(
                     icon: "gamecontroller",
                     title: title,
-                    subtitle: nil,
+                    subtitle: reportedCount == 0 ? nil : reportedSavesSubtitle(reportedCount),
                     detail: scan.statusSummary,
                     isWarning: scan.matched.isEmpty
                 )
@@ -123,11 +129,19 @@ struct SyncOverviewView: View {
             sourceRow(
                 icon: "gamecontroller",
                 title: title,
-                subtitle: String(localized: "No save folder set up"),
+                subtitle: reportedCount == 0
+                    ? String(localized: "No save folder set up")
+                    : reportedSavesSubtitle(reportedCount),
                 detail: "",
                 isWarning: true
             )
         }
+    }
+
+    private func reportedSavesSubtitle(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "1 save reported")
+            : String(localized: "\(count) saves reported")
     }
 
     // MARK: - Server states
@@ -210,7 +224,9 @@ private func previewOperation(
         SyncOverviewView(viewModel: SyncOverviewViewModel(
             showing: .loaded(SyncPreview(
                 deviceId: "ios-1",
+                sessionId: 7,
                 reportedSaveCount: 12,
+                reportedCountsBySource: [.internalStore: 9, .externalApp(.delta): 3],
                 operations: [
                     previewOperation(.upload, romId: 1, reason: "Newer on this device"),
                     previewOperation(.upload, romId: 2, reason: "Not on the server"),
@@ -226,7 +242,13 @@ private func previewOperation(
 #Preview("Up to date") {
     NavigationStack {
         SyncOverviewView(viewModel: SyncOverviewViewModel(
-            showing: .loaded(SyncPreview(deviceId: "ios-1", reportedSaveCount: 12, operations: []))
+            showing: .loaded(SyncPreview(
+                deviceId: "ios-1",
+                sessionId: nil,
+                reportedSaveCount: 12,
+                reportedCountsBySource: [.internalStore: 12],
+                operations: []
+            ))
         ))
     }
 }

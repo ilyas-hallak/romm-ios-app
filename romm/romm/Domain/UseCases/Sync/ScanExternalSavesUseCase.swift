@@ -17,7 +17,7 @@ final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
     private let logger = Logger.emulator
     private let saveFiles: PExternalSaveFileRepository
     private let localROMs: PLocalROMRepository
-    private let handoffStore: PExternalEmulatorHandoffStore
+    private let naming: ExternalSaveNaming
 
     init(
         saveFiles: PExternalSaveFileRepository,
@@ -26,7 +26,7 @@ final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
     ) {
         self.saveFiles = saveFiles
         self.localROMs = localROMs
-        self.handoffStore = handoffStore
+        self.naming = ExternalSaveNaming(handoffStore: handoffStore)
     }
 
     func execute(for emulator: ExternalEmulatorID) throws -> ExternalSaveScan? {
@@ -76,19 +76,8 @@ final class ScanExternalSavesUseCase: PScanExternalSavesUseCase {
         var index: [String: Int] = [:]
 
         for rom in roms {
-            switch layout.naming {
-            case .romBaseName:
-                // A multi-file ROM has no single name, so every part counts:
-                // the app named the save after whichever one it opened.
-                for file in rom.files {
-                    let base = (file.fileName as NSString).deletingPathExtension
-                    index[base.lowercased()] = rom.id
-                }
-            case .gameIdentifier:
-                let kind = emulator.emulator.identifierKind
-                if let identifier = handoffStore.cachedGameIdentifier(romId: rom.id, kind: kind) {
-                    index[identifier.lowercased()] = rom.id
-                }
+            for base in naming.baseNames(for: rom, emulator: emulator, layout: layout) {
+                index[base.lowercased()] = rom.id
             }
         }
         return index

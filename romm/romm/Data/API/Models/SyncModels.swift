@@ -157,7 +157,10 @@ struct SyncOperationSchema: Codable {
 
 /// Response of `POST /api/sync/negotiate`.
 struct SyncNegotiateResponse: Codable {
-    let sessionId: String?
+    /// The session negotiation opened. Needed to report the outcome back, and
+    /// an integer because `POST /api/sync/sessions/{id}/complete` takes it in
+    /// the path.
+    let sessionId: Int?
     let operations: [SyncOperationSchema]
     let totalUpload: Int?
     let totalDownload: Int?
@@ -175,11 +178,12 @@ struct SyncNegotiateResponse: Codable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        // session_id may arrive as string or int; accept either.
-        if let s = try? c.decodeIfPresent(String.self, forKey: .sessionId) {
-            sessionId = s
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .sessionId) {
-            sessionId = String(i)
+        // An int on the wire, but accept a numeric string too rather than
+        // losing the whole response to a server that quotes it.
+        if let i = try? c.decodeIfPresent(Int.self, forKey: .sessionId) {
+            sessionId = i
+        } else if let s = try? c.decodeIfPresent(String.self, forKey: .sessionId) {
+            sessionId = Int(s)
         } else {
             sessionId = nil
         }
@@ -198,5 +202,55 @@ struct SyncNegotiateResponse: Codable {
         try c.encodeIfPresent(totalDownload, forKey: .totalDownload)
         try c.encodeIfPresent(totalConflict, forKey: .totalConflict)
         try c.encodeIfPresent(totalNoOp, forKey: .totalNoOp)
+    }
+}
+
+// MARK: - Sessions
+
+/// Body for `POST /api/sync/sessions/{id}/complete` — closes the session
+/// negotiation opened and tells the server how the plan actually went.
+///
+/// Play sessions are left out: this app does not collect them, and the field is
+/// optional.
+struct SyncCompleteRequest: Codable {
+    let operationsCompleted: Int
+    let operationsFailed: Int
+
+    enum CodingKeys: String, CodingKey {
+        case operationsCompleted = "operations_completed"
+        case operationsFailed = "operations_failed"
+    }
+}
+
+/// One sync session as the server records it.
+struct SyncSessionSchema: Codable {
+    let id: Int
+    let status: String
+    let operationsPlanned: Int?
+    let operationsCompleted: Int?
+    let operationsFailed: Int?
+    let errorMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, status
+        case operationsPlanned = "operations_planned"
+        case operationsCompleted = "operations_completed"
+        case operationsFailed = "operations_failed"
+        case errorMessage = "error_message"
+    }
+}
+
+/// Response of `POST /api/sync/sessions/{id}/complete`. Only the session is
+/// read; the play-session ingest report has no caller here.
+struct SyncCompleteResponse: Codable {
+    let session: SyncSessionSchema
+}
+
+/// Body for `POST /api/saves/{id}/downloaded` and `POST /api/saves/{id}/track`.
+struct SaveDeviceRequest: Codable {
+    let deviceId: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
     }
 }

@@ -447,6 +447,7 @@ class MockDependencyFactory: PDependencyFactory {
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
         SyncPreviewUseCase(
             saveStore: saveStore,
+            saveFiles: ExternalSaveFileRepository(folderStore: externalSaveFolderStore),
             syncDevice: syncDeviceRepository,
             apiClient: apiClient,
             tokenProvider: tokenProvider
@@ -458,6 +459,16 @@ class MockDependencyFactory: PDependencyFactory {
 
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase {
         ScanExternalSavesUseCase(
+            saveFiles: ExternalSaveFileRepository(folderStore: externalSaveFolderStore),
+            localROMs: localROMRepository,
+            handoffStore: externalEmulatorHandoffStore
+        )
+    }
+
+    func makeApplySyncUseCase() -> PApplySyncUseCase {
+        ApplySyncUseCase(
+            apiClient: apiClient,
+            saveStore: saveStore,
             saveFiles: ExternalSaveFileRepository(folderStore: externalSaveFolderStore),
             localROMs: localROMRepository,
             handoffStore: externalEmulatorHandoffStore

@@ -6,8 +6,14 @@ import Foundation
 struct SyncPreview {
     /// This app's registered device on the server.
     let deviceId: String
-    /// How many battery saves this device reported.
+    /// The session negotiation opened. Every plan belongs to one, and the
+    /// server keeps it open until the outcome is reported back.
+    let sessionId: Int?
+    /// How many saves this device reported, all sources together.
     let reportedSaveCount: Int
+    /// The same count split by where the saves live, so the report can name a
+    /// source rather than lumping another app's saves in with this device's.
+    let reportedCountsBySource: [SyncSaveSource: Int]
     /// Every operation the server planned, ours and other devices' alike.
     let operations: [SyncPreviewOperation]
 
@@ -17,6 +23,10 @@ struct SyncPreview {
 
     /// True when server and device already agree and syncing would do nothing.
     var isUpToDate: Bool { uploads.isEmpty && downloads.isEmpty && conflicts.isEmpty }
+
+    /// The operations a sync can carry out on its own, conflicts excluded:
+    /// those need the user to say which side wins.
+    var applicableOperations: [SyncPreviewOperation] { uploads + downloads }
 }
 
 /// A single planned change, flattened from the server's operation list.
@@ -35,6 +45,9 @@ struct SyncPreviewOperation: Identifiable, Equatable {
     let id = UUID()
     let romId: Int
     let direction: Direction
+    /// The server-side save this operation is about, which downloading it and
+    /// replacing it both address. Nil for an upload, where none exists yet.
+    let saveId: Int?
     /// The server's name for the file, which is not the local one: a slotted
     /// save carries a datetime tag the server applies on upload.
     let serverFileName: String?
@@ -44,6 +57,47 @@ struct SyncPreviewOperation: Identifiable, Equatable {
     /// back to it.
     let reason: String?
     let serverUpdatedAt: Date?
+    /// Which of this device's save sources the slot belongs to, or nil for a
+    /// slot this build does not own: a save another device filed under a slot
+    /// this version knows nothing about.
+    let source: SyncSaveSource?
+    /// The file behind a save that lives in another app's folder, as the
+    /// preview found it. Nil for the internal store, which is addressed by ROM
+    /// id, and for a save this device does not have yet.
+    let externalFile: ExternalSaveFile?
+    /// When the local save was last written, as reported to the server. Nil
+    /// when this device had no save for the pair.
+    ///
+    /// Kept so a download can tell whether the file it is about to replace is
+    /// still the one the plan was made for. An emulator app writing a save
+    /// between preview and apply would otherwise lose it without a word.
+    let localUpdatedAt: Date?
+
+    init(
+        romId: Int,
+        direction: Direction,
+        saveId: Int? = nil,
+        serverFileName: String?,
+        slot: String?,
+        emulator: String?,
+        reason: String?,
+        serverUpdatedAt: Date?,
+        source: SyncSaveSource? = nil,
+        externalFile: ExternalSaveFile? = nil,
+        localUpdatedAt: Date? = nil
+    ) {
+        self.romId = romId
+        self.direction = direction
+        self.saveId = saveId
+        self.serverFileName = serverFileName
+        self.slot = slot
+        self.emulator = emulator
+        self.reason = reason
+        self.serverUpdatedAt = serverUpdatedAt
+        self.source = source
+        self.externalFile = externalFile
+        self.localUpdatedAt = localUpdatedAt
+    }
 
     static func == (lhs: SyncPreviewOperation, rhs: SyncPreviewOperation) -> Bool {
         lhs.id == rhs.id

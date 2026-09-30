@@ -103,9 +103,10 @@ protocol PRommAPIClient {
     func getStates(romId: Int) async throws -> [StateSchema]
 
     // Saves sync
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: Int?, overwrite: Bool, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func downloadSave(id: Int, deviceId: String?, sessionId: Int?, optimistic: Bool) async throws -> Data
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws
     func deleteSaves(ids: [Int]) async throws
 
     // States sync
@@ -117,6 +118,7 @@ protocol PRommAPIClient {
     // Save-sync API (RomM 5.0+)
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse
+    func completeSyncSession(id: Int, operationsCompleted: Int, operationsFailed: Int) async throws -> SyncSessionSchema
 }
 
 enum APIClientError: LocalizedError {
@@ -302,10 +304,6 @@ class RommAPIClient: PRommAPIClient {
         request.timeoutInterval = 60.0
 
         logger.debug("Download URL: \(url.absoluteString)")
-        #if DEBUG
-        logger.debug("Download Auth header (debug-only): \(authHeader)")
-        #endif
-
         return request
     }
 

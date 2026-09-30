@@ -118,6 +118,7 @@ protocol PDependencyFactory {
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase
+    func makeApplySyncUseCase() -> PApplySyncUseCase
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase
     var externalSaveFolderStore: PExternalSaveFolderStore { get }
     var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
@@ -501,9 +502,20 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
         SyncPreviewUseCase(
             saveStore: saveStore,
+            saveFiles: externalSaveFileRepository,
             syncDevice: syncDeviceRepository,
             apiClient: apiClient,
             tokenProvider: tokenProvider
+        )
+    }
+
+    func makeApplySyncUseCase() -> PApplySyncUseCase {
+        ApplySyncUseCase(
+            apiClient: apiClient,
+            saveStore: saveStore,
+            saveFiles: externalSaveFileRepository,
+            localROMs: localROMRepository,
+            handoffStore: externalEmulatorHandoffStore
         )
     }
 

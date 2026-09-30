@@ -69,3 +69,51 @@ extension SyncPreview {
             .joined(separator: ", ")
     }
 }
+
+/// How a conflict resolution reads on a menu, shared so the plan detail's row
+/// label and its picker cannot end up naming the same choice differently.
+extension SyncConflictResolution {
+    var label: String {
+        switch self {
+        case .keepLocal: return String(localized: "Keep this device's save")
+        case .takeServer: return String(localized: "Take the server's save")
+        case .skip: return String(localized: "Leave both alone")
+        }
+    }
+
+    /// The form that fits beside a ROM name, as in "Keeping this device's".
+    var shortLabel: String {
+        switch self {
+        case .keepLocal: return String(localized: "Keeping this device's")
+        case .takeServer: return String(localized: "Taking the server's")
+        case .skip: return String(localized: "Leaving alone")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .keepLocal: return "arrow.up.circle"
+        case .takeServer: return "arrow.down.circle"
+        case .skip: return "minus.circle"
+        }
+    }
+}
+
+/// How an apply outcome is drawn in the result list.
+extension SyncApplyOutcome.Status {
+    var icon: String {
+        switch self {
+        case .applied: return "checkmark.circle.fill"
+        case .skipped: return "minus.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .applied: return .green
+        case .skipped: return .secondary
+        case .failed: return .red
+        }
+    }
+}

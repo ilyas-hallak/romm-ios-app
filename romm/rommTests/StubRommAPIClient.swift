@@ -66,9 +66,10 @@ class StubRommAPIClient: PRommAPIClient {
     func getStats() async throws -> StatsReturn { fatalError("getStats not stubbed") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("getSaves not stubbed") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("getStates not stubbed") }
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("uploadSave not stubbed") }
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("updateSave not stubbed") }
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data { fatalError("downloadSave not stubbed") }
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: Int?, overwrite: Bool, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("uploadSave not stubbed") }
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("updateSave not stubbed") }
+    func downloadSave(id: Int, deviceId: String?, sessionId: Int?, optimistic: Bool) async throws -> Data { fatalError("downloadSave not stubbed") }
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws { fatalError("confirmSaveDownloaded not stubbed") }
     func deleteSaves(ids: [Int]) async throws { fatalError("deleteSaves not stubbed") }
     func uploadState(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("uploadState not stubbed") }
     func updateState(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("updateState not stubbed") }
@@ -76,4 +77,5 @@ class StubRommAPIClient: PRommAPIClient {
     func deleteStates(ids: [Int]) async throws { fatalError("deleteStates not stubbed") }
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("registerDevice not stubbed") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("negotiateSync not stubbed") }
+    func completeSyncSession(id: Int, operationsCompleted: Int, operationsFailed: Int) async throws -> SyncSessionSchema { fatalError("completeSyncSession not stubbed") }
 }
