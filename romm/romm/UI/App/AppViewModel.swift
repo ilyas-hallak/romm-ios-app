@@ -56,6 +56,11 @@ class AppViewModel {
     private let saveServerVersionUseCase: SaveServerVersionUseCase
     private let getHeartbeatUseCase: GetHeartbeatUseCase
     private let getCurrentUserUseCase: GetCurrentUserUseCase
+    private let resolveServerEndpointUseCase: PResolveServerEndpointUseCase
+
+    /// Launch, coming back to the foreground and a network change can all ask
+    /// at once, they share the one check that is running.
+    private var endpointResolution: Task<Void, Never>?
 
     private let factory: PDependencyFactory
 
@@ -74,6 +79,7 @@ class AppViewModel {
         self.saveServerVersionUseCase = factory.makeSaveServerVersionUseCase()
         self.getHeartbeatUseCase = factory.makeGetHeartbeatUseCase()
         self.getCurrentUserUseCase = factory.makeGetCurrentUserUseCase()
+        self.resolveServerEndpointUseCase = factory.makeResolveServerEndpointUseCase()
 
         // Listen for restart setup requests
         NotificationCenter.default.addObserver(
@@ -96,6 +102,8 @@ class AppViewModel {
                 self?.handleSessionExpiration()
             }
         }
+
+        observeNetworkChanges()
     }
 
     // MARK: - Public Methods
@@ -128,6 +136,8 @@ class AppViewModel {
 
             if hasAuth {
                 logger.info("Authentication state: \(appData.isAuthenticated) (method: \(authMethod.displayName))")
+                // Before the first request, so it already goes to an address that answers.
+                await resolveServerEndpoint()
                 updateAppConfig(config)
                 appState = .authenticated
                 await loadCurrentUser()
@@ -264,6 +274,43 @@ class AppViewModel {
             logger.error("Failed to clear configuration on session expiration: \(error)")
             appData.updateError("Session expired - please restart the app")
         }
+    }
+
+    // MARK: - Server Address
+
+    func appDidBecomeActive() async {
+        if appState == .authenticated {
+            await resolveServerEndpoint()
+        }
+        await checkServerVersionOnForeground()
+    }
+
+    private func resolveServerEndpoint() async {
+        if let running = endpointResolution {
+            await running.value
+            return
+        }
+        let resolution = Task { _ = await resolveServerEndpointUseCase.execute() }
+        endpointResolution = resolution
+        await resolution.value
+        endpointResolution = nil
+    }
+
+    /// Leaving the home Wi-Fi is the typical moment the other address is needed.
+    private func observeNetworkChanges() {
+        let monitor = NetworkMonitor.shared
+        monitor.$isConnected
+            .combineLatest(monitor.$connectionType)
+            .dropFirst()
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .filter { isConnected, _ in isConnected }
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.appState == .authenticated else { return }
+                    await self.resolveServerEndpoint()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Server Version Check

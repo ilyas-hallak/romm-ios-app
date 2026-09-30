@@ -17,6 +17,9 @@ struct SetupConfiguration: Codable {
     let setupDate: Date
     let version: String
     let allowIncompatibleVersionLogin: Bool
+    /// A second address of the same server, used while the main one does not
+    /// answer, for example a local address at home and a public one outside.
+    var alternativeServerURL: String?
 
     enum CodingKeys: String, CodingKey {
         case serverURL
@@ -27,6 +30,7 @@ struct SetupConfiguration: Codable {
         case setupDate
         case version
         case allowIncompatibleVersionLogin
+        case alternativeServerURL
     }
 
     init(
@@ -37,7 +41,8 @@ struct SetupConfiguration: Codable {
         refreshToken: String?,
         setupDate: Date,
         version: String,
-        allowIncompatibleVersionLogin: Bool = false
+        allowIncompatibleVersionLogin: Bool = false,
+        alternativeServerURL: String? = nil
     ) {
         self.serverURL = serverURL
         self.username = username
@@ -47,6 +52,7 @@ struct SetupConfiguration: Codable {
         self.setupDate = setupDate
         self.version = version
         self.allowIncompatibleVersionLogin = allowIncompatibleVersionLogin
+        self.alternativeServerURL = alternativeServerURL
     }
 
     init(from decoder: Decoder) throws {
@@ -62,6 +68,7 @@ struct SetupConfiguration: Codable {
             Bool.self,
             forKey: .allowIncompatibleVersionLogin
         ) ?? false
+        alternativeServerURL = try container.decodeIfPresent(String.self, forKey: .alternativeServerURL)
     }
 }
 
@@ -72,6 +79,7 @@ protocol PSetupRepository {
     func isSetupComplete() -> Bool
     func clearSetupConfiguration() throws
     func updateToken(_ token: String) throws
+    func updateAlternativeServerURL(_ url: String?) throws
     func saveAndValidateConfiguration(
         serverURL: String,
         username: String,
@@ -111,6 +119,7 @@ class SetupRepository: PSetupRepository {
         logger.debug("Has Token: \(config.token != nil)")
         logger.debug("Has Refresh Token: \(config.refreshToken != nil)")
         logger.debug("Allow Incompatible Version Login: \(config.allowIncompatibleVersionLogin)")
+        logger.debug("Alternative Server URL: \(config.alternativeServerURL ?? "none")")
         
         do {
             let jsonData = try JSONEncoder().encode(config)
@@ -195,12 +204,24 @@ class SetupRepository: PSetupRepository {
             refreshToken: config.refreshToken,
             setupDate: config.setupDate,
             version: config.version,
-            allowIncompatibleVersionLogin: config.allowIncompatibleVersionLogin
+            allowIncompatibleVersionLogin: config.allowIncompatibleVersionLogin,
+            alternativeServerURL: config.alternativeServerURL
         )
         
         // Save updated configuration
         try saveSetupConfiguration(updatedConfig)
         logger.info("Token updated in JSON configuration")
+    }
+
+    func updateAlternativeServerURL(_ url: String?) throws {
+        guard var config = getSetupConfiguration() else {
+            logger.error("No existing configuration to update")
+            throw SetupRepositoryError.dataNotFound
+        }
+
+        config.alternativeServerURL = url
+        try saveSetupConfiguration(config)
+        logger.info("Alternative server URL \(url == nil ? "removed" : "saved")")
     }
     
     @MainActor

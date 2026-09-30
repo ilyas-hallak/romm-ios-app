@@ -61,6 +61,9 @@ protocol PDependencyFactory {
     func makeGetSetupConfigurationUseCase() -> PGetSetupConfigurationUseCase
     func makeCheckSetupStatusUseCase() -> PCheckSetupStatusUseCase
     func makeClearSetupConfigurationUseCase() -> PClearSetupConfigurationUseCase
+    func makeGetServerConnectionUseCase() -> PGetServerConnectionUseCase
+    func makeSaveAlternativeServerURLUseCase() -> PSaveAlternativeServerURLUseCase
+    func makeResolveServerEndpointUseCase() -> PResolveServerEndpointUseCase
     
     // SFTP Use Cases
     func makeGetAllConnectionsUseCase() -> GetAllConnectionsUseCase
@@ -181,6 +184,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
+    lazy var serverEndpointRepository: PServerEndpointRepository = ServerEndpointRepository()
     
     // MARK: - Services (Singletons)
     
@@ -328,6 +332,18 @@ class DefaultDependencyFactory: PDependencyFactory {
             setupRepository: setupRepository,
             configurationService: DefaultConfigurationService.shared
         )
+    }
+
+    func makeGetServerConnectionUseCase() -> PGetServerConnectionUseCase {
+        GetServerConnectionUseCase(setupRepository: setupRepository, endpointRepository: serverEndpointRepository)
+    }
+
+    func makeSaveAlternativeServerURLUseCase() -> PSaveAlternativeServerURLUseCase {
+        SaveAlternativeServerURLUseCase(setupRepository: setupRepository)
+    }
+
+    func makeResolveServerEndpointUseCase() -> PResolveServerEndpointUseCase {
+        ResolveServerEndpointUseCase(setupRepository: setupRepository, endpointRepository: serverEndpointRepository)
     }
     
     // MARK: - SFTP Use Cases
