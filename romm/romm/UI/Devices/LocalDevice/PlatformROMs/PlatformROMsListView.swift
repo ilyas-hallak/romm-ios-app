@@ -59,17 +59,14 @@ struct PlatformROMsListView: View {
             ForEach(roms) { rom in
                 ROMCardRow(
                     rom: rom,
-                    // An external app decides for itself what it can play, and it
-                    // covers systems no built-in engine does, so the built-in
-                    // support list must not gate Play when one is selected.
-                    isPlayable: isPlatformSupported(rom.platformSlug) || externalPlay.playsExternally,
+                    isPlayable: canPlay(rom.platformSlug),
                     isLaunching: launchingRomId == rom.id,
                     isDisabled: launchingRomId != nil && launchingRomId != rom.id,
                     hasSaveGame: hasSaveGame(romId: rom.id),
                     hasSaveState: hasSaveState(romId: rom.id),
                     lastSync: viewModel.lastSync(romId: rom.id),
                     onPlay: {
-                        guard isPlatformSupported(rom.platformSlug), launchingRomId == nil else { return }
+                        guard canPlay(rom.platformSlug), launchingRomId == nil else { return }
                         launchingRomId = rom.id
                         Task { await startPlay(rom: rom) }
                     },
@@ -93,6 +90,7 @@ struct PlatformROMsListView: View {
         .navigationDestination(item: $detailRom) { rom in
             RomDetailView(rom: rom.toRom())
         }
+        #if !APP_STORE
         .fullScreenCover(item: $launchDecision, onDismiss: {
             launchingRomId = nil
             pendingResumeSlot = nil
@@ -114,6 +112,7 @@ struct PlatformROMsListView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        #endif
         .confirmationDialog(
             "Delete ROM?",
             isPresented: Binding(
@@ -200,7 +199,19 @@ struct PlatformROMsListView: View {
         }
     }
 
+    /// An external app decides for itself what it can play, and it covers
+    /// systems no built-in engine does, so the built-in support list must not
+    /// gate Play when one is selected.
+    private func canPlay(_ platformSlug: String) -> Bool {
+        isPlatformSupported(platformSlug) || externalPlay.playsExternally
+    }
+
     private func isPlatformSupported(_ platformSlug: String) -> Bool {
+        #if APP_STORE
+        // No built-in engine ships in this build, so Play only ever goes
+        // through canPlay's externalPlay.playsExternally fallback above.
+        return false
+        #else
         let supportedPlatforms: Set<String> = [
             "nes", "snes", "n64", "gba", "gbc", "gb", "nds",
             // "dc" fehlt bewusst: Dreamcast ist wegen der Audioausgabe deaktiviert,
@@ -212,5 +223,6 @@ struct PlatformROMsListView: View {
             "arcade"
         ]
         return supportedPlatforms.contains { platformSlug.lowercased().contains($0) }
+        #endif
     }
 }

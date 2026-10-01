@@ -31,10 +31,9 @@ struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
 
-    /// The App Store build ships the libretro cores as a regular feature, so the
-    /// section belongs to that target rather than to the receipt the build was
-    /// installed with. Everywhere else it stays the TestFlight/Debug experiment
-    /// it has been.
+    /// The App Store build has no in-app engine, so its Emulator section only
+    /// ever offers the external-app picker, always visible there. Everywhere
+    /// else the in-app engine stays the TestFlight/Debug experiment it has been.
     private var showsEmulatorSection: Bool {
         #if APP_STORE
         return true
@@ -59,7 +58,7 @@ struct SettingsView: View {
 
     private var emulatorSectionFooter: String {
         #if APP_STORE
-        return "Play ROMs directly in the app, or hand them to an emulator app you already have."
+        return "Hand downloaded ROMs to an emulator app you already have to play them."
         #else
         return "Experimental: play ROMs directly in the app. Only available in TestFlight and Debug builds."
         #endif
@@ -139,6 +138,16 @@ struct SettingsView: View {
             // Emulator Section
             if showsEmulatorSection {
                 Section {
+                    #if APP_STORE
+                    // No in-app engine to switch on, so this is just the door to
+                    // picking (and setting up) an external emulator app.
+                    NavigationLink(destination: EmulatorEngineSettingsView()) {
+                        HStack {
+                            Image(systemName: "gamecontroller")
+                            Text("Emulator App")
+                        }
+                    }
+                    #else
                     Toggle(isOn: $experimentalSettings.isEmulatorEnabled) {
                         HStack {
                             Image(systemName: "gamecontroller")
@@ -159,11 +168,8 @@ struct SettingsView: View {
                             }
                         }
 
-                        // Stays in every build: PlayStation and Dreamcast do not
-                        // start without their BIOS, see LibretroBIOSRequirement,
-                        // and the libretro cores ship App Store side too. Only
-                        // shown while a game actually runs here, the row means
-                        // nothing for the web engine or an external app.
+                        // Only shown while a game actually runs here, the row
+                        // means nothing for the web engine or an external app.
                         if playsOnDevice {
                             NavigationLink(destination: BIOSSettingsView()) {
                                 HStack {
@@ -173,17 +179,12 @@ struct SettingsView: View {
                             }
                         }
 
-                        // Skins need a DeltaCore to inspect the .deltaskin, which
-                        // the App Store build does not have, so the page would
-                        // only ever come back empty there.
-                        #if !APP_STORE
                         NavigationLink(destination: ControllerSkinsSettingsView()) {
                             HStack {
                                 Image(systemName: "paintbrush.fill")
                                 Text("Controller Skins")
                             }
                         }
-                        #endif
 
                         NavigationLink(destination: ExternalDisplaySettingsView()) {
                             HStack {
@@ -204,6 +205,7 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    #endif
                 } header: {
                     Text("Emulator")
                 } footer: {

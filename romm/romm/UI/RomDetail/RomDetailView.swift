@@ -298,6 +298,7 @@ struct RomDetailView: View {
                     print(scrollOffset)
                 }
             }
+            #if !APP_STORE
             .fullScreenCover(item: $viewModel.launchDecision, onDismiss: {
                 viewModel.emulatorPresentationDidEnd()
                 pendingResumeSlot = nil
@@ -334,6 +335,7 @@ struct RomDetailView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
+            #endif
             .onAppear {
                 Task {
                     await viewModel.loadRomDetails(romId: rom.id)

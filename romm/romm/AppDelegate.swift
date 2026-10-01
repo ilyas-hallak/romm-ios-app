@@ -13,9 +13,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         AppBootstrap.run()
+        #if !APP_STORE
         // A previous run may have been killed while the screen was blanked for
         // TV play, which would leave the panel dark at brightness 0.
         PhoneScreenBlanker.shared.recoverIfNeeded()
+        #endif
         // Downloads keep transferring while the app is gone, so the queue has to
         // be reconciled with what the session actually still holds. This also
         // runs when the app was only relaunched to be handed session events,
@@ -63,11 +65,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
+        #if !APP_STORE
         if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
             let config = UISceneConfiguration(name: "External Display", sessionRole: connectingSceneSession.role)
             config.delegateClass = ExternalDisplaySceneDelegate.self
             return config
         }
+        #endif
         return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
     }
 
