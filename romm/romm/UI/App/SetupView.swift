@@ -23,9 +23,11 @@ struct SetupView: View {
     /// Question the help opens on, set by whichever error offered it.
     @State private var helpTopic: HelpTopic?
 
+    #if !APP_STORE
     /// Joining a game as the second player needs no account, so the way in sits
     /// here rather than behind the login.
     @State private var showingRemoteController = false
+    #endif
 
     private var connectionLogger: ConnectionLogger { ConnectionLogger.shared }
 
@@ -110,7 +112,9 @@ struct SetupView: View {
             }
             .scrollDismissesKeyboard(.interactively)
 
+            #if !APP_STORE
             playAsControllerButton
+            #endif
         }
         .preferredColorScheme(.dark)
         .tint(SetupTheme.coralLight)
@@ -148,11 +152,14 @@ struct SetupView: View {
         .sheet(item: $helpTopic) { topic in
             HelpView(highlightedQuestion: topic.question)
         }
+        #if !APP_STORE
         .sheet(isPresented: $showingRemoteController) {
             RemoteControllerView()
         }
+        #endif
     }
 
+    #if !APP_STORE
     // MARK: - Play as Controller
 
     private var playAsControllerButton: some View {
@@ -175,6 +182,7 @@ struct SetupView: View {
         .padding(.top, 16)
         .padding(.trailing, 20)
     }
+    #endif
 
     // MARK: - Glass Card
 

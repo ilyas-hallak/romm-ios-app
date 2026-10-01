@@ -300,6 +300,86 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.downloadState.requestedIds == [30])
     }
 
+    // MARK: - Pull states, baseline-driven regression coverage
+
+    /// The real bug report, on the pre-launch pull path: a state saved
+    /// locally after the last sync, whose push never reached the server,
+    /// must not be overwritten by a pull just because the server row was
+    /// touched elsewhere and its `updated_at` moved on with no content
+    /// change. The pull only ever downloads, so here that means leaving the
+    /// local file alone entirely.
+    @Test func pullStatesNeverOverwritesANeverPushedLocalSaveWhenTheServerRowIsOnlyTouched() async throws {
+        let store = makeStore()
+        let oldContent = Data([0x01])
+        let baselineTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.writeStateBaseline(romId: 1, slot: 0, baseline: StateSyncBaseline(
+            serverId: 30, serverUpdatedAt: baselineTime, contentHash: SaveContentHash.of(oldContent)
+        ))
+        try store.writeState(romId: 1, slot: 0, data: Data([0xAA]))
+        try store.setStateModifiedAt(romId: 1, slot: 0, date: baselineTime.addingTimeInterval(60))
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = nil
+        fakes.listStates.statesByRomId[1] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 1, fileName: "slot0.state", updatedAt: baselineTime.addingTimeInterval(3_600))
+        ]
+        fakes.downloadState.dataForId[30] = oldContent
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig())
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readState(romId: 1, slot: 0) == Data([0xAA]))
+    }
+
+    /// A genuinely newer server state (another device's real save) is still
+    /// pulled down, and the slot it overwrites stays recoverable via undo.
+    @Test func pullStatesDownloadsAGenuinelyNewerServerStateAndBacksUpForUndo() async throws {
+        let store = makeStore()
+        let oldContent = Data([0xAA])
+        let baselineTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.writeState(romId: 1, slot: 0, data: oldContent)
+        try store.setStateModifiedAt(romId: 1, slot: 0, date: baselineTime)
+        try store.writeStateBaseline(romId: 1, slot: 0, baseline: StateSyncBaseline(
+            serverId: 30, serverUpdatedAt: baselineTime, contentHash: SaveContentHash.of(oldContent)
+        ))
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = nil
+        let newContent = Data([0xBB])
+        fakes.listStates.statesByRomId[1] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 1, fileName: "slot0.state", updatedAt: baselineTime.addingTimeInterval(3_600))
+        ]
+        fakes.downloadState.dataForId[30] = newContent
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig())
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readState(romId: 1, slot: 0) == newContent)
+        #expect(store.hasUndoSave(romId: 1, slot: 0))
+    }
+
+    /// Migration case on the pull path: no baseline exists yet, but local
+    /// and server already agree on the bytes. Nothing gets written, only the
+    /// baseline is recorded.
+    @Test func pullStatesRecordsBaselineWithoutOverwritingWhenMigratingWithIdenticalContent() async throws {
+        let store = makeStore()
+        let content = Data([0xAA])
+        try store.writeState(romId: 1, slot: 0, data: content)
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = nil
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listStates.statesByRomId[1] = [
+            FakeListServerStatesUseCase.makeSchema(id: 30, romId: 1, fileName: "slot0.state", updatedAt: serverTime)
+        ]
+        fakes.downloadState.dataForId[30] = content
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig())
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readState(romId: 1, slot: 0) == content)
+        let baseline = try store.readStateBaseline(romId: 1, slot: 0)
+        #expect(baseline?.serverId == 30)
+        #expect(baseline?.contentHash == SaveContentHash.of(content))
+    }
+
     // MARK: - Push battery
 
     /// Every push carries this device's id, the fixed `battery` slot, and

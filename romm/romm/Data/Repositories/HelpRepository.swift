@@ -12,8 +12,16 @@ import Foundation
 /// server cannot be reached, which is exactly when the setup screen offers it.
 final class HelpRepository: PHelpRepository {
 
+    /// The App Store build has its own copy, because it has none of the
+    /// playing features the main FAQ explains.
+    #if APP_STORE
+    private static let documentName = "FAQ-AppStore"
+    #else
+    private static let documentName = "FAQ"
+    #endif
+
     private static let remoteURL = URL(
-        string: "https://raw.githubusercontent.com/ilyas-hallak/romm-ios-app/main/FAQ.md")!
+        string: "https://raw.githubusercontent.com/ilyas-hallak/romm-ios-app/main/\(documentName).md")!
 
     /// Short on purpose. Help opens on a tap, so waiting is worse than showing
     /// the bundled copy, which is never badly out of date.
@@ -53,8 +61,8 @@ final class HelpRepository: PHelpRepository {
     }
 
     private func bundled() -> String {
-        guard let url = bundle.url(forResource: "FAQ", withExtension: "md") else {
-            logger.warning("FAQ.md not found in app bundle")
+        guard let url = bundle.url(forResource: Self.documentName, withExtension: "md") else {
+            logger.warning("\(Self.documentName).md not found in app bundle")
             return ""
         }
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""

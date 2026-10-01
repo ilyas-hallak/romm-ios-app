@@ -23,6 +23,12 @@ end
 DELTA_FRAMEWORK = /DeltaCore/
 DELTA_ASSETS = ["*.deltaskin", "*.deltamapping"].freeze
 
+# The App Store build ships no in-app engine at all, so the libretro cores,
+# PPSSPP's asset bundle and the EmulatorJS web player have no business being
+# in that .app either. Same 4.3(a) risk as the Delta cores above.
+LIBRETRO_FRAMEWORK = /libretro/
+NO_ENGINE_ITEMS = ["PPSSPPAssets", "emulator.html"].freeze
+
 # The signing team is no longer stored in the project file, it comes from a
 # gitignored Signing.xcconfig that a release worktree does not have. So the
 # build has to be told the team explicitly. Override with IOS_DEVELOPMENT_TEAM.
@@ -49,6 +55,8 @@ def verify_ipa!(ipa_path, expect_delta_cores:)
     frameworks = Dir.glob(File.join(app, "Frameworks", "*")).map { |f| File.basename(f) }
     delta_frameworks = frameworks.grep(DELTA_FRAMEWORK)
     delta_assets = DELTA_ASSETS.flat_map { |g| Dir.glob(File.join(app, "**", g)) }
+    libretro_frameworks = frameworks.grep(LIBRETRO_FRAMEWORK)
+    no_engine_items = NO_ENGINE_ITEMS.flat_map { |name| Dir.glob(File.join(app, "**", name)) }
 
     UI.message("#{frameworks.count} embedded frameworks, #{delta_frameworks.count} of them Delta")
 
@@ -69,6 +77,16 @@ def verify_ipa!(ipa_path, expect_delta_cores:)
       unless delta_assets.empty?
         names = delta_assets.map { |f| File.basename(f) }.uniq
         UI.user_error!("App Store build still ships Delta assets: #{names.join(', ')}")
+      end
+      unless libretro_frameworks.empty?
+        UI.user_error!(
+          "App Store build still embeds libretro cores: #{libretro_frameworks.join(', ')}. " \
+          "Refusing to upload, this is the 4.3(a) rejection all over again."
+        )
+      end
+      unless no_engine_items.empty?
+        names = no_engine_items.map { |f| File.basename(f) }.uniq
+        UI.user_error!("App Store build still ships in-app engine assets: #{names.join(', ')}")
       end
 
       # Frameworks and assets are not the whole story. A leftover credit line
@@ -105,11 +123,18 @@ def next_build_number(api_key)
 end
 
 # Release notes ("What to Test"). Explicit override via TF_CHANGELOG, else the
-# recent git commit subjects.
-def release_notes
-  changelog = ENV["TF_CHANGELOG"].to_s.strip
-  return changelog unless changelog.empty?
+# recent git commit subjects. The label goes first, so both variants can be told
+# apart in the shared TestFlight build list.
+TESTFLIGHT_LABEL = "[TestFlight] Full build with emulation"
+APPSTORE_LABEL = "[App Store] Companion only, no emulation"
 
+def release_notes(label)
+  changelog = ENV["TF_CHANGELOG"].to_s.strip
+  changelog = commit_subjects if changelog.empty?
+  [label, changelog].compact.reject(&:empty?).join("\n\n")
+end
+
+def commit_subjects
   begin
     changelog_from_git_commits(
       commits_count: 15,
@@ -121,7 +146,7 @@ def release_notes
   end
 end
 
-def build_and_upload(scheme:, expect_delta_cores:, skip_upload:)
+def build_and_upload(scheme:, label:, expect_delta_cores:, skip_upload:)
   api_key = asc_api_key
   build = next_build_number(api_key)
 
@@ -165,12 +190,10 @@ def build_and_upload(scheme:, expect_delta_cores:, skip_upload:)
     return
   end
 
-  changelog = release_notes
   upload_to_testflight(
     api_key: api_key,
-    changelog: changelog,
-    distribute_external: false,
-    skip_waiting_for_build_processing: changelog.to_s.strip.empty?
+    changelog: release_notes(label),
+    distribute_external: false
   )
 
   UI.success("Uploaded #{scheme} build #{build} 🚀")
@@ -190,6 +213,7 @@ platform :ios do
   lane :beta do |options|
     build_and_upload(
       scheme: "romm",
+      label: TESTFLIGHT_LABEL,
       expect_delta_cores: true,
       skip_upload: options[:skip_upload]
     )
@@ -204,10 +228,26 @@ platform :ios do
     verify_ipa!(path, expect_delta_cores: options[:expect_delta_cores] || false)
   end
 
+  desc "Upload an already built App Store .ipa after inspecting it again"
+  lane :upload_appstore do |options|
+    path = options[:ipa] ||
+      Dir.glob(File.join(project_dir, "build", "romm-AppStore-*.ipa")).max_by { |f| File.mtime(f) }
+    UI.user_error!("No .ipa given and none found in build/") if path.nil?
+    verify_ipa!(path, expect_delta_cores: false)
+    upload_to_testflight(
+      api_key: asc_api_key,
+      ipa: path,
+      changelog: release_notes(APPSTORE_LABEL),
+      distribute_external: false
+    )
+    UI.success("Uploaded #{File.basename(path)}")
+  end
+
   desc "Build and upload the App Store variant (without the Delta cores)"
   lane :appstore do |options|
     build_and_upload(
       scheme: "romm-AppStore",
+      label: APPSTORE_LABEL,
       expect_delta_cores: false,
       skip_upload: options[:skip_upload]
     )

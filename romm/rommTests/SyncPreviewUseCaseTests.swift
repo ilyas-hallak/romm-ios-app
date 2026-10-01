@@ -77,6 +77,10 @@ private final class FakeSaveStore: PSaveStore, @unchecked Sendable {
 
     func readThumbnail(romId: Int, slot: Int) throws -> Data? { nil }
     func writeThumbnail(romId: Int, slot: Int, data: Data) throws {}
+    func deleteThumbnail(romId: Int, slot: Int) throws {}
+
+    func readStateBaseline(romId: Int, slot: Int) throws -> StateSyncBaseline? { nil }
+    func writeStateBaseline(romId: Int, slot: Int, baseline: StateSyncBaseline) throws {}
 
     func backupSlotForUndoSave(romId: Int, slot: Int) throws {}
     func restoreSlotFromUndoSave(romId: Int, slot: Int) throws -> Bool { false }
