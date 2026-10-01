@@ -22,6 +22,12 @@ protocol PSaveStore {
 
     func readThumbnail(romId: Int, slot: Int) throws -> Data?
     func writeThumbnail(romId: Int, slot: Int, data: Data) throws
+    func deleteThumbnail(romId: Int, slot: Int) throws
+
+    // Sync baseline: what this device last agreed with the server about a
+    // slot, see StateSyncBaseline/StateSyncDecision.
+    func readStateBaseline(romId: Int, slot: Int) throws -> StateSyncBaseline?
+    func writeStateBaseline(romId: Int, slot: Int, baseline: StateSyncBaseline) throws
 
     // Undo Save: snapshot existing slot before overwrite
     func backupSlotForUndoSave(romId: Int, slot: Int) throws

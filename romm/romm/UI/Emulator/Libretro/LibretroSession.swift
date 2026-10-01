@@ -377,7 +377,7 @@ final class LibretroSession: NSObject {
         if let thumb {
             try saveStates.writeThumbnail(romId: romId, slot: slot, data: thumb)
         }
-        cloudSync?.pushState(slot: slot, data: data, thumbnail: thumb)
+        cloudSync?.pushState(slot: slot)
     }
 
     func loadState(slot: Int) throws {
