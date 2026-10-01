@@ -618,7 +618,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     @objc private func externalControllerDidConnect(_ notification: Notification) {
         guard let controller = notification.object as? GameController,
               let core = emulatorCore else { return }
-        let usedIndexes = Set(ExternalGameControllerManager.shared.connectedControllers.compactMap { $0.playerIndex })
+        // The manager already lists the new controller, and can announce one that
+        // is attached already. Counting it as taken would push it to player two.
+        let usedIndexes = Set(ExternalGameControllerManager.shared.connectedControllers
+            .filter { !$0.isEqual(controller) }
+            .compactMap { $0.playerIndex })
         var nextIndex = 0
         while usedIndexes.contains(nextIndex) { nextIndex += 1 }
         controller.playerIndex = nextIndex
