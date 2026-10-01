@@ -274,7 +274,7 @@ class RomDetailViewModel {
         isLoadingSaves = true
         
         do {
-            saves = try await apiClient.getSaves(romId: romId)
+            saves = try await apiClient.getSaves(romId: romId).sorted { $0.updatedAt > $1.updatedAt }
             isLoadingSaves = false
             logger.info("Loaded \(saves.count) saves for ROM \(romId)")
         } catch {
@@ -290,7 +290,7 @@ class RomDetailViewModel {
         isLoadingStates = true
         
         do {
-            states = try await apiClient.getStates(romId: romId)
+            states = try await apiClient.getStates(romId: romId).sorted { $0.updatedAt > $1.updatedAt }
             isLoadingStates = false
             logger.info("Loaded \(states.count) states for ROM \(romId)")
         } catch {
