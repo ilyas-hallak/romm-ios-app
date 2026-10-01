@@ -157,13 +157,18 @@ struct EarnedRetroAchievement: Equatable {
 
 enum UserRole: String, CaseIterable {
     case admin = "admin"
+    // Server 5.2+ only distinguishes user/admin; viewer/editor are legacy
+    // roles from servers older than 5.2.
+    case user = "user"
     case editor = "editor"
     case viewer = "viewer"
-    
+
     var displayName: String {
         switch self {
         case .admin:
             return "Administrator"
+        case .user:
+            return "User"
         case .editor:
             return "Editor"
         case .viewer:

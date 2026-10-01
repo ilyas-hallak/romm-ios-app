@@ -9,7 +9,7 @@ import Foundation
 
 struct UserMapper {
     static func mapFromAPI(_ apiUser: UserSchema) -> User {
-        let role = UserRole(rawValue: apiUser.role.rawValue) ?? .viewer
+        let role = UserRole(rawValue: apiUser.role.rawValue) ?? .user
         
         return User(
             id: apiUser.id,

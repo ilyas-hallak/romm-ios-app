@@ -37,7 +37,7 @@ class AppViewModel {
     var serverVersionAlert: ServerVersionAlert?
 
     /// Single-flight guard: opening a game fires several requests at once, so an
-    /// expired/revoked token produces a burst of parallel 401/403s. Without this,
+    /// expired/revoked token produces a burst of parallel 401s. Without this,
     /// each one would re-run the logout, causing the reported sign-in loop (#59).
     private var isHandlingSessionExpiration = false
 
@@ -243,7 +243,7 @@ class AppViewModel {
             return
         }
 
-        // Collapse a burst of parallel 401/403s into a single logout (#59).
+        // Collapse a burst of parallel 401s into a single logout (#59).
         guard !isHandlingSessionExpiration else {
             logger.debug("Ignoring session expiration - already handling one")
             return

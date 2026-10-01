@@ -312,7 +312,7 @@ class SetupRepository: PSetupRepository {
 
             // Use URLSession with private network delegate for self-signed certs
             let sessionDelegate = PrivateNetworkURLSessionDelegate()
-            let configuration = URLSessionConfiguration.default
+            let configuration = URLSessionConfiguration.default.withoutCookies()
             configuration.timeoutIntervalForRequest = 30.0
             configuration.waitsForConnectivity = true
             let session = URLSession(configuration: configuration, delegate: sessionDelegate, delegateQueue: nil)

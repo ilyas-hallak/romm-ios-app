@@ -106,7 +106,7 @@ extension ClientTokenAuthService {
         logger.info("Exchanging pairing code with server")
 
         let session = URLSession(
-            configuration: .default,
+            configuration: .default.withoutCookies(),
             delegate: PrivateNetworkURLSessionDelegate(),
             delegateQueue: nil
         )
@@ -198,7 +198,7 @@ extension ClientTokenAuthService {
         request.timeoutInterval = 15.0
 
         let session = URLSession(
-            configuration: .default,
+            configuration: .default.withoutCookies(),
             delegate: PrivateNetworkURLSessionDelegate(),
             delegateQueue: nil
         )

@@ -176,7 +176,7 @@ class RommAPIClient: PRommAPIClient {
         if let urlSession = urlSession {
             self.urlSession = urlSession
         } else {
-            let configuration = URLSessionConfiguration.default
+            let configuration = URLSessionConfiguration.default.withoutCookies()
             configuration.timeoutIntervalForRequest = 30.0
             configuration.timeoutIntervalForResource = 60 * 60
             configuration.waitsForConnectivity = true
@@ -244,7 +244,7 @@ class RommAPIClient: PRommAPIClient {
                 return data
             case 401:
                 logger.warning("Authentication failed - invalid credentials")
-                NotificationCenter.default.post(name: .sessionExpired, object: nil)
+                NotificationCenter.default.post(name: .sessionExpired, object: self)
                 throw APIClientError.authenticationRequired
             case 403:
                 let msg = String(data: data, encoding: .utf8) ?? "Forbidden"
@@ -255,14 +255,8 @@ class RommAPIClient: PRommAPIClient {
                     throw APIClientError.cloudflareProtection(msg)
                 }
 
-                // For client token auth, 403 means token was revoked/invalid
-                if tokenProvider.getAuthMethod() == .clientToken {
-                    logger.warning("Client token rejected (403) - session expired")
-                    NotificationCenter.default.post(name: .sessionExpired, object: nil)
-                    throw APIClientError.authenticationRequired
-                }
-
-                // Regular 403 error
+                // 403 is a regular error, never a logout trigger. Only 401 means the
+                // credentials themselves are rejected.
                 logger.error("Forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
             case 409:
@@ -450,7 +444,7 @@ class RommAPIClient: PRommAPIClient {
         case 401:
             try? FileManager.default.removeItem(at: tempURL)
             logger.warning("Authentication failed during download")
-            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            NotificationCenter.default.post(name: .sessionExpired, object: self)
             throw APIClientError.authenticationRequired
 
         case 400...599:
@@ -514,7 +508,7 @@ class RommAPIClient: PRommAPIClient {
                 return data
             case 401:
                 logger.warning("Authentication failed for multipart request")
-                NotificationCenter.default.post(name: .sessionExpired, object: nil)
+                NotificationCenter.default.post(name: .sessionExpired, object: self)
                 throw APIClientError.authenticationRequired
             case 403:
                 let msg = String(data: data, encoding: .utf8) ?? "Forbidden"
@@ -524,12 +518,8 @@ class RommAPIClient: PRommAPIClient {
                     throw APIClientError.cloudflareProtection(msg)
                 }
 
-                if tokenProvider.getAuthMethod() == .clientToken {
-                    logger.warning("Client token rejected (403) on multipart - session expired")
-                    NotificationCenter.default.post(name: .sessionExpired, object: nil)
-                    throw APIClientError.authenticationRequired
-                }
-
+                // 403 is a regular error, never a logout trigger. Only 401 means the
+                // credentials themselves are rejected.
                 logger.error("Multipart forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
             case 409:
@@ -583,7 +573,7 @@ class RommAPIClient: PRommAPIClient {
         switch http.statusCode {
         case 200...299: return data
         case 401:
-            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            NotificationCenter.default.post(name: .sessionExpired, object: self)
             throw APIClientError.authenticationRequired
         default:
             let msg = String(data: data.prefix(500), encoding: .utf8) ?? "Error"

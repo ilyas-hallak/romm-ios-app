@@ -13,7 +13,8 @@ class HeartbeatRepository: PHeartbeatRepository {
     // MARK: - Constants
 
     let minSupportedServerVersion = "4.1.0"
-    let maxSupportedServerVersion = "5.2.0"
+    // Only major.minor counts for the upper bound, so every 5.3.x is supported.
+    let maxSupportedServerVersion = "5.3.0"
     let versionCheckThrottleSeconds: TimeInterval = 30
 
     // MARK: - UserDefaults Keys
@@ -98,7 +99,7 @@ class HeartbeatRepository: PHeartbeatRepository {
         }
 
         // Check if version is above maximum
-        if compareVersions(serverVersion, maxSupportedServerVersion) > 0 {
+        if isAboveMaxSupportedVersion(serverVersion) {
             logger.warning(
                 "Server version \(serverVersion) is above maximum \(maxSupportedServerVersion)")
             throw HeartbeatError.serverVersionTooHigh(
@@ -148,7 +149,7 @@ class HeartbeatRepository: PHeartbeatRepository {
                 )
             }
 
-            if compareVersions(serverVersion, maxSupportedServerVersion) > 0 {
+            if isAboveMaxSupportedVersion(serverVersion) {
                 logger.warning(
                     "Server version \(serverVersion) is above maximum \(maxSupportedServerVersion)")
                 throw HeartbeatError.serverVersionTooHigh(
@@ -201,8 +202,17 @@ class HeartbeatRepository: PHeartbeatRepository {
 
     func isVersionCompatible(_ version: String) -> Bool {
         let aboveMin = compareVersions(version, minSupportedServerVersion) >= 0
-        let belowMax = compareVersions(version, maxSupportedServerVersion) <= 0
-        return aboveMin && belowMax
+        return aboveMin && !isAboveMaxSupportedVersion(version)
+    }
+
+    private func isAboveMaxSupportedVersion(_ version: String) -> Bool {
+        compareVersions(majorMinor(version), majorMinor(maxSupportedServerVersion)) > 0
+    }
+
+    private func majorMinor(_ version: String) -> String {
+        if version == "development" { return version }
+        let base = version.split(separator: "-").first.map(String.init) ?? version
+        return base.split(separator: ".").prefix(2).joined(separator: ".")
     }
 
     private func compareVersions(_ version1: String, _ version2: String) -> Int {

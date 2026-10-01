@@ -53,7 +53,9 @@ class DefaultConfigurationService: ConfigurationService {
     private let keychainService = "com.romm.app"
     private let setupConfigurationKey = "setup_configuration_json"
     private let logger = Logger.data
-    
+    // Not .shared, see URLSessionConfiguration.withoutCookies().
+    private let session = URLSession(configuration: .default.withoutCookies())
+
     private init() {}
     
     func saveConfiguration(serverURL: String, username: String, password: String) async throws {
@@ -158,8 +160,8 @@ class DefaultConfigurationService: ConfigurationService {
         logger.debug("Sending refresh token request...")
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
+            let (data, response) = try await session.data(for: request)
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 logger.error("Invalid response type during refresh")
                 return false
@@ -243,7 +245,7 @@ class DefaultConfigurationService: ConfigurationService {
         
         do {
             logger.debug("Sending Basic Auth test request...")
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             
             logger.debug("Response received")
             logger.debug("Response data size: \(data.count) bytes")

@@ -17,7 +17,7 @@ extension RommAPIClient {
     /// it just never answers, and the user watches a spinner until they give up.
     /// A short, self-contained budget turns that into an error message.
     private static let setupSession: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
+        let configuration = URLSessionConfiguration.ephemeral.withoutCookies()
         configuration.timeoutIntervalForRequest = RommAPIClient.setupTimeout
         configuration.timeoutIntervalForResource = RommAPIClient.setupTimeout
         // Queueing the request until the network looks better would bring the

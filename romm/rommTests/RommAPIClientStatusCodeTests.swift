@@ -12,7 +12,22 @@ import Foundation
 import Testing
 @testable import romm
 
+/// Counts calls from a closure that outlives the statement it was written in.
+private final class CallCounter: @unchecked Sendable {
+    private(set) var count = 0
+    func mark() { count += 1 }
+}
+
 struct RommAPIClientStatusCodeTests {
+
+    /// Counts only the posts of `client`, other suites post `.sessionExpired` concurrently.
+    private func countSessionExpiredPosts(from client: RommAPIClient, during body: () async -> Void) async -> Int {
+        let posts = CallCounter()
+        let observer = NotificationCenter.default.addObserver(forName: .sessionExpired, object: client, queue: nil) { _ in posts.mark() }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        await body()
+        return posts.count
+    }
 
     private static let minimalSaveResponse = Data("""
     {
@@ -114,6 +129,47 @@ struct RommAPIClientStatusCodeTests {
         }
     }
 
+    @Test func jsonPath401ThrowsAuthenticationRequired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 401, body: Data("invalid credentials".utf8)),
+            forHost: host
+        )
+        let posts = await countSessionExpiredPosts(from: client) {
+            do {
+                _ = try await client.confirmSaveDownloaded(id: 1, deviceId: "device-abc")
+                Issue.record("Expected APIClientError.authenticationRequired")
+            } catch APIClientError.authenticationRequired {
+                // expected
+            } catch {
+                Issue.record("Wrong error type: \(error)")
+            }
+        }
+        #expect(posts == 1)
+    }
+
+    /// RomM 5.3's CSRF check can reject a request with 403 even though the bearer
+    /// token is still valid, so 403 must stay a regular error and never log the
+    /// user out the way 401 does.
+    @Test func jsonPath403StaysInvalidResponseNotAuthRequired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 403, body: Data("CSRF token verification failed".utf8)),
+            forHost: host
+        )
+        let posts = await countSessionExpiredPosts(from: client) {
+            do {
+                _ = try await client.confirmSaveDownloaded(id: 1, deviceId: "device-abc")
+                Issue.record("Expected APIClientError.invalidResponse")
+            } catch APIClientError.invalidResponse(let code, _) {
+                #expect(code == 403)
+            } catch {
+                Issue.record("Wrong error type: \(error)")
+            }
+        }
+        #expect(posts == 0)
+    }
+
     @Test func jsonPathSuccessWithEmptyBodyDoesNotThrow() async throws {
         let (client, host) = makeStubbedClient()
         URLProtocolStubRegistry.shared.setResponse(
@@ -191,6 +247,44 @@ struct RommAPIClientStatusCodeTests {
         }
     }
 
+    @Test func multipartPath401ThrowsAuthenticationRequired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 401, body: Data("invalid credentials".utf8)),
+            forHost: host
+        )
+        let posts = await countSessionExpiredPosts(from: client) {
+            do {
+                try await uploadOnce(client: client)
+                Issue.record("Expected APIClientError.authenticationRequired")
+            } catch APIClientError.authenticationRequired {
+                // expected
+            } catch {
+                Issue.record("Wrong error type: \(error)")
+            }
+        }
+        #expect(posts == 1)
+    }
+
+    @Test func multipartPath403StaysInvalidResponseNotAuthRequired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 403, body: Data("CSRF token verification failed".utf8)),
+            forHost: host
+        )
+        let posts = await countSessionExpiredPosts(from: client) {
+            do {
+                try await uploadOnce(client: client)
+                Issue.record("Expected APIClientError.invalidResponse")
+            } catch APIClientError.invalidResponse(let code, _) {
+                #expect(code == 403)
+            } catch {
+                Issue.record("Wrong error type: \(error)")
+            }
+        }
+        #expect(posts == 0)
+    }
+
     @Test func multipartPathSuccessDoesNotThrow() async throws {
         let (client, host) = makeStubbedClient()
         URLProtocolStubRegistry.shared.setResponse(
@@ -198,5 +292,39 @@ struct RommAPIClientStatusCodeTests {
             forHost: host
         )
         _ = try await uploadOnce(client: client)
+    }
+
+    // MARK: - Manual PDF path (getManualPDFData, its own request builder)
+
+    @Test func manualPDFPath401ThrowsAuthenticationRequired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 401, body: Data("invalid credentials".utf8)),
+            forHost: host
+        )
+        do {
+            _ = try await client.getManualPDFData(manualURL: "https://\(host)/manual.pdf")
+            Issue.record("Expected APIClientError.authenticationRequired")
+        } catch APIClientError.authenticationRequired {
+            // expected
+        } catch {
+            Issue.record("Wrong error type: \(error)")
+        }
+    }
+
+    @Test func manualPDFPath403StaysInvalidResponse() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 403, body: Data("CSRF token verification failed".utf8)),
+            forHost: host
+        )
+        do {
+            _ = try await client.getManualPDFData(manualURL: "https://\(host)/manual.pdf")
+            Issue.record("Expected APIClientError.invalidResponse")
+        } catch APIClientError.invalidResponse(let code, _) {
+            #expect(code == 403)
+        } catch {
+            Issue.record("Wrong error type: \(error)")
+        }
     }
 }
