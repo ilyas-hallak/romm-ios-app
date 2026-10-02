@@ -350,10 +350,21 @@ class KingfisherCacheManager: ObservableObject {
         // The host is read per request: at launch there may be no server yet,
         // and the app can switch to the alternative address at any time.
         let modifier = AnyModifier { request in
-            guard let serverURL = tokenProvider.getServerURL(),
-                  let serverHost = URL(string: serverURL)?.host,
-                  request.url?.host == serverHost else { return request }
+            guard let serverURL = tokenProvider.getServerURL() else { return request }
             var r = request
+
+            // Covers loaded before an endpoint switch still point at the old address; rebase
+            // the request onto the active one so it actually reaches a live host.
+            if let requestURL = r.url {
+                r.url = ServerURLRebaser.rebase(
+                    requestURL,
+                    activeBaseURL: serverURL,
+                    knownBaseURLs: tokenProvider.getKnownServerURLs()
+                )
+            }
+
+            guard let serverHost = URL(string: serverURL)?.host,
+                  r.url?.host == serverHost else { return r }
             let authMethod = tokenProvider.getAuthMethod()
             switch authMethod {
             case .clientToken, .deviceFlow:

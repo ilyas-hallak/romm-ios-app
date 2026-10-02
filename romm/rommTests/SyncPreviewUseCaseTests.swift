@@ -112,6 +112,7 @@ private final class FakeTokenProvider: PTokenProvider, @unchecked Sendable {
     var serverURL: String? = "https://example.org"
 
     func getServerURL() -> String? { serverURL }
+    func getKnownServerURLs() -> [String] { serverURL.map { [$0] } ?? [] }
     func getAuthToken() -> String? { "token" }
     func getUsername() -> String? { "tester" }
     func getPassword() -> String? { nil }

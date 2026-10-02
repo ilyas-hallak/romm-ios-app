@@ -159,6 +159,96 @@ struct TokenProviderServerURLTests {
     }
 }
 
+struct ServerURLRebaserTests {
+
+    @Test func rewritesFromMainToAlternative() {
+        let url = URL(string: "\(primaryURL)/assets/cover/small.png")!
+
+        let rebased = ServerURLRebaser.rebase(
+            url,
+            activeBaseURL: alternativeURL,
+            knownBaseURLs: [primaryURL, alternativeURL]
+        )
+
+        #expect(rebased.absoluteString == "\(alternativeURL)/assets/cover/small.png")
+    }
+
+    @Test func rewritesFromAlternativeBackToMain() {
+        let url = URL(string: "\(alternativeURL)/assets/cover/small.png")!
+
+        let rebased = ServerURLRebaser.rebase(
+            url,
+            activeBaseURL: primaryURL,
+            knownBaseURLs: [primaryURL, alternativeURL]
+        )
+
+        #expect(rebased.absoluteString == "\(primaryURL)/assets/cover/small.png")
+    }
+
+    @Test func matchesABasePathPrefix() {
+        let basePath = "https://host.example.com/romm"
+        let url = URL(string: "\(basePath)/assets/cover/small.png")!
+
+        let rebased = ServerURLRebaser.rebase(
+            url,
+            activeBaseURL: alternativeURL,
+            knownBaseURLs: [basePath, alternativeURL]
+        )
+
+        #expect(rebased.absoluteString == "\(alternativeURL)/assets/cover/small.png")
+    }
+
+    @Test func leavesAForeignHostUntouched() {
+        let url = URL(string: "https://cdn2.steamgriddb.com/grid/abc.png")!
+
+        let rebased = ServerURLRebaser.rebase(
+            url,
+            activeBaseURL: alternativeURL,
+            knownBaseURLs: [primaryURL, alternativeURL]
+        )
+
+        #expect(rebased == url)
+    }
+
+    @Test func leavesALookAlikeHostPrefixUntouched() {
+        // "https://host" is a textual prefix of this URL, but not followed by "/", "?" or the
+        // end of the string, so it must not be treated as a prefix match.
+        let url = URL(string: "https://hostother.example.com/cover.png")!
+
+        let rebased = ServerURLRebaser.rebase(
+            url,
+            activeBaseURL: alternativeURL,
+            knownBaseURLs: ["https://host", alternativeURL]
+        )
+
+        #expect(rebased == url)
+    }
+
+    @Test func leavesAnAlreadyActiveURLUnchanged() {
+        let url = URL(string: "\(alternativeURL)/assets/cover/small.png")!
+
+        let rebased = ServerURLRebaser.rebase(
+            url,
+            activeBaseURL: alternativeURL,
+            knownBaseURLs: [primaryURL, alternativeURL]
+        )
+
+        #expect(rebased == url)
+    }
+
+    @Test func preservesTheQueryString() {
+        let url = URL(string: "\(primaryURL)/assets/cover/small.png?ts=2026-07-15%2022:14:51")!
+
+        let rebased = ServerURLRebaser.rebase(
+            url,
+            activeBaseURL: alternativeURL,
+            knownBaseURLs: [primaryURL, alternativeURL]
+        )
+
+        #expect(rebased.absoluteString == "\(alternativeURL)/assets/cover/small.png?ts=2026-07-15%2022:14:51")
+    }
+}
+
 @MainActor
 struct SetupConfigurationDecodingTests {
 

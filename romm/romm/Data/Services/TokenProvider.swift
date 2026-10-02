@@ -11,6 +11,9 @@ import Foundation
 protocol PTokenProvider {
     func getAuthToken() -> String?
     func getServerURL() -> String?
+    /// Every server base URL the app is configured with (the main one, plus the alternative
+    /// when one is set), regardless of which is currently active.
+    func getKnownServerURLs() -> [String]
     func getUsername() -> String?
     func getPassword() -> String?
     func isConfigured() -> Bool
@@ -107,7 +110,23 @@ class TokenProvider: PTokenProvider {
         }
         return alternativeURL
     }
-    
+
+    func getKnownServerURLs() -> [String] {
+        if let setupConfig = setupRepository.getSetupConfiguration() {
+            var urls = [setupConfig.serverURL]
+            if let alternativeURL = setupConfig.alternativeServerURL {
+                urls.append(alternativeURL)
+            }
+            return urls
+        }
+
+        if let config = configurationService.getConfiguration() {
+            return [config.serverURL]
+        }
+
+        return []
+    }
+
     func getUsername() -> String? {
         logger.debug("Getting username...")
         
@@ -231,7 +250,13 @@ class MockTokenProvider: PTokenProvider {
     func getServerURL() -> String? {
         return mockServerURL
     }
-    
+
+    var mockKnownServerURLs: [String]?
+
+    func getKnownServerURLs() -> [String] {
+        return mockKnownServerURLs ?? mockServerURL.map { [$0] } ?? []
+    }
+
     func getUsername() -> String? {
         return mockUsername
     }
