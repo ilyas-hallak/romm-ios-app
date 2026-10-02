@@ -16,33 +16,30 @@ final class PlatformEngineSupport: PPlatformEngineSupport {
     }
 
     func supportedEngines(for platformSlug: String) -> Set<EmulatorEngine> {
+        #if APP_STORE
+        // No engines ship in the App Store build: no Delta cores, no
+        // libretro cores, no bundled EmulatorJS. Play always hands off to
+        // an external emulator app instead.
+        return []
+        #else
         let slug = platformSlug.lowercased()
         var result: Set<EmulatorEngine> = []
         if AppFeatures.webEmulatorEnabled, webSupport.execute(platformSlug: slug) {
             result.insert(.web)
         }
-        #if !APP_STORE
         if PlatformSlugToGameType.map(slug) != nil || PlatformSlugToLibretroCore.map(slug) != nil {
             result.insert(.native)
         }
-        #else
-        // No Delta cores in this build, so the only on-device engine is
-        // libretro. `.auto` doubles as the "some on-device engine can run
-        // this" flag here, since `.native` does not exist in this build.
-        if PlatformSlugToLibretroCore.map(slug) != nil {
-            result.insert(.auto)
-        }
-        #endif
         return result
+        #endif
     }
 
     func preferred(for platformSlug: String) -> EmulatorEngine {
-        let supported = supportedEngines(for: platformSlug)
-        if supported.contains(.web) { return .web }
-        #if !APP_STORE
-        return .native
-        #else
+        #if APP_STORE
         return .auto
+        #else
+        let supported = supportedEngines(for: platformSlug)
+        return supported.contains(.web) ? .web : .native
         #endif
     }
 

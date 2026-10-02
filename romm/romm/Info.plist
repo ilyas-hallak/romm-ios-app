@@ -66,6 +66,12 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is needed to scan QR codes for device pairing</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Local network access is needed to use another phone as a second controller.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_romm-pad._tcp</string>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Microphone access is required to emulate the Nintendo DS built-in microphone used by some games.</string>
 </dict>

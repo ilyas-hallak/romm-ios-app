@@ -66,13 +66,13 @@ final class SaveSyncRunner: PSaveSyncRunner {
     /// download are resolved from the plan itself (`SyncPreviewOperation`), which
     /// already carries the save id and content hash the server negotiated.
     private let listServerSavesUseCase: PListServerSavesUseCase
-    private let listServerStatesUseCase: PListServerStatesUseCase
-    private let uploadStateUseCase: PUploadStateUseCase
-    private let updateStateUseCase: PUpdateStateUseCase
-    private let downloadStateUseCase: PDownloadStateUseCase
     private let completeSyncSessionUseCase: PCompleteSyncSessionUseCase
     private let externalSaveFolderStore: PExternalSaveFolderStore
     private let recordRunUseCase: PRecordSaveSyncRunUseCase
+    /// Routes every state slot through the same decision logic
+    /// `CloudSaveSyncService` uses, so the two never grow different ideas of
+    /// "changed".
+    private let stateSyncCoordinator: StateSyncCoordinator
 
     init(
         saveStore: PSaveStore,
@@ -93,13 +93,16 @@ final class SaveSyncRunner: PSaveSyncRunner {
         self.downloadSaveUseCase = downloadSaveUseCase
         self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.listServerSavesUseCase = listServerSavesUseCase
-        self.listServerStatesUseCase = listServerStatesUseCase
-        self.uploadStateUseCase = uploadStateUseCase
-        self.updateStateUseCase = updateStateUseCase
-        self.downloadStateUseCase = downloadStateUseCase
         self.completeSyncSessionUseCase = completeSyncSessionUseCase
         self.externalSaveFolderStore = externalSaveFolderStore
         self.recordRunUseCase = recordRunUseCase
+        self.stateSyncCoordinator = StateSyncCoordinator(
+            saveStore: saveStore,
+            listStatesUseCase: listServerStatesUseCase,
+            uploadStateUseCase: uploadStateUseCase,
+            updateStateUseCase: updateStateUseCase,
+            downloadStateUseCase: downloadStateUseCase
+        )
     }
 
     func run(
@@ -303,103 +306,19 @@ final class SaveSyncRunner: PSaveSyncRunner {
     // MARK: - Save states (this device)
 
     /// Negotiate's id namespace mixes saves and states, so states are synced
-    /// on their own: one ROM at a time, comparing what is on this device
-    /// against what the server has, slot by slot. The slot assignment
-    /// (including the synthetic slots for a server state that arrived with no
-    /// `slotN.state` name) goes through `StateSlots`, so the same server
-    /// state always lands in the same slot.
+    /// on their own, through the same `StateSyncCoordinator` the automatic
+    /// pre-launch pull uses.
     private func runStatesSync(romId: Int) async -> [StepOutcome] {
-        let localEntries = (try? saveStore.listStates(romId: romId)) ?? []
-        let localBySlot = Dictionary(uniqueKeysWithValues: localEntries.map { ($0.slot, $0.modifiedAt) })
-
-        let serverStates: [StateSchema]
-        do {
-            serverStates = try await listServerStatesUseCase.execute(romId: romId)
-        } catch {
-            guard !localBySlot.isEmpty else { return [] }
-            return [.failed("ROM \(romId): could not list server states (\(error.localizedDescription))")]
-        }
-
-        let (slotByStateId, overflow) = StateSlots.assign(serverStates.map {
-            StateSlots.Candidate(id: $0.id, fileName: $0.fileName, updatedAt: $0.updatedAt)
-        })
-        if overflow > 0 {
-            logger.warning("\(overflow) server state(s) skipped: no free slot (max 21)")
-        }
-        var serverStateBySlot: [Int: StateSchema] = [:]
-        for state in serverStates {
-            guard let slot = slotByStateId[state.id] else { continue }
-            serverStateBySlot[slot] = state
-        }
-        let slots = Set(localBySlot.keys).union(serverStateBySlot.keys)
-
-        var outcomes: [StepOutcome] = []
-        for slot in slots {
-            switch (localBySlot[slot], serverStateBySlot[slot]) {
-            case (nil, let server?):
-                outcomes.append(await downloadState(romId: romId, slot: slot, server: server))
-            case (.some, nil):
-                outcomes.append(await uploadState(romId: romId, slot: slot, existingServerId: nil))
-            case (let local?, let server?):
-                if local > server.updatedAt {
-                    // `StateSlots.assign` can park a server state with no
-                    // recognisable name (e.g. uploaded from the RomM web UI)
-                    // under a synthetic slot, ordered by timestamp/id. That
-                    // ordering shifts whenever another unnamed state appears
-                    // or disappears, so a slot that "wins" this run may name
-                    // a different server state next run. Only overwrite a
-                    // server state whose own file name actually names this
-                    // slot; anything else is left alone rather than risk
-                    // PUTting this device's content over an unrelated save.
-                    if StateSlots.slot(fromFileName: server.fileName) == slot {
-                        outcomes.append(await uploadState(romId: romId, slot: slot, existingServerId: server.id))
-                    } else {
-                        outcomes.append(.skipped)
-                    }
-                } else if server.updatedAt > local {
-                    outcomes.append(await downloadState(romId: romId, slot: slot, server: server))
-                }
-            case (nil, nil):
-                break
-            }
-        }
-        return outcomes
+        await stateSyncCoordinator.syncStates(romId: romId, mode: .bidirectional).map(mapSlotOutcome)
     }
 
-    private func uploadState(romId: Int, slot: Int, existingServerId: Int?) async -> StepOutcome {
-        guard let data = try? saveStore.readState(romId: romId, slot: slot), !data.isEmpty else {
-            return .failed("ROM \(romId) slot \(slot): no local state to upload")
+    private func mapSlotOutcome(_ outcome: StateSyncCoordinator.SlotOutcome) -> StepOutcome {
+        switch outcome {
+        case .uploaded: return .uploaded
+        case .downloaded: return .downloaded
+        case .skipped, .recordedBaseline: return .skipped
+        case .failed(let message): return .failed(message)
         }
-        let thumbnail = try? saveStore.readThumbnail(romId: romId, slot: slot)
-        let fileName = StateSlots.fileName(slot: slot)
-
-        do {
-            if let existingServerId {
-                _ = try await updateStateUseCase.execute(
-                    id: existingServerId, emulator: nil, fileName: fileName,
-                    fileData: data, screenshotData: thumbnail
-                )
-            } else {
-                _ = try await uploadStateUseCase.execute(
-                    romId: romId, emulator: nil, fileName: fileName,
-                    fileData: data, screenshotData: thumbnail
-                )
-            }
-        } catch {
-            return .failed("ROM \(romId) slot \(slot): state upload failed (\(error.localizedDescription))")
-        }
-        return .uploaded
-    }
-
-    private func downloadState(romId: Int, slot: Int, server: StateSchema) async -> StepOutcome {
-        do {
-            let data = try await downloadStateUseCase.execute(id: server.id)
-            try saveStore.writeState(romId: romId, slot: slot, data: data)
-            try? saveStore.setStateModifiedAt(romId: romId, slot: slot, date: server.updatedAt)
-        } catch {
-            return .failed("ROM \(romId) slot \(slot): state download failed (\(error.localizedDescription))")
-        }
-        return .downloaded
     }
 
     // MARK: - External emulator apps (upload only)

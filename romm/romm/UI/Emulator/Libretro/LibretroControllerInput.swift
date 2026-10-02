@@ -1,6 +1,6 @@
 import GameController
 
-/// Bridges a connected GCController to LibretroFrontend.buttonState.
+/// Bridges one connected GCController to one libretro player.
 ///
 /// Maps digital buttons and D-Pad only. Analog sticks are intentionally
 /// omitted, they may be added in a future iteration if needed.
@@ -12,14 +12,16 @@ import GameController
 /// `PGamepadFaceButtonPreference` flips those two pairs back for pads whose
 /// labels run the other way round.
 ///
-/// Writes go straight to `buttonState` from the handler, exactly like the touch
-/// path in LibretroTouchControllerView. The core reads that array from the
+/// Writes go straight to the frontend's button state from the handler, exactly
+/// like the touch path in LibretroTouchControllerView. The core reads that array from the
 /// emulation thread; that is a pre-existing, deliberate arrangement here and
 /// this class does not add synchronisation of its own.
 @MainActor
 final class LibretroControllerInput {
 
     private weak var frontend: LibretroFrontend?
+    /// Libretro port this pad drives.
+    private let player: Int
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference?
     private let faceButtonPreference: PGamepadFaceButtonPreference?
     var onMenuRequested: (() -> Void)?
@@ -38,10 +40,12 @@ final class LibretroControllerInput {
 
     init(
         frontend: LibretroFrontend,
+        player: Int = 0,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         faceButtonPreference: PGamepadFaceButtonPreference? = nil
     ) {
         self.frontend = frontend
+        self.player = player
         self.menuShortcutPreference = menuShortcutPreference
         self.faceButtonPreference = faceButtonPreference
         self.comboButtons = Self.comboButtons(for: menuShortcutPreference?.current ?? .none)
@@ -108,7 +112,7 @@ final class LibretroControllerInput {
         clearHandlers(on: controller?.extendedGamepad)
         pressedButtons.removeAll()
         comboLatched = false
-        frontend?.clearAllButtons()
+        frontend?.clearAllButtons(player: player)
     }
 
     // MARK: - Face button layout
@@ -163,7 +167,7 @@ final class LibretroControllerInput {
     }
 
     private func send(_ button: LibretroABI.JoypadButton, pressed: Bool) {
-        frontend?.setButton(button, pressed: pressed)
+        frontend?.setButton(button, pressed: pressed, player: player)
         if pressed {
             pressedButtons.insert(button)
         } else {

@@ -103,11 +103,17 @@ final class AppUpdateUseCase: PAppUpdateUseCase {
     /// App Store users get updates from the system, so the hint is TestFlight
     /// only. Debug builds check when the flag is flipped by hand, for testing.
     private var isCheckWorthwhile: Bool {
+        #if APP_STORE
+        // App Review also runs on a sandbox receipt, so the channel would read
+        // as TestFlight there and point the reviewer to a beta.
+        return false
+        #else
         switch repository.distributionChannel {
         case .testFlight: return true
         case .debug: return stateStore.forcesCheck
         case .appStore: return false
         }
+        #endif
     }
 
     private var isThrottled: Bool {
