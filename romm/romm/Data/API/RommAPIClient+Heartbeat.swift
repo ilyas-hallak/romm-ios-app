@@ -16,19 +16,43 @@ extension RommAPIClient {
     /// download and wrong here: a mistyped or unreachable address does not fail,
     /// it just never answers, and the user watches a spinner until they give up.
     /// A short, self-contained budget turns that into an error message.
-    private static let setupSession: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral.withoutCookies()
-        configuration.timeoutIntervalForRequest = RommAPIClient.setupTimeout
-        configuration.timeoutIntervalForResource = RommAPIClient.setupTimeout
-        // Queueing the request until the network looks better would bring the
-        // endless spinner back in another shape.
-        configuration.waitsForConnectivity = false
-        return URLSession(configuration: configuration)
-    }()
+    private static let setupSession = makeShortSession(timeout: setupTimeout)
 
     /// Long enough for a slow home server behind a proxy, short enough that
     /// nobody wonders whether the app is still doing anything.
     private static let setupTimeout: TimeInterval = 15
+
+    /// Checked before the pre-launch sync, so an offline start does not wait
+    /// on the shared session.
+    private static let reachabilitySession = makeShortSession(
+        timeout: reachabilityTimeout, delegate: reachabilityDelegate
+    )
+    private static let reachabilityDelegate = PrivateNetworkURLSessionDelegate()
+    private static let reachabilityTimeout: TimeInterval = 4
+
+    private static func makeShortSession(timeout: TimeInterval, delegate: URLSessionDelegate? = nil) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral.withoutCookies()
+        configuration.timeoutIntervalForRequest = timeout
+        configuration.timeoutIntervalForResource = timeout
+        // Queueing the request until the network looks better would bring the
+        // endless spinner back in another shape.
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+    }
+
+    func isServerReachable() async -> Bool {
+        guard let url = try? buildURL(path: "api/heartbeat") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = Self.reachabilityTimeout
+        do {
+            // Any HTTP answer means the server is there, even an error status.
+            let (_, response) = try await Self.reachabilitySession.data(for: request)
+            return response is HTTPURLResponse
+        } catch {
+            logger.info("Server not reachable: \(error.localizedDescription)")
+            return false
+        }
+    }
 
     func getHeartbeat() async throws -> HeartbeatResponse {
         return try await get("api/heartbeat", responseType: HeartbeatResponse.self)

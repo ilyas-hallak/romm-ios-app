@@ -41,6 +41,7 @@ final class LibretroSession: NSObject {
     private var attachedControllers: [GCController?]
     /// Whether a phone on the network is playing as the second player.
     private var hasRemotePad = false
+    private var isStopped = false
 
     init(
         gameURL: URL,
@@ -134,6 +135,8 @@ final class LibretroSession: NSObject {
         Task { [weak self] in
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
+            // The player may have quit while the pull was still running.
+            guard !self.isStopped else { return }
             self.stageBatteryForCore()
             self.startCore()
             // After the core is up: port two is a call into it, and a pad that
@@ -356,6 +359,7 @@ final class LibretroSession: NSObject {
 
 
     func stop() {
+        isStopped = true
         // Detach both input sides before tearing down the frontend so their
         // button-lifting runs while it is still live.
         SecondControllerManager.shared.setInput(nil)
