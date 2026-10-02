@@ -69,11 +69,20 @@ struct ManicEmuExternalEmulatorTests {
         #expect(manic.romExtensions?.contains(archive) == false)
     }
 
-    /// Disc formats need a sheet plus separate tracks, which a single hashed file
-    /// cannot stand in for. `bin` is also ambiguous and would match a data track.
-    @Test(arguments: ["cue", "iso", "chd", "bin", "m3u", "gdi"])
-    func declaresNoDiscExtensions(disc: String) {
+    /// Multi-file disc formats need a sheet plus separate tracks, which a single
+    /// hashed file cannot stand in for. `bin` is also ambiguous and would match a
+    /// data track.
+    @Test(arguments: ["cue", "iso", "bin", "m3u", "gdi"])
+    func declaresNoMultiFileDiscExtensions(disc: String) {
         #expect(manic.romExtensions?.contains(disc) == false)
+    }
+
+    /// Unlike `cue`/`bin`, a whole PS1 disc fits in one `chd` or `pbp` file, so
+    /// hashing it is no different from any other single ROM file. RomM serves
+    /// the vast majority of its PS1 library this way.
+    @Test(arguments: ["chd", "pbp"])
+    func declaresSingleFileDiscExtensions(disc: String) {
+        #expect(manic.romExtensions?.contains(disc) == true)
     }
 
     /// Platforms a built-in engine already plays go through their game type, whose

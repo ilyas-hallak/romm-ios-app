@@ -33,9 +33,12 @@ struct ManicEmuExternalEmulator: PExternalEmulator {
 
     /// Systems Manic plays that the built-in engines have no game type for.
     ///
-    /// No archives, which Manic unpacks itself, and no disc formats (`cue`,
-    /// `iso`, `chd`, `bin`) even though it plays them: those ROMs are a sheet
-    /// plus separate tracks, and one hashed file cannot stand in for the set.
+    /// No archives, which Manic unpacks itself. Multi-file disc formats (`cue`,
+    /// `bin`, `m3u`, `gdi`, `iso`) stay out too: those ROMs are a sheet plus
+    /// separate tracks, and one hashed file cannot stand in for the set. `chd`
+    /// and `pbp` are different, a whole PS1 disc packed into one file, so they
+    /// hash exactly like any other single ROM file and are the formats RomM
+    /// actually serves PS1 as.
     var romExtensions: Set<String>? {
         [
             // Nintendo
@@ -48,6 +51,8 @@ struct ManicEmuExternalEmulator: PExternalEmulator {
             "a26", "a52", "a78", "j64", "jag", "lnx",
             // NEC / SNK
             "pce", "sgx", "ngp", "ngpc", "npc",
+            // Sony (single-file disc images only)
+            "chd", "pbp",
             // Other
             "wad", "iwad", "pwad", "jar"
         ]
