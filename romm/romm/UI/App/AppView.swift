@@ -60,9 +60,9 @@ struct AppView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
-                logger.debug("App became active - checking server version")
+                logger.debug("App became active - checking server address and version")
                 Task {
-                    await appViewModel.checkServerVersionOnForeground()
+                    await appViewModel.appDidBecomeActive()
                 }
             }
         }

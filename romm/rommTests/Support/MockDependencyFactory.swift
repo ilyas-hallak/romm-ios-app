@@ -29,6 +29,9 @@ class MockDependencyFactory: PDependencyFactory {
     var statsRepository: PStatsRepository
     var heartbeatRepository: PHeartbeatRepository
     var apiClient: PRommAPIClient
+    var serverEndpointRepository: PServerEndpointRepository = ServerEndpointRepository(
+        userDefaults: UserDefaults(suiteName: "MockDependencyFactory.serverEndpoint")!
+    )
 
     // Side-effecting dependencies (disk, keychain, Core Data). These trap on
     // access unless a test injects a double, via the `_injected…` backing
@@ -298,6 +301,18 @@ class MockDependencyFactory: PDependencyFactory {
             setupRepository: setupRepository,
             configurationService: DefaultConfigurationService.shared
         )
+    }
+
+    func makeGetServerConnectionUseCase() -> PGetServerConnectionUseCase {
+        GetServerConnectionUseCase(setupRepository: setupRepository, endpointRepository: serverEndpointRepository)
+    }
+
+    func makeSaveAlternativeServerURLUseCase() -> PSaveAlternativeServerURLUseCase {
+        SaveAlternativeServerURLUseCase(setupRepository: setupRepository)
+    }
+
+    func makeResolveServerEndpointUseCase() -> PResolveServerEndpointUseCase {
+        ResolveServerEndpointUseCase(setupRepository: setupRepository, endpointRepository: serverEndpointRepository)
     }
     
     // MARK: - SFTP Use Cases

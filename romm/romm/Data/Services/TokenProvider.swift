@@ -11,6 +11,9 @@ import Foundation
 protocol PTokenProvider {
     func getAuthToken() -> String?
     func getServerURL() -> String?
+    /// Every server base URL the app is configured with (the main one, plus the alternative
+    /// when one is set), regardless of which is currently active.
+    func getKnownServerURLs() -> [String]
     func getUsername() -> String?
     func getPassword() -> String?
     func isConfigured() -> Bool
@@ -29,12 +32,15 @@ class TokenProvider: PTokenProvider {
     
     private let setupRepository: PSetupRepository
     private let configurationService: ConfigurationService
+    private let endpointRepository: PServerEndpointRepository
     private let logger = Logger.auth
     
     init(setupRepository: PSetupRepository = SetupRepository(),
-         configurationService: ConfigurationService = DefaultConfigurationService.shared) {
+         configurationService: ConfigurationService = DefaultConfigurationService.shared,
+         endpointRepository: PServerEndpointRepository = ServerEndpointRepository()) {
         self.setupRepository = setupRepository
         self.configurationService = configurationService
+        self.endpointRepository = endpointRepository
     }
     
     func getAuthToken() -> String? {
@@ -80,8 +86,9 @@ class TokenProvider: PTokenProvider {
         
         // Try to get from setup repository first (preferred)
         if let setupConfig = setupRepository.getSetupConfiguration() {
-            logger.info("Server URL found in setup repository: \(setupConfig.serverURL)")
-            return setupConfig.serverURL
+            let serverURL = activeServerURL(of: setupConfig)
+            logger.info("Server URL found in setup repository: \(serverURL)")
+            return serverURL
         }
         
         // Fallback to configuration service
@@ -94,6 +101,32 @@ class TokenProvider: PTokenProvider {
         return nil
     }
     
+    /// A stale choice from before the alternative address was removed falls
+    /// back to the main one.
+    private func activeServerURL(of config: SetupConfiguration) -> String {
+        guard endpointRepository.activeEndpoint == .alternative,
+              let alternativeURL = config.alternativeServerURL else {
+            return config.serverURL
+        }
+        return alternativeURL
+    }
+
+    func getKnownServerURLs() -> [String] {
+        if let setupConfig = setupRepository.getSetupConfiguration() {
+            var urls = [setupConfig.serverURL]
+            if let alternativeURL = setupConfig.alternativeServerURL {
+                urls.append(alternativeURL)
+            }
+            return urls
+        }
+
+        if let config = configurationService.getConfiguration() {
+            return [config.serverURL]
+        }
+
+        return []
+    }
+
     func getUsername() -> String? {
         logger.debug("Getting username...")
         
@@ -217,7 +250,13 @@ class MockTokenProvider: PTokenProvider {
     func getServerURL() -> String? {
         return mockServerURL
     }
-    
+
+    var mockKnownServerURLs: [String]?
+
+    func getKnownServerURLs() -> [String] {
+        return mockKnownServerURLs ?? mockServerURL.map { [$0] } ?? []
+    }
+
     func getUsername() -> String? {
         return mockUsername
     }

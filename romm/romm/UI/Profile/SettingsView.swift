@@ -67,33 +67,11 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var profileVM = profileViewModel
         return List {
-            // Signing out and starting over. Who is signed in and on which
-            // server is shown in the account itself, see AccountSheet, this is
-            // only the pair of actions, kept out of a menu one taps by mistake.
-            Section {
-                Button(role: .destructive) {
-                    showingLogoutAlert = true
-                } label: {
-                    Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-
-                if appData.currentConfiguration != nil {
-                    Button {
-                        showingResetAlert = true
-                    } label: {
-                        Label("Reset Configuration", systemImage: "arrow.clockwise")
-                            .foregroundStyle(.orange)
-                    }
-                }
-            } header: {
-                Text("RomM account")
-            }
-
             // Platforms Section
             Section {
                 Toggle(isOn: $profileVM.groupRomsByMetaId) {
                     HStack {
-                        Image(systemName: "rectangle.stack")
+                        rowIcon("rectangle.stack")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Group ROMs")
                             Text("Group versions of the same ROM together in the gallery")
@@ -114,7 +92,7 @@ struct SettingsView: View {
                 if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
                     NavigationLink(destination: LoggingConfigurationView()) {
                         HStack {
-                            Image(systemName: "doc.text.magnifyingglass")
+                            rowIcon("doc.text.magnifyingglass")
                             Text("Logging Configuration")
                         }
                     }
@@ -122,14 +100,14 @@ struct SettingsView: View {
 
                 NavigationLink(destination: ImageCacheSettingsView()) {
                     HStack {
-                        Image(systemName: "photo.stack")
+                        rowIcon("photo.stack")
                         Text("Image Cache Settings")
                     }
                 }
 
                 NavigationLink(destination: LicensesView()) {
                     HStack {
-                        Image(systemName: "doc.text")
+                        rowIcon("doc.text")
                         Text("Licenses")
                     }
                 }
@@ -150,7 +128,7 @@ struct SettingsView: View {
                     #else
                     Toggle(isOn: $experimentalSettings.isEmulatorEnabled) {
                         HStack {
-                            Image(systemName: "gamecontroller")
+                            rowIcon("gamecontroller")
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("In-App Emulator")
                                 Text("Plays ROMs directly in the app")
@@ -163,7 +141,7 @@ struct SettingsView: View {
                     if experimentalSettings.isEmulatorEnabled {
                         NavigationLink(destination: EmulatorEngineSettingsView()) {
                             HStack {
-                                Image(systemName: "cpu.fill")
+                                rowIcon("cpu.fill")
                                 Text("Emulator Engine")
                             }
                         }
@@ -173,7 +151,7 @@ struct SettingsView: View {
                         if playsOnDevice {
                             NavigationLink(destination: BIOSSettingsView()) {
                                 HStack {
-                                    Image(systemName: "cpu")
+                                    rowIcon("cpu")
                                     Text("BIOS Files")
                                 }
                             }
@@ -181,14 +159,14 @@ struct SettingsView: View {
 
                         NavigationLink(destination: ControllerSkinsSettingsView()) {
                             HStack {
-                                Image(systemName: "paintbrush.fill")
+                                rowIcon("paintbrush.fill")
                                 Text("Controller Skins")
                             }
                         }
 
                         NavigationLink(destination: ExternalDisplaySettingsView()) {
                             HStack {
-                                Image(systemName: "tv")
+                                rowIcon("tv")
                                 Text("Play on TV")
                             }
                         }
@@ -202,7 +180,7 @@ struct SettingsView: View {
 
                         Toggle(isOn: $cloudSyncSettings.isEnabled) {
                             HStack {
-                                Image(systemName: "icloud.and.arrow.up")
+                                rowIcon("icloud.and.arrow.up")
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Cloud Save Sync")
                                     Text("Sync game saves and save states with the RomM server")
@@ -221,6 +199,8 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
             }
+
+            accountSection
 
             Section {
                 VStack(spacing: 4) {
@@ -249,6 +229,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .onAppear {
             refreshPlayDestination()
+            profileViewModel.refreshServerConnection()
         }
         .alert("Logout", isPresented: $showingLogoutAlert) {
             Button("Cancel", role: .cancel) { }
@@ -265,6 +246,86 @@ struct SettingsView: View {
             }
         } message: {
             Text("This will delete all configuration settings including your server connection and credentials. You will be returned to the setup screen.")
+        }
+    }
+}
+
+extension SettingsView {
+    /// The server addresses, signing out and starting over. Kept at the end,
+    /// out of the way of the settings one changes more often.
+    private var accountSection: some View {
+        Section {
+            if let connection = profileViewModel.serverConnection {
+                serverRow(
+                    title: "Server URL",
+                    url: connection.primaryURL,
+                    icon: "server.rack",
+                    isInUse: connection.alternativeURL != nil && connection.activeEndpoint == .primary
+                )
+
+                NavigationLink(destination: AlternativeServerURLView()) {
+                    serverRow(
+                        title: "Alternative URL",
+                        url: connection.alternativeURL,
+                        icon: "arrow.triangle.branch",
+                        isInUse: connection.activeEndpoint == .alternative
+                    )
+                }
+            }
+
+            Button(role: .destructive) {
+                showingLogoutAlert = true
+            } label: {
+                HStack {
+                    rowIcon("rectangle.portrait.and.arrow.right")
+                    Text("Logout")
+                }
+                .foregroundStyle(.red)
+            }
+
+            if appData.currentConfiguration != nil {
+                Button {
+                    showingResetAlert = true
+                } label: {
+                    HStack {
+                        rowIcon("arrow.clockwise")
+                        Text("Reset Configuration")
+                    }
+                    .foregroundStyle(.orange)
+                }
+            }
+        } header: {
+            Text("RomM account")
+        } footer: {
+            if profileViewModel.serverConnection != nil {
+                Text("When the server URL can't be reached, the app switches to the alternative URL, for example a local address at home and a public one on the go.")
+            }
+        }
+    }
+
+    /// One width for every symbol, so the titles line up.
+    private func rowIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .frame(width: 28)
+    }
+
+    private func serverRow(title: LocalizedStringKey, url: String?, icon: String, isInUse: Bool) -> some View {
+        HStack {
+            rowIcon(icon)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(url ?? String(localized: "Not set"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            if isInUse {
+                Text("In use")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
         }
     }
 }

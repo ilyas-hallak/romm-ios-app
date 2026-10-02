@@ -154,6 +154,7 @@ struct SaveSyncStubTokenProvider: PTokenProvider {
 
     func getAuthToken() -> String? { "stub-token" }
     func getServerURL() -> String? { serverURL }
+    func getKnownServerURLs() -> [String] { [serverURL] }
     func getUsername() -> String? { nil }
     func getPassword() -> String? { nil }
     func isConfigured() -> Bool { true }

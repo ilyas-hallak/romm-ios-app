@@ -20,6 +20,7 @@ private final class StubTokenProvider: PTokenProvider {
     var serverURL: String? = "https://server"
     func getAuthToken() -> String? { nil }
     func getServerURL() -> String? { serverURL }
+    func getKnownServerURLs() -> [String] { serverURL.map { [$0] } ?? [] }
     func getUsername() -> String? { nil }
     func getPassword() -> String? { nil }
     func isConfigured() -> Bool { serverURL != nil }

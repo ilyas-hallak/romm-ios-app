@@ -17,6 +17,9 @@ class ProfileViewModel {
     private let clearSetupConfigurationUseCase: PClearSetupConfigurationUseCase
     private let getGroupRomsUseCase: PGetGroupRomsUseCase
     private let saveGroupRomsUseCase: PSaveGroupRomsUseCase
+    private let getServerConnectionUseCase: PGetServerConnectionUseCase
+
+    private(set) var serverConnection: ServerConnection?
 
     var groupRomsByMetaId: Bool {
         didSet {
@@ -30,7 +33,12 @@ class ProfileViewModel {
         self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
         self.getGroupRomsUseCase = factory.makeGetGroupRomsUseCase()
         self.saveGroupRomsUseCase = factory.makeSaveGroupRomsUseCase()
+        self.getServerConnectionUseCase = factory.makeGetServerConnectionUseCase()
         self.groupRomsByMetaId = getGroupRomsUseCase.execute()
+    }
+
+    func refreshServerConnection() {
+        serverConnection = getServerConnectionUseCase.execute()
     }
     
     func logout() {
