@@ -33,10 +33,14 @@ final class LibretroSession: NSObject {
     /// outlive the session it paints from.
     private var externalRenderTarget: LibretroExternalRenderTarget?
 
-    // MARK: - Physical controller input bridge
-    private let controllerInput: LibretroControllerInput
-    /// The controller currently wired to the input bridge, if any.
-    private var attachedController: GCController?
+    // MARK: - Physical controller input bridges
+    /// One bridge per libretro player, built once and re-pointed as controllers
+    /// come and go.
+    private let controllerInputs: [LibretroControllerInput]
+    /// The controller wired to each bridge, in player order.
+    private var attachedControllers: [GCController?]
+    /// Whether a phone on the network is playing as the second player.
+    private var hasRemotePad = false
 
     init(
         gameURL: URL,
@@ -65,14 +69,18 @@ final class LibretroSession: NSObject {
             aspectRatioPreference: aspectRatioPreference,
             screenPositionPreference: screenPositionPreference
         )
-        // controllerInput must be created before super.init() because stored
+        // The bridges must be created before super.init() because stored
         // properties must be initialised before the instance escapes.
         // onMenuRequested is wired after super.init() once self is available.
-        self.controllerInput = LibretroControllerInput(
-            frontend: LibretroFrontend.shared,
-            menuShortcutPreference: menuShortcutPreference,
-            faceButtonPreference: faceButtonPreference
-        )
+        self.controllerInputs = (0..<LibretroFrontend.maxPlayers).map { player in
+            LibretroControllerInput(
+                frontend: LibretroFrontend.shared,
+                player: player,
+                menuShortcutPreference: menuShortcutPreference,
+                faceButtonPreference: faceButtonPreference
+            )
+        }
+        self.attachedControllers = Array(repeating: nil, count: LibretroFrontend.maxPlayers)
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in
             self?.onMenuRequested?()
@@ -82,7 +90,9 @@ final class LibretroSession: NSObject {
         }
 
         // Forward menu requests from the optional controller shortcut combo.
-        controllerInput.onMenuRequested = { [weak self] in
+        // Only from player one: a second player pressing their own combo would
+        // pause a game that is not theirs to pause.
+        controllerInputs[0].onMenuRequested = { [weak self] in
             self?.onMenuRequested?()
         }
 
@@ -101,7 +111,7 @@ final class LibretroSession: NSObject {
         }
 
         // Attach to any controller that is already connected at launch.
-        attachControllerIfPresent()
+        attachConnectedControllers()
     }
 
     // MARK: - Lifecycle
@@ -126,6 +136,9 @@ final class LibretroSession: NSObject {
             await self.cloudSync?.pullBeforeLaunch()
             self.stageBatteryForCore()
             self.startCore()
+            // After the core is up: port two is a call into it, and a pad that
+            // joined before the game started still has to be picked up.
+            SecondControllerManager.shared.setInput(self)
             guard let slot = resumeSlot else { return }
             // Give the core a few frames so its serialize size is initialized,
             // then load while paused.
@@ -254,7 +267,7 @@ final class LibretroSession: NSObject {
                 isRumbleActive = true
                 rumbleOutput.scale = preference.intensity.scale
                 rumbleOutput.start()
-                rumbleOutput.attach(controller: attachedController)
+                rumbleOutput.attach(controller: attachedControllers.first ?? nil)
                 frontend.onRumbleChanged = { [weak self] strong, weak in
                     self?.rumbleOutput.setMotors(strong: strong, weak: weak)
                 }
@@ -284,22 +297,40 @@ final class LibretroSession: NSObject {
     // MARK: - Physical controller input
 
     @objc private func handleControllerConnectionChanged() {
-        // Release every button that might be latched on the outgoing controller
+        // Release every button that might be latched on an outgoing controller
         // before re-evaluating; prevents permanently-stuck inputs across
         // connect/disconnect events.
-        controllerInput.detach(from: attachedController)
-        attachedController = nil
-        // Back to the device haptics until a controller shows up again.
-        rumbleOutput.attach(controller: nil)
-        attachControllerIfPresent()
+        detachControllers()
+        attachConnectedControllers()
     }
 
-    private func attachControllerIfPresent() {
-        guard let controller = GCController.controllers().first else { return }
-        attachedController = controller
-        controllerInput.attach(to: controller)
-        rumbleOutput.attach(controller: controller)
-        print("[Libretro] physical controller attached: \(controller.vendorName ?? "unknown")")
+    private func detachControllers() {
+        for (player, input) in controllerInputs.enumerated() {
+            input.detach(from: attachedControllers[player])
+            attachedControllers[player] = nil
+        }
+        // Back to the device haptics until a controller shows up again.
+        rumbleOutput.attach(controller: nil)
+    }
+
+    /// Hands out the players in the order the system lists the controllers, so
+    /// a second pad joins as player two.
+    private func attachConnectedControllers() {
+        let controllers = GCController.controllers().prefix(LibretroFrontend.maxPlayers)
+        for (player, controller) in controllers.enumerated() {
+            attachedControllers[player] = controller
+            controllerInputs[player].attach(to: controller)
+            print("[Libretro] controller attached as player \(player + 1): \(controller.vendorName ?? "unknown")")
+        }
+        // Rumble follows whoever holds player one.
+        rumbleOutput.attach(controller: attachedControllers.first ?? nil)
+        updateSecondPlayerPort()
+    }
+
+    /// Plugs port two in or out, from whichever of the two second players is
+    /// there: another gamepad, or a phone on the network.
+    private func updateSecondPlayerPort() {
+        frontend.setSecondPlayerConnected(hasRemotePad || attachedControllers[Self.remotePadPlayer] != nil)
     }
 
     func reloadAspectRatio() {
@@ -310,7 +341,9 @@ final class LibretroSession: NSObject {
     /// in-game menu, live. Both only affect how the input bridge reads the pad,
     /// so nothing about the running core has to be touched.
     func reloadControllerPreferences() {
-        controllerInput.reloadPreferences(for: attachedController)
+        for (player, input) in controllerInputs.enumerated() {
+            input.reloadPreferences(for: attachedControllers[player])
+        }
     }
 
     /// Picks up an intensity changed from the in-game menu, live. Only the
@@ -323,10 +356,10 @@ final class LibretroSession: NSObject {
 
 
     func stop() {
-        // Detach the physical controller before tearing down the frontend so
-        // clearAllButtons() runs while the frontend is still live.
-        controllerInput.detach(from: attachedController)
-        attachedController = nil
+        // Detach both input sides before tearing down the frontend so their
+        // button-lifting runs while it is still live.
+        SecondControllerManager.shared.setInput(nil)
+        detachControllers()
         // Unwire both sinks BEFORE tearing down the core: pcsx_rearmed can emit a
         // final video frame during retro_unload_game / retro_deinit, and after
         // dlclose() any CGImage backed by core memory would crash on render.
@@ -708,5 +741,20 @@ final class LibretroGameViewController: UIViewController {
         if abs(target - top.constant) > 0.5 {
             top.constant = target
         }
+    }
+}
+
+// MARK: - Second player over the network
+
+extension LibretroSession: PSecondPlayerInput {
+
+    func setSecondPlayerConnected(_ connected: Bool) {
+        hasRemotePad = connected
+        if !connected { frontend.clearAllButtons(player: Self.remotePadPlayer) }
+        updateSecondPlayerPort()
+    }
+
+    func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool) {
+        frontend.setButton(button.libretroButton, pressed: pressed, player: Self.remotePadPlayer)
     }
 }

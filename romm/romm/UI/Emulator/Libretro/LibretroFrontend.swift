@@ -86,16 +86,47 @@ final class LibretroFrontend {
 
     weak var videoSink: LibretroVideoSink?
 
-    // MARK: - Input state (Joypad port 0)
-    /// Index = JoypadButton.rawValue. Atomar via MainActor-Isolation.
-    var buttonState: [Bool] = Array(repeating: false, count: 16)
+    // MARK: - Input state
 
-    func setButton(_ button: LibretroABI.JoypadButton, pressed: Bool) {
-        buttonState[Int(button.rawValue)] = pressed
+    /// Players the frontend can carry. Two, which is what a second pad needs
+    /// and what every core here offers without further setup.
+    static let maxPlayers = 2
+
+    /// One button array per player, index = JoypadButton.rawValue. Atomar via
+    /// MainActor-Isolation.
+    private var playerButtons = Array(
+        repeating: Array(repeating: false, count: 16),
+        count: maxPlayers
+    )
+
+    func setButton(_ button: LibretroABI.JoypadButton, pressed: Bool, player: Int = 0) {
+        guard player < Self.maxPlayers else { return }
+        playerButtons[player][Int(button.rawValue)] = pressed
     }
 
-    func clearAllButtons() {
-        for i in 0..<buttonState.count { buttonState[i] = false }
+    /// Reads one button for the core, which asks by raw index.
+    func isButtonPressed(_ id: Int, player: Int) -> Bool {
+        guard player < Self.maxPlayers, id >= 0, id < 16 else { return false }
+        return playerButtons[player][id]
+    }
+
+    /// Lifts every button of one player, or of all of them.
+    func clearAllButtons(player: Int? = nil) {
+        for index in 0..<Self.maxPlayers where player == nil || player == index {
+            for button in 0..<playerButtons[index].count { playerButtons[index][button] = false }
+        }
+    }
+
+    /// Tells the core whether a second pad is plugged into port two.
+    ///
+    /// Not done once at load: a core that sees two pads can behave differently,
+    /// PlayStation titles in particular, so the port stays empty until a pad is
+    /// really there. Safe to call while the game runs, the core steps on the
+    /// main actor too (see `startRunLoop`).
+    func setSecondPlayerConnected(_ connected: Bool) {
+        guard handle != nil else { return }
+        if !connected { clearAllButtons(player: 1) }
+        retro_set_controller_port_device?(1, connected ? LibretroABI.DEVICE_JOYPAD : LibretroABI.DEVICE_NONE)
     }
 
     // MARK: - Rumble state (port 0)
