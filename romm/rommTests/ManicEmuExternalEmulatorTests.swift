@@ -98,4 +98,18 @@ struct ManicEmuExternalEmulatorTests {
     func coversPlatformsOnlyManicPlays(extra: String) {
         #expect(manic.romExtensions?.contains(extra) == true)
     }
+
+    /// The system's generic type for both extensions resolves to one of Manic's
+    /// own UTIs whose candidate list has no PS1 entry, so the pasteboard item has
+    /// to carry a Manic type that does list it, or the platform picker Manic
+    /// shows on paste leaves PS1 out.
+    @Test func overridesThePasteboardTypeForSingleFileDiscImages() {
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: "chd") == "public.aoshuang.game.mcd")
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: "pbp") == "public.aoshuang.game.ps1")
+    }
+
+    @Test(arguments: ["gba", "nds", "zip", "cue", "wad"])
+    func leavesOtherExtensionsToTheSystemsOwnTypeGuess(other: String) {
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: other) == nil)
+    }
 }

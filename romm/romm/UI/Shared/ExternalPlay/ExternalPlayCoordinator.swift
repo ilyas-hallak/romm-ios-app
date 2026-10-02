@@ -257,8 +257,14 @@ final class ExternalPlayCoordinator {
         }
         // Exactly one type, the one the extension resolves to. A broad type such
         // as public.data can hurt: an importer matching by substring may settle
-        // on it and then find no extension to name the file after.
-        let romType = UTType(filenameExtension: url.pathExtension) ?? .data
+        // on it and then find no extension to name the file after. An emulator
+        // can override that guess, when the system's own type does not lead the
+        // target back to the right extension or platform.
+        let overrideIdentifier = playTarget.externalEmulatorID?.emulator
+            .pasteboardTypeIdentifier(forROMExtension: url.pathExtension)
+        let romType = overrideIdentifier.flatMap { UTType($0) }
+            ?? UTType(filenameExtension: url.pathExtension)
+            ?? .data
         // Eager, because a registered representation is produced on request, and
         // by then this process may be suspended with nobody left to answer.
         let provider = NSItemProvider(item: data as NSData, typeIdentifier: romType.identifier)

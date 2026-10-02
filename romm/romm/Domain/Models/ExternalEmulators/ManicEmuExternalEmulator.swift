@@ -20,6 +20,12 @@ struct ManicEmuExternalEmulator: PExternalEmulator {
     /// `NSItemProvider` and takes no scope, so the ROM goes over the pasteboard.
     var romDelivery: ExternalROMDelivery { .pasteboard }
 
+    /// Same as the default pasteboard explanation, plus a word on the platform
+    /// picker Manic shows for a disc image on every import.
+    var handoffExplanation: String {
+        String(localized: "\(displayName) cannot take games from the share sheet, so the first time you play one it goes to the clipboard instead. Open \(displayName) and paste it to add it to your library, picking PlayStation when it asks which platform a disc image is. After that it opens there straight away.")
+    }
+
     /// Saves land under `3DS/sdmc/saves/<system or core>/`, so the hint stops at
     /// `saves`: the level below it is not one value. `srm` alongside `sav` for
     /// the same reason, since the n64 core writes the libretro extension.
@@ -56,6 +62,19 @@ struct ManicEmuExternalEmulator: PExternalEmulator {
             // Other
             "wad", "iwad", "pwad", "jar"
         ]
+    }
+
+    /// Manic's paste importer names the file it stores after the first filename
+    /// extension its own `UTType` declares, not the real one, then offers a
+    /// platform picker built from that extension. The system's generic `chd`
+    /// type resolves to Manic's PSP type, whose candidate list has no PS1, so
+    /// this steers the pasteboard item to a Manic type that does list it.
+    func pasteboardTypeIdentifier(forROMExtension extension: String) -> String? {
+        switch `extension`.lowercased() {
+        case "chd": return "public.aoshuang.game.mcd"
+        case "pbp": return "public.aoshuang.game.ps1"
+        default: return nil
+        }
     }
 
     /// Sideloaded builds re-sign with a different team, so match the prefix.

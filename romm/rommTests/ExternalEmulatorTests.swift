@@ -80,4 +80,13 @@ struct ExternalEmulatorIDTests {
         let schemes = ExternalEmulatorID.allCases.map { $0.emulator.urlScheme }
         #expect(Set(schemes).count == schemes.count)
     }
+
+    /// Only Manic overrides the pasteboard type for `chd`/`pbp`. Every other app
+    /// has to fall through to the default, so the system's own type guess decides.
+    @Test func onlyManicOverridesThePasteboardType() {
+        for id in ExternalEmulatorID.allCases where id != .manicEmu {
+            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "chd") == nil)
+            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "pbp") == nil)
+        }
+    }
 }
