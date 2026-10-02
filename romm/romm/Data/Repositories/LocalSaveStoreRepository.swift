@@ -95,6 +95,7 @@ final class LocalSaveStoreRepository: PSaveStore {
         if fileManager.fileExists(atPath: thumb.path) {
             try fileManager.removeItem(at: thumb)
         }
+        removeIfExists(SaveStorePaths.stateBaselineURL(root: rootDirectory, romId: romId, slot: slot))
     }
 
     func stateModifiedAt(romId: Int, slot: Int) -> Date? {
@@ -125,6 +126,28 @@ final class LocalSaveStoreRepository: PSaveStore {
             withIntermediateDirectories: true
         )
         try data.write(to: SaveStorePaths.thumbURL(root: rootDirectory, romId: romId, slot: slot), options: .atomic)
+    }
+
+    func deleteThumbnail(romId: Int, slot: Int) throws {
+        removeIfExists(SaveStorePaths.thumbURL(root: rootDirectory, romId: romId, slot: slot))
+    }
+
+    // MARK: - Sync baseline
+
+    func readStateBaseline(romId: Int, slot: Int) throws -> StateSyncBaseline? {
+        let url = SaveStorePaths.stateBaselineURL(root: rootDirectory, romId: romId, slot: slot)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(StateSyncBaseline.self, from: data)
+    }
+
+    func writeStateBaseline(romId: Int, slot: Int, baseline: StateSyncBaseline) throws {
+        try fileManager.createDirectory(
+            at: SaveStorePaths.statesDir(root: rootDirectory, romId: romId),
+            withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(baseline)
+        try data.write(to: SaveStorePaths.stateBaselineURL(root: rootDirectory, romId: romId, slot: slot), options: .atomic)
     }
 
     // MARK: - Undo Save
