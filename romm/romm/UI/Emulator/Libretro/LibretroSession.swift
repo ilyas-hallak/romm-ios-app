@@ -180,17 +180,18 @@ final class LibretroSession: NSObject {
     /// `LibretroSaves/<stem>.srm` — two different files, so the save never
     /// reaches the running game.
     private func stageBatteryForCore() {
-        guard let data = try? saveStates.readBattery(romId: romId) else { return }
-        let dir = libretroSaveDirectory()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard case .adoptedCoreFile(let data) = batteryFile.stage() else { return }
+        print("[Libretro] kept the newer .srm over the stored battery (\(data.count) bytes)")
+        cloudSync?.pushBattery(data: data)
+    }
+
+    private var batteryFile: CoreBatteryFile {
         let stem = gameURL.deletingPathExtension().lastPathComponent
-        let dst = dir.appendingPathComponent("\(stem).srm")
-        do {
-            try data.write(to: dst, options: .atomic)
-            print("[Libretro] staged battery into saveDir (\(data.count) bytes)")
-        } catch {
-            print("[Libretro] failed to stage battery: \(error.localizedDescription)")
-        }
+        return CoreBatteryFile(
+            url: libretroSaveDirectory().appendingPathComponent("\(stem).srm"),
+            romId: romId,
+            saveStates: saveStates
+        )
     }
 
     // MARK: - HW-Render Meilenstein 1 (TEMPORAER)
@@ -302,7 +303,12 @@ final class LibretroSession: NSObject {
         }
     }
 
-    func pause() { frontend.pause() }
+    func pause() {
+        frontend.pause()
+        // A pause is often the last thing that runs: iOS can end a backgrounded
+        // app without `stop()` ever being called.
+        flushBatteryFromSaveDir(pushesUnchanged: false)
+    }
     func resume() { frontend.resume() }
 
     /// Re-applies the hidden-video state on returning to the foreground.
@@ -417,17 +423,16 @@ final class LibretroSession: NSObject {
         frontend.stop()
         rumbleOutput.stop()
         isRumbleActive = false
-        flushBatteryFromSaveDir()
+        flushBatteryFromSaveDir(pushesUnchanged: true)
     }
 
-    /// Libretro cores persist their battery saves (.srm) into `saveDir` during
-    /// runtime — we read the file once the core has stopped and push it.
-    private func flushBatteryFromSaveDir() {
-        let stem = gameURL.deletingPathExtension().lastPathComponent
-        let candidate = libretroSaveDirectory().appendingPathComponent("\(stem).srm")
-        guard let data = try? Data(contentsOf: candidate) else { return }
-        try? saveStates.writeBattery(romId: romId, data: data)
-        cloudSync?.pushBattery(data: data)
+    /// The frontend writes the core's battery save (.srm) into `saveDir` on
+    /// every pause and on stop, this hands it on to the store and the server.
+    /// - Parameter pushesUnchanged: Also push a save the store already had. Done
+    ///   on quit, so a push that failed earlier, offline for example, gets retried.
+    private func flushBatteryFromSaveDir(pushesUnchanged: Bool) {
+        guard let battery = batteryFile.collect(), battery.isNew || pushesUnchanged else { return }
+        cloudSync?.pushBattery(data: battery.data)
     }
 
     // MARK: - Save state API (mirrors DeltaCoreSession)

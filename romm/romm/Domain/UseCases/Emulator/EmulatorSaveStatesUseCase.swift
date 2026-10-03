@@ -4,6 +4,7 @@ protocol PEmulatorSaveStatesUseCase {
     // Battery
     func readBattery(romId: Int) throws -> Data?
     func writeBattery(romId: Int, data: Data) throws
+    func batteryModifiedAt(romId: Int) -> Date?
 
     // State
     func listStates(romId: Int) throws -> [SaveStateEntry]
@@ -41,6 +42,9 @@ final class EmulatorSaveStatesUseCase: PEmulatorSaveStatesUseCase {
     }
     func writeBattery(romId: Int, data: Data) throws {
         try saveStore.writeBattery(romId: romId, data: data)
+    }
+    func batteryModifiedAt(romId: Int) -> Date? {
+        saveStore.batteryModifiedAt(romId: romId)
     }
     func listStates(romId: Int) throws -> [SaveStateEntry] {
         try saveStore.listStates(romId: romId)
