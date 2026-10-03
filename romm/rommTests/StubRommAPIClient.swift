@@ -77,6 +77,10 @@ class StubRommAPIClient: PRommAPIClient {
     func updateState(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("updateState not stubbed") }
     func downloadState(id: Int) async throws -> Data { fatalError("downloadState not stubbed") }
     func deleteStates(ids: [Int]) async throws { fatalError("deleteStates not stubbed") }
+    func startRomUpload(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String { fatalError("startRomUpload not stubbed") }
+    func uploadRomChunk(uploadId: String, index: Int, fileURL: URL, progressHandler: ((Double) -> Void)?) async throws { fatalError("uploadRomChunk not stubbed") }
+    func completeRomUpload(uploadId: String) async throws { fatalError("completeRomUpload not stubbed") }
+    func cancelRomUpload(uploadId: String) async throws { fatalError("cancelRomUpload not stubbed") }
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("registerDevice not stubbed") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("negotiateSync not stubbed") }
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws { fatalError("completeSyncSession not stubbed") }

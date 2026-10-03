@@ -28,6 +28,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in
             await DownloadQueueManager.shared.resumeInterruptedJobs()
         }
+        // A ROM upload interrupted by the app being killed resumes from its
+        // last acknowledged chunk rather than starting over.
+        Task { @MainActor in
+            RomUploadQueueManager.shared.resumeInterruptedJobs()
+        }
         return true
     }
 
@@ -77,40 +82,4 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #endif
         return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
     }
-
-    // Handle URL callbacks (client token pairing)
-    func application(
-        _ app: UIApplication,
-        open url: URL,
-        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-    ) -> Bool {
-        Logger.auth.info("App received URL: \(url.absoluteString)")
-
-        guard url.scheme == "romm" else {
-            Logger.auth.warning("Unknown URL scheme: \(url.scheme ?? "none")")
-            return false
-        }
-
-        switch url.host {
-        case "pair":
-            Logger.auth.info("Pairing deep link received")
-            let service = ClientTokenAuthService()
-            if let code = service.handleDeepLink(url: url) {
-                NotificationCenter.default.post(
-                    name: .clientTokenPairingCode,
-                    object: nil,
-                    userInfo: ["code": code]
-                )
-            }
-            return true
-
-        default:
-            Logger.auth.warning("Unknown URL host: \(url.host ?? "none")")
-            return false
-        }
-    }
-}
-
-extension Notification.Name {
-    static let clientTokenPairingCode = Notification.Name("clientTokenPairingCode")
 }

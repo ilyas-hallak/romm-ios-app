@@ -28,6 +28,12 @@ class MockDependencyFactory: PDependencyFactory {
     var collectionsRepository: PCollectionsRepository
     var statsRepository: PStatsRepository
     var heartbeatRepository: PHeartbeatRepository
+    lazy var romUploadRepository: PRomUploadRepository = RomUploadRepository(
+        apiClient: apiClient,
+        tokenProvider: tokenProvider,
+        heartbeat: heartbeatRepository
+    )
+    lazy var incomingRomFileRepository: PIncomingRomFileRepository = IncomingRomFileRepository()
     var apiClient: PRommAPIClient
     var serverEndpointRepository: PServerEndpointRepository = ServerEndpointRepository(
         userDefaults: UserDefaults(suiteName: "MockDependencyFactory.serverEndpoint")!
@@ -315,8 +321,26 @@ class MockDependencyFactory: PDependencyFactory {
         ResolveServerEndpointUseCase(setupRepository: setupRepository, endpointRepository: serverEndpointRepository)
     }
     
+    // MARK: - ROM Upload Use Cases
+
+    func makeGetRomUploadAvailabilityUseCase() -> GetRomUploadAvailabilityUseCase {
+        GetRomUploadAvailabilityUseCase(repository: romUploadRepository)
+    }
+
+    func makeStageIncomingRomUseCase() -> StageIncomingRomUseCase {
+        StageIncomingRomUseCase(repository: incomingRomFileRepository)
+    }
+
+    func makeSuggestPlatformForFileUseCase() -> SuggestPlatformForFileUseCase {
+        SuggestPlatformForFileUseCase()
+    }
+
+    func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase {
+        DiscardStagedRomUseCase(repository: incomingRomFileRepository)
+    }
+
     // MARK: - SFTP Use Cases
-    
+
     func makeGetAllConnectionsUseCase() -> GetAllConnectionsUseCase {
         GetAllConnectionsUseCase(repository: sftpRepository)
     }
