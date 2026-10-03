@@ -24,6 +24,7 @@ struct SyncOverviewView: View {
 
     var body: some View {
         Form {
+            RomUploadsSection()
             switch viewModel.state {
             case .idle, .loading:
                 loadingSection

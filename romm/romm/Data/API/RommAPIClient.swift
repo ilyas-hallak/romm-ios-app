@@ -122,6 +122,12 @@ protocol PRommAPIClient {
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws
+
+    // ROM upload (RomM 4.8.0+, chunked)
+    func startRomUpload(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String
+    func uploadRomChunk(uploadId: String, index: Int, fileURL: URL, progressHandler: ((Double) -> Void)?) async throws
+    func completeRomUpload(uploadId: String) async throws
+    func cancelRomUpload(uploadId: String) async throws
 }
 
 enum APIClientError: LocalizedError {

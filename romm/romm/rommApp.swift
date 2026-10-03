@@ -19,6 +19,9 @@ struct rommApp: App {
     var body: some Scene {
         WindowGroup {
             AppView()
+                .onOpenURL { url in
+                    IncomingURLRouter.shared.handle(url)
+                }
         }
     }
 }
