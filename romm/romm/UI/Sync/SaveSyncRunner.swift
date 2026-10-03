@@ -210,7 +210,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
             // slot upload match an existing row by name. Reusing
             // `op.serverFileName` (itself already stamped) would only grow a
             // second timestamp onto it on every run, so this always uploads
-            // under the same fixed name.
+            // under the same fallback name (see `BatterySaveFileName`).
             _ = try await uploadSaveUseCase.execute(
                 romId: op.romId,
                 emulator: nil,
@@ -224,7 +224,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
                 // row this device never synced, and since negotiate keeps
                 // planning the same upload, the save could never go up at all.
                 overwrite: true,
-                fileName: "battery.sav",
+                fileName: BatterySaveFileName.fallback(romId: op.romId),
                 fileData: data,
                 screenshotData: nil
             )

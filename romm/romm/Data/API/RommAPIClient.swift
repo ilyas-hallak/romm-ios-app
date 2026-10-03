@@ -107,7 +107,7 @@ protocol PRommAPIClient {
 
     // Saves sync
     func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
     func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data
     func deleteSaves(ids: [Int]) async throws
     func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema

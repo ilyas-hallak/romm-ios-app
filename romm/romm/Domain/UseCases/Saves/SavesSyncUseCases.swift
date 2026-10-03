@@ -9,7 +9,7 @@ protocol PUploadSaveUseCase {
 }
 
 protocol PUpdateSaveUseCase {
-    func execute(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func execute(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
 }
 
 protocol PDownloadSaveUseCase {
@@ -52,10 +52,11 @@ final class UploadSaveUseCase: PUploadSaveUseCase {
 final class UpdateSaveUseCase: PUpdateSaveUseCase {
     private let repository: PSavesRepository
     init(repository: PSavesRepository) { self.repository = repository }
-    func execute(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+    func execute(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
         try await repository.updateSave(
             id: id,
             emulator: emulator,
+            deviceId: deviceId,
             fileName: fileName,
             fileData: fileData,
             screenshotData: screenshotData

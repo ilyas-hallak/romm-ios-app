@@ -36,7 +36,9 @@ final class SyncSaveViewModel {
     private let updateSaveUseCase: PUpdateSaveUseCase
     private let uploadStateUseCase: PUploadStateUseCase
     private let updateStateUseCase: PUpdateStateUseCase
+    private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
     private let saveStore: PSaveStore
+    private let syncDevice: PSyncDeviceRepository
 
     init(
         rom: DownloadedROM,
@@ -48,7 +50,9 @@ final class SyncSaveViewModel {
         updateSaveUseCase: PUpdateSaveUseCase,
         uploadStateUseCase: PUploadStateUseCase,
         updateStateUseCase: PUpdateStateUseCase,
+        confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase,
         saveStore: PSaveStore,
+        syncDevice: PSyncDeviceRepository,
         recordSyncUseCase: PRecordSyncUseCase,
         getLastSyncUseCase: PGetLastSyncUseCase
     ) {
@@ -61,7 +65,9 @@ final class SyncSaveViewModel {
         self.updateSaveUseCase = updateSaveUseCase
         self.uploadStateUseCase = uploadStateUseCase
         self.updateStateUseCase = updateStateUseCase
+        self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.saveStore = saveStore
+        self.syncDevice = syncDevice
         self.recordSyncUseCase = recordSyncUseCase
         self.getLastSyncUseCase = getLastSyncUseCase
     }
@@ -125,14 +131,28 @@ final class SyncSaveViewModel {
         Task {
             defer { downloadingSaveIds.remove(save.id) }
             do {
-                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: nil, sessionId: nil)
+                let deviceId = await syncDevice.deviceId()
+                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: deviceId, sessionId: nil)
                 guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
                 try saveStore.writeBattery(romId: rom.id, data: data)
                 hasLocalBattery = true
                 recordManualSync()
+                await confirmDownload(saveId: save.id, deviceId: deviceId)
             } catch {
                 errorMessage = "Download failed: \(error.localizedDescription)"
             }
+        }
+    }
+
+    /// Tells the server this device now has the save's content, so the next
+    /// negotiate stops replanning the same download. Best effort, same as the
+    /// other sync paths: a failed confirmation never undoes the write above.
+    private func confirmDownload(saveId: Int, deviceId: String?) async {
+        guard let deviceId else { return }
+        do {
+            _ = try await confirmSaveDownloadUseCase.execute(id: saveId, deviceId: deviceId)
+        } catch {
+            Logger.sync.warning("Download confirmation failed (save \(saveId)): \(error.localizedDescription)")
         }
     }
 
@@ -186,15 +206,32 @@ final class SyncSaveViewModel {
                 defer { isUploadingBattery = false }
                 do {
                     guard let data = try saveStore.readBattery(romId: rom.id) else { return }
-                    let fileName = "\(rom.id).sav"
+                    let fileName = BatterySaveFileName.fallback(romId: rom.id)
+                    let deviceId = await syncDevice.deviceId()
                     if update, let existingId {
-                        let updated = try await updateSaveUseCase.execute(id: existingId, emulator: nil, fileName: fileName, fileData: data, screenshotData: nil)
+                        let updated = try await updateSaveUseCase.execute(id: existingId, emulator: nil, deviceId: deviceId, fileName: fileName, fileData: data, screenshotData: nil)
                         if let idx = serverSaves.firstIndex(where: { $0.id == updated.id }) { serverSaves[idx] = updated }
                     } else {
-                        let uploaded = try await uploadSaveUseCase.execute(romId: rom.id, emulator: nil, slot: nil, deviceId: nil, sessionId: nil, autocleanup: nil, overwrite: nil, fileName: fileName, fileData: data, screenshotData: nil)
+                        let uploaded = try await uploadSaveUseCase.execute(
+                            romId: rom.id,
+                            emulator: nil,
+                            slot: SaveSlot.battery,
+                            deviceId: deviceId,
+                            sessionId: nil,
+                            autocleanup: true,
+                            // The user explicitly asked for this upload, so it should
+                            // win over whatever the slot currently holds, same as the
+                            // manual sync run (see SaveSyncRunner.runBatteryUpload).
+                            overwrite: true,
+                            fileName: fileName,
+                            fileData: data,
+                            screenshotData: nil
+                        )
                         serverSaves.append(uploaded)
                     }
                     recordManualSync()
+                } catch APIClientError.conflict {
+                    errorMessage = "Another device already saved over this slot. Reload and try again."
                 } catch {
                     errorMessage = "Upload failed: \(error.localizedDescription)"
                 }
@@ -225,7 +262,8 @@ final class SyncSaveViewModel {
         Task {
             defer { exportingServerSaveIds.remove(save.id) }
             do {
-                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: nil, sessionId: nil)
+                let deviceId = await syncDevice.deviceId()
+                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: deviceId, sessionId: nil)
                 guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
                 presentExport(data: data, baseName: save.fileNameNoExt)
             } catch {

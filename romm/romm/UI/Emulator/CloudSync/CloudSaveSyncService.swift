@@ -118,7 +118,7 @@ final class CloudSaveSyncService {
                                          uniquingKeysWith: { a, _ in a })
         do {
             let response = try await apiClient.negotiateSync(
-                SyncNegotiateRequest(deviceId: deviceId, saves: localStates)
+                SyncNegotiateRequest(deviceId: deviceId, saves: localStates, romIds: [config.romId])
             )
             logger.info("Negotiate ok: \(response.operations.count) ops "
                 + "(down=\(response.totalDownload ?? 0) up=\(response.totalUpload ?? 0) "
@@ -306,9 +306,11 @@ final class CloudSaveSyncService {
                 logger.warning("Battery push skipped: \(reason)")
                 return
             case .update(let serverId):
+                let deviceId = await syncDevice.deviceId()
                 result = try await updateSaveUseCase.execute(
                     id: serverId,
                     emulator: cfg.emulator,
+                    deviceId: deviceId,
                     fileName: cfg.batteryFileName,
                     fileData: data,
                     screenshotData: nil
