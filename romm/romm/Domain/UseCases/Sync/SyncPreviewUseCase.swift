@@ -110,7 +110,7 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
             guard let data = try? saveStore.readBattery(romId: romId), !data.isEmpty else { return nil }
             return ClientSaveState(
                 romId: romId,
-                fileName: "battery.sav",
+                fileName: BatterySaveFileName.fallback(romId: romId),
                 slot: SaveSlot.battery,
                 // Attribution only, and which engine wrote a save is not
                 // recorded per ROM, so an invented value is worse than none.

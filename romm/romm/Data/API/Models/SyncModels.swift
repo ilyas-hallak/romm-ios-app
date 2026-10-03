@@ -94,10 +94,27 @@ struct ClientSaveState: Codable {
 struct SyncNegotiateRequest: Codable {
     let deviceId: String
     let saves: [ClientSaveState]
+    /// Restricts the plan to these ROMs (server caps at 500). Nil asks the
+    /// server to plan the whole library, which is what the sync overview wants.
+    let romIds: [Int]?
 
     enum CodingKeys: String, CodingKey {
         case deviceId = "device_id"
         case saves
+        case romIds = "rom_ids"
+    }
+
+    init(deviceId: String, saves: [ClientSaveState], romIds: [Int]? = nil) {
+        self.deviceId = deviceId
+        self.saves = saves
+        self.romIds = romIds
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(deviceId, forKey: .deviceId)
+        try c.encode(saves, forKey: .saves)
+        try c.encodeIfPresent(romIds, forKey: .romIds)
     }
 }
 

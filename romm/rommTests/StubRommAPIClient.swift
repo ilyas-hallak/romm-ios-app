@@ -69,7 +69,7 @@ class StubRommAPIClient: PRommAPIClient {
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("getSaves not stubbed") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("getStates not stubbed") }
     func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("uploadSave not stubbed") }
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("updateSave not stubbed") }
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("updateSave not stubbed") }
     func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data { fatalError("downloadSave not stubbed") }
     func deleteSaves(ids: [Int]) async throws { fatalError("deleteSaves not stubbed") }
     func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema { fatalError("confirmSaveDownloaded not stubbed") }

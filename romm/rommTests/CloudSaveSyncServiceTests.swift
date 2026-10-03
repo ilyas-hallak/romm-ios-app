@@ -37,9 +37,11 @@ private final class NegotiateFailingAPIClient: StubRommAPIClient, @unchecked Sen
 /// negotiated path instead of falling back to the legacy pull.
 private final class NegotiateStubAPIClient: StubRommAPIClient, @unchecked Sendable {
     let response: SyncNegotiateResponse
+    private(set) var requestedRomIds: [[Int]?] = []
     init(response: SyncNegotiateResponse) { self.response = response }
     override func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse {
-        response
+        requestedRomIds.append(body.romIds)
+        return response
     }
 }
 
@@ -106,11 +108,11 @@ private final class FakeUploadSaveUseCase: PUploadSaveUseCase, @unchecked Sendab
 
 private final class FakeUpdateSaveUseCase: PUpdateSaveUseCase, @unchecked Sendable {
     var error: Error?
-    private(set) var calls: [(id: Int, emulator: String?, fileName: String, fileData: Data)] = []
+    private(set) var calls: [(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data)] = []
 
-    func execute(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+    func execute(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
         if let error { throw error }
-        calls.append((id, emulator, fileName, fileData))
+        calls.append((id, emulator, deviceId, fileName, fileData))
         return FakeListServerSavesUseCase.makeSchema(id: id, romId: 0, fileName: fileName)
     }
 }
@@ -562,7 +564,24 @@ struct CloudSaveSyncServiceTests {
         await service.pushBatteryAsync(data: Data([0xBB]))
         #expect(fakes.updateSave.calls.count == 1)
         #expect(fakes.updateSave.calls.first?.id == 77)
+        #expect(fakes.updateSave.calls.first?.deviceId == "device-1")
         #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// Negotiate is scoped to this ROM: without `rom_ids` the server would plan
+    /// the whole library on every launch, so the request must name the ROM
+    /// being synced.
+    @Test func negotiateRequestIsScopedToTheCurrentRom() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(romId: 7), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(client.requestedRomIds == [[7]])
     }
 
     /// A negotiate response names the row but is allowed to leave out when it

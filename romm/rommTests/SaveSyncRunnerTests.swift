@@ -346,7 +346,7 @@ struct SaveSyncRunnerTests {
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
 
         #expect(report.uploaded == 1)
-        #expect(fakes.uploadSave.calls.first?.fileName == "battery.sav")
+        #expect(fakes.uploadSave.calls.first?.fileName == BatterySaveFileName.fallback(romId: 1))
     }
 
     /// No server row exists yet for this ROM (the plan carries no server file
@@ -363,7 +363,7 @@ struct SaveSyncRunnerTests {
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
 
         #expect(report.uploaded == 1)
-        #expect(fakes.uploadSave.calls.first?.fileName == "battery.sav")
+        #expect(fakes.uploadSave.calls.first?.fileName == BatterySaveFileName.fallback(romId: 1))
     }
 
     // MARK: - Battery download is resolved by save id
