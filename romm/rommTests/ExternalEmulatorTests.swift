@@ -85,8 +85,8 @@ struct ExternalEmulatorIDTests {
     /// has to fall through to the default, so the system's own type guess decides.
     @Test func onlyManicOverridesThePasteboardType() {
         for id in ExternalEmulatorID.allCases where id != .manicEmu {
-            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "chd") == nil)
-            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "pbp") == nil)
+            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "chd", platformSlug: "ps") == nil)
+            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "pbp", platformSlug: "ps") == nil)
         }
     }
 }

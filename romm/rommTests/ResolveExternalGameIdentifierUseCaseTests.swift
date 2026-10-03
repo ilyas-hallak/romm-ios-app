@@ -183,8 +183,7 @@ struct ResolveExternalGameIdentifierUseCaseTests {
     // MARK: - PS1 (no DeltaGameType, falls back to the emulator's own extensions)
 
     /// PSX has no `DeltaGameType`, so a PS1 ROM only resolves through Manic's own
-    /// `romExtensions`. The real server mostly ships PS1 as a single `.chd` or
-    /// `.pbp` file (confirmed against romm.mnk.any64.de: 150 of 183 PS1 ROMs),
+    /// `romExtensions`. RomM mostly ships PS1 as a single `.chd` or `.pbp` file,
     /// both of which are one self-contained disc image, so hashing that one file
     /// is exactly what Manic itself hashes on import. Uses the real resolver and
     /// real files on disk, since the point is the extension lookup, not a stub.

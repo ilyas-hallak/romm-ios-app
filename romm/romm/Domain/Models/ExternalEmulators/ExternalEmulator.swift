@@ -40,7 +40,10 @@ protocol PExternalEmulator: Sendable {
     /// Pasteboard type identifier a ROM with this extension should be put on the
     /// clipboard as, overriding the system's own guess from the extension, or nil
     /// to keep that guess. Only meaningful for `.pasteboard` delivery.
-    func pasteboardTypeIdentifier(forROMExtension extension: String) -> String?
+    ///
+    /// `platformSlug` disambiguates an extension shared by several platforms,
+    /// such as `pbp` for both PS1 and PSP.
+    func pasteboardTypeIdentifier(forROMExtension extension: String, platformSlug: String) -> String?
     /// Whether an app that just received a document is this emulator. The
     /// bundle identifier `UIDocumentInteractionController` reports is the only
     /// reliable signal that the handoff happened.
@@ -69,7 +72,7 @@ extension PExternalEmulator {
     var saveLayout: ExternalSaveLayout? { nil }
 
     /// Most targets are fine with the system's own type guess.
-    func pasteboardTypeIdentifier(forROMExtension extension: String) -> String? { nil }
+    func pasteboardTypeIdentifier(forROMExtension extension: String, platformSlug: String) -> String? { nil }
 
     /// What the user has to do the first time a ROM goes to this app. The one
     /// step that cannot be done for them, so setup says it out loud.
