@@ -73,24 +73,12 @@ struct ManicEmuExternalEmulator: PExternalEmulator {
     /// `pbp` is also PSP's EBOOT format, so unlike `chd` it needs the platform to
     /// tell a PS1 disc from a PSP game, or a PSP `.pbp` would go out as Manic's
     /// PS1 type and its picker would leave PSP off the list.
-    ///
-    /// Mirrors the PSP slugs `PlatformSlugToLibretroCore` recognises, which
-    /// cannot be reused here: it lives with the native Libretro engine, a part
-    /// of the app the App Store target drops entirely, while this handoff has
-    /// to work in both targets.
     func pasteboardTypeIdentifier(forROMExtension extension: String, platformSlug: String) -> String? {
         switch `extension`.lowercased() {
         case "chd": return "public.aoshuang.game.mcd"
-        case "pbp": return Self.isPSPSlug(platformSlug) ? "public.aoshuang.game.psp" : "public.aoshuang.game.ps1"
+        case "pbp": return Platform.isPSP(slug: platformSlug) ? "public.aoshuang.game.psp" : "public.aoshuang.game.ps1"
         default: return nil
         }
-    }
-
-    private static func isPSPSlug(_ slug: String) -> Bool {
-        let s = slug.lowercased()
-        return s == "psp" || s == "sony-psp" || s == "psportable"
-            || s == "playstation-portable" || s == "playstationportable"
-            || s.contains("playstation portable") || s.contains("playstation-portable")
     }
 
     /// Sideloaded builds re-sign with a different team, so match the prefix.
