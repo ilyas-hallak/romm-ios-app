@@ -69,6 +69,14 @@ enum LibretroABI {
     /// PCSX ReARMed only reports rumble while the port is set to DualShock.
     static let DEVICE_PSE_DUALSHOCK: UInt32 = 517
 
+    // MARK: - Analog sticks
+    /// The `index` a core passes when it asks `RETRO_DEVICE_ANALOG` for a stick.
+    enum AnalogStick: UInt32 {
+        case left = 0, right = 1
+    }
+    static let ANALOG_AXIS_X: UInt32 = 0
+    static let ANALOG_AXIS_Y: UInt32 = 1
+
     // MARK: - Rumble effects
     static let RUMBLE_STRONG: UInt32 = 0
     static let RUMBLE_WEAK: UInt32 = 1

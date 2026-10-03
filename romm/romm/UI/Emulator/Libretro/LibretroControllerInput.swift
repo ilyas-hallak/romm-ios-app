@@ -2,8 +2,8 @@ import GameController
 
 /// Bridges one connected GCController to one libretro player.
 ///
-/// Maps digital buttons and D-Pad only. Analog sticks are intentionally
-/// omitted, they may be added in a future iteration if needed.
+/// Maps buttons, D-Pad and both thumbsticks. A core that never asks for the
+/// sticks simply does not read them.
 ///
 /// Layout follows the SNES/libretro convention where the bottom face button
 /// is RETRO_DEVICE_ID_JOYPAD_B (index 0) and the right face button is
@@ -91,6 +91,9 @@ final class LibretroControllerInput {
         // shortcut combo below.
         pad.buttonMenu.valueChangedHandler = handler(for: .start)
         pad.buttonOptions?.valueChangedHandler = handler(for: .select)
+
+        pad.leftThumbstick.valueChangedHandler = stickHandler(for: .left)
+        pad.rightThumbstick.valueChangedHandler = stickHandler(for: .right)
     }
 
     /// Picks up the face-button swap and the menu shortcut after they changed in
@@ -166,6 +169,16 @@ final class LibretroControllerInput {
         }
     }
 
+    /// GameController reports up as positive y, libretro wants it negative.
+    private func stickHandler(for stick: LibretroABI.AnalogStick) -> GCControllerDirectionPadValueChangedHandler {
+        return { [weak self] _, x, y in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.frontend?.setStick(stick, x: Double(x), y: Double(-y), player: self.player)
+            }
+        }
+    }
+
     private func send(_ button: LibretroABI.JoypadButton, pressed: Bool) {
         frontend?.setButton(button, pressed: pressed, player: player)
         if pressed {
@@ -220,5 +233,7 @@ final class LibretroControllerInput {
         pad.rightThumbstickButton?.valueChangedHandler = nil
         pad.buttonMenu.valueChangedHandler     = nil
         pad.buttonOptions?.valueChangedHandler = nil
+        pad.leftThumbstick.valueChangedHandler  = nil
+        pad.rightThumbstick.valueChangedHandler = nil
     }
 }

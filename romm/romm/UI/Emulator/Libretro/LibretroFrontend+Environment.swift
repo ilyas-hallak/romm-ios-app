@@ -61,10 +61,18 @@ extension LibretroFrontend {
 
     static let inputPollCallback: LibretroABI.InputPollFn = { }
 
-    static let inputStateCallback: LibretroABI.InputStateFn = { port, device, _, id in
-        guard device == LibretroABI.DEVICE_JOYPAD else { return 0 }
-        return MainActor.assumeIsolated {
-            LibretroFrontend.shared.isButtonPressed(Int(id), player: Int(port)) ? 1 : 0
+    static let inputStateCallback: LibretroABI.InputStateFn = { port, device, index, id in
+        switch device {
+        case LibretroABI.DEVICE_JOYPAD:
+            return MainActor.assumeIsolated {
+                LibretroFrontend.shared.isButtonPressed(Int(id), player: Int(port)) ? 1 : 0
+            }
+        case LibretroABI.DEVICE_ANALOG:
+            return MainActor.assumeIsolated {
+                LibretroFrontend.shared.stickAxis(index: index, axis: id, player: Int(port))
+            }
+        default:
+            return 0
         }
     }
 
@@ -139,8 +147,9 @@ extension LibretroFrontend {
             switch key {
             case "pcsx_rearmed_memcard1", "pcsx_rearmed_memcard2": answer = "libretro"
             // The core would otherwise swallow L1+R1+Select as its analog toggle,
-            // which collides with our own L1+R1 menu shortcut. We do not support
-            // analog sticks anyway, so a manual toggle buys nothing.
+            // which collides with our own L1+R1 menu shortcut. Not needed for the
+            // sticks either: on a DualShock port the core switches to analog mode
+            // by itself once a game asks for it.
             case "pcsx_rearmed_analog_combo": answer = "disabled"
             // Flycast would otherwise render on its own thread, which has no
             // current EAGL context -- our context lives on the main thread that

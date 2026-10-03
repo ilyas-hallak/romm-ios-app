@@ -12,6 +12,7 @@ final class LibretroSession: NSObject {
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
     private let rumblePreference: PRumblePreference?
+    private let analogSticksPreference: PAnalogSticksPreference?
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
 
@@ -21,6 +22,13 @@ final class LibretroSession: NSObject {
     /// core that reports it). The in-game menu only offers the intensity when
     /// this is true, a slider that does nothing would be worse than none.
     private(set) var isRumbleActive = false
+
+    /// Only PlayStation lets the player choose between the plain pad and the
+    /// one with two sticks. PSP always has its stick.
+    var offersAnalogSticks: Bool { core == .pcsxRearmed }
+    private var usesAnalogSticks: Bool {
+        offersAnalogSticks && (analogSticksPreference?.isEnabled ?? false)
+    }
 
     var onMenuRequested: (() -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
@@ -53,6 +61,7 @@ final class LibretroSession: NSObject {
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         faceButtonPreference: PGamepadFaceButtonPreference? = nil,
         rumblePreference: PRumblePreference? = nil,
+        analogSticksPreference: PAnalogSticksPreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -62,10 +71,14 @@ final class LibretroSession: NSObject {
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
         self.rumblePreference = rumblePreference
+        self.analogSticksPreference = analogSticksPreference
         self.cloudSync = cloudSync
         self.externalRenderTarget = nil
         self.viewController = LibretroGameViewController(
-            core: core,
+            controllerLayout: .forCore(
+                core,
+                analogSticks: core == .pcsxRearmed && (analogSticksPreference?.isEnabled ?? false)
+            ),
             gameURL: gameURL,
             aspectRatioPreference: aspectRatioPreference,
             screenPositionPreference: screenPositionPreference
@@ -246,14 +259,11 @@ final class LibretroSession: NSObject {
             }
 
             // pcsx_rearmed only reports rumble on a DualShock port, and that port
-            // also changes what the core expects from us. With rumble switched
-            // off we stay on the plain pad, which is exactly the old behaviour.
-            // The preference is read once here, never per frame.
+            // also changes what the core expects from us. The preference is read
+            // once here, never per frame.
             let preference = rumblePreference
             let rumbleActive = (preference?.isEnabled ?? false) && core == .pcsxRearmed
-            let portDevice = rumbleActive
-                ? LibretroABI.DEVICE_PSE_DUALSHOCK
-                : LibretroABI.DEVICE_JOYPAD
+            let portDevice = Self.playerOneDevice(rumble: rumbleActive, analogSticks: usesAnalogSticks)
 
             try frontend.load(
                 corePath: corePath,
@@ -347,6 +357,20 @@ final class LibretroSession: NSObject {
         for (player, input) in controllerInputs.enumerated() {
             input.reloadPreferences(for: attachedControllers[player])
         }
+    }
+
+    /// Picks up the analog stick switch from the in-game menu, live: the touch
+    /// layout changes and the core gets the matching pad in port one.
+    func reloadAnalogSticks() {
+        guard offersAnalogSticks else { return }
+        viewController.controllerView.layout = .forCore(core, analogSticks: usesAnalogSticks)
+        frontend.setPlayerOneDevice(Self.playerOneDevice(rumble: isRumbleActive, analogSticks: usesAnalogSticks))
+    }
+
+    /// Sticks and rumble both only exist on the DualShock, without either the
+    /// plain pad keeps the old behaviour for every PlayStation title.
+    static func playerOneDevice(rumble: Bool, analogSticks: Bool) -> UInt32 {
+        rumble || analogSticks ? LibretroABI.DEVICE_PSE_DUALSHOCK : LibretroABI.DEVICE_JOYPAD
     }
 
     /// Picks up an intensity changed from the in-game menu, live. Only the
@@ -490,7 +514,6 @@ final class LibretroSession: NSObject {
 }
 
 final class LibretroGameViewController: UIViewController {
-    private let core: LibretroCore
     private let gameURL: URL
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     private let screenPositionPreference: PEmulatorScreenPositionPreference
@@ -517,22 +540,14 @@ final class LibretroGameViewController: UIViewController {
     }()
 
     init(
-        core: LibretroCore,
+        controllerLayout: LibretroTouchControllerView.Layout,
         gameURL: URL,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference
     ) {
-        self.core = core
         self.gameURL = gameURL
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
-        let controllerLayout: LibretroTouchControllerView.Layout
-        switch core {
-        case .beetlePCEFast: controllerLayout = .pcEngine
-        case .genesisPlusGX: controllerLayout = .genesis
-        case .flycast: controllerLayout = .dreamcast
-        default: controllerLayout = .standard
-        }
         self.controllerView = LibretroTouchControllerView(layout: controllerLayout)
         super.init(nibName: nil, bundle: nil)
     }

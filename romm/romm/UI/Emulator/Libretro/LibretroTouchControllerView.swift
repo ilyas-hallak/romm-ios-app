@@ -151,9 +151,83 @@ final class LibretroTouchControllerView: UIView {
         }
     }
 
+    // MARK: - Analog stick
+
+    /// A fixed stick: the knob follows the finger inside the ring and springs
+    /// back to the centre when the finger lifts.
+    private final class ThumbstickView: UIView {
+        let stick: LibretroABI.AnalogStick
+        private let ring = CAShapeLayer()
+        private let knob = CAShapeLayer()
+        private var vector = CGVector.zero
+
+        init(stick: LibretroABI.AnalogStick) {
+            self.stick = stick
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+            ring.fillColor = UIColor.white.withAlphaComponent(0.08).cgColor
+            ring.strokeColor = UIColor.white.withAlphaComponent(0.5).cgColor
+            ring.lineWidth = 2
+            knob.fillColor = UIColor.white.withAlphaComponent(0.3).cgColor
+            knob.strokeColor = UIColor.white.withAlphaComponent(0.85).cgColor
+            knob.lineWidth = 2
+            layer.addSublayer(ring)
+            layer.addSublayer(knob)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            ring.path = UIBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)).cgPath
+            let knobSize = bounds.width * 0.5
+            knob.path = UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: knobSize, height: knobSize)).cgPath
+            placeKnob()
+        }
+
+        /// Moves the knob without the implicit layer animation, it has to stick
+        /// to the finger.
+        func show(_ vector: CGVector) {
+            self.vector = vector
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            placeKnob()
+            CATransaction.commit()
+        }
+
+        private func placeKnob() {
+            let knobSize = bounds.width * 0.5
+            let travel = (bounds.width - knobSize) / 2
+            knob.frame = CGRect(
+                x: bounds.midX - knobSize / 2 + vector.dx * travel,
+                y: bounds.midY - knobSize / 2 + vector.dy * travel,
+                width: knobSize,
+                height: knobSize
+            )
+        }
+    }
+
+    /// Deflection for a finger at `point` on a stick filling `bounds`, -1 to 1
+    /// on both axes with negative being left and up. Full deflection is reached
+    /// a little inside the ring, a thumb should not have to chase the edge.
+    nonisolated static func stickVector(for point: CGPoint, in bounds: CGRect) -> CGVector {
+        let reach = bounds.width * 0.35
+        guard reach > 0 else { return .zero }
+        var dx = (point.x - bounds.midX) / reach
+        var dy = (point.y - bounds.midY) / reach
+        let length = (dx * dx + dy * dy).squareRoot()
+        if length > 1 {
+            dx /= length
+            dy /= length
+        }
+        return CGVector(dx: dx, dy: dy)
+    }
+
     // MARK: - State
 
     private var faceButtons: [FaceButton] = []
+    private var thumbsticks: [ThumbstickView] = []
+    private var stickTouchMap: [ObjectIdentifier: ThumbstickView] = [:]
     private let dpad = DPadView()
     private var dpadTouch: UITouch?
     private var faceTouchMap: [ObjectIdentifier: FaceButton] = [:]
@@ -167,6 +241,11 @@ final class LibretroTouchControllerView: UIView {
         LibretroFrontend.shared.setButton(button, pressed: pressed)
     }
 
+    /// Where a stick moves to, with both axes from -1 to 1.
+    var onStick: (LibretroABI.AnalogStick, Double, Double) -> Void = { stick, x, y in
+        LibretroFrontend.shared.setStick(stick, x: x, y: y)
+    }
+
     /// Hides the button that opens the in-game menu, for a pad that has no game
     /// of its own to pause.
     var isMenuButtonHidden: Bool {
@@ -177,6 +256,7 @@ final class LibretroTouchControllerView: UIView {
     /// Vergrößert die Trefferzone für Face/Shoulder-Buttons (visuell unverändert).
     private let hitSlop: CGFloat = 28
     private let dpadSlop: CGFloat = 32
+    private let stickSlop: CGFloat = 20
     private let haptic = UIImpactFeedbackGenerator(style: .medium)
     /// Slightly softer tick fired when a finger lifts off a button (like Ignited).
     private let releaseHaptic = UIImpactFeedbackGenerator(style: .light)
@@ -186,17 +266,68 @@ final class LibretroTouchControllerView: UIView {
     /// On-screen button layout per core family.
     enum Layout {
         case standard   // D-pad + △○✕□ + shoulders + Start/Select (PSX-style)
+        case dualShock  // standard plus two analog sticks
+        case psp        // D-pad + △○✕□ + one analog stick + L / R + Start/Select
         case pcEngine   // D-pad + II / I + Select / Run
         case genesis    // D-pad + A / B / C + Mode / Start (Sega 3-button)
         case dreamcast  // D-pad + A / B / X / Y diamond + L / R triggers + Start
+
+        var sticks: [LibretroABI.AnalogStick] {
+            switch self {
+            case .dualShock: return [.left, .right]
+            case .psp: return [.left]
+            case .standard, .pcEngine, .genesis, .dreamcast: return []
+            }
+        }
+
+        /// Shoulder buttons as left/right pairs, top row first.
+        var shoulderRows: [(left: LibretroABI.JoypadButton, right: LibretroABI.JoypadButton)] {
+            switch self {
+            case .standard, .dualShock: return [(.l, .r), (.l2, .r2)]
+            case .psp: return [(.l, .r)]
+            case .dreamcast: return [(.l2, .r2)]
+            case .pcEngine, .genesis: return []
+            }
+        }
+
+        static func forCore(_ core: LibretroCore, analogSticks: Bool) -> Layout {
+            switch core {
+            case .pcsxRearmed: return analogSticks ? .dualShock : .standard
+            case .ppsspp: return .psp
+            case .beetlePCEFast: return .pcEngine
+            case .genesisPlusGX: return .genesis
+            case .flycast: return .dreamcast
+            }
+        }
     }
-    private let layout: Layout
+
+    /// Swapping the layout lets go of everything held first, a button that
+    /// vanishes mid press would otherwise stay down in the core.
+    var layout: Layout {
+        didSet {
+            guard layout != oldValue else { return }
+            releaseAll()
+            faceButtons.forEach { $0.removeFromSuperview() }
+            faceButtons.removeAll()
+            thumbsticks.forEach { $0.removeFromSuperview() }
+            thumbsticks.removeAll()
+            buildLayout()
+            setNeedsLayout()
+        }
+    }
 
     init(layout: Layout = .standard) {
         self.layout = layout
         super.init(frame: .zero)
         isMultipleTouchEnabled = true
         backgroundColor = .clear
+        addSubview(dpad)
+        menuButton.setImage(UIImage(named: "LibretroControls/button-menu"), for: .normal)
+        menuButton.setImage(UIImage(named: "LibretroControls/button-menu-pressed"), for: .highlighted)
+        menuButton.tintColor = UIColor.white.withAlphaComponent(0.85)
+        menuButton.imageView?.contentMode = .scaleAspectFit
+        menuButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
+        addSubview(menuButton)
         buildLayout()
         haptic.prepare()
         releaseHaptic.prepare()
@@ -211,26 +342,20 @@ final class LibretroTouchControllerView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func buildLayout() {
-        addSubview(dpad)
-
-        menuButton.setImage(UIImage(named: "LibretroControls/button-menu"), for: .normal)
-        menuButton.setImage(UIImage(named: "LibretroControls/button-menu-pressed"), for: .highlighted)
-        menuButton.tintColor = UIColor.white.withAlphaComponent(0.85)
-        menuButton.imageView?.contentMode = .scaleAspectFit
-        menuButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
-        addSubview(menuButton)
-
         switch layout {
-        case .standard:
-            addFace(.x, "△", .systemGreen)   // Triangle
-            addFace(.a, "○", .systemRed)     // Circle
-            addFace(.b, "✕", .systemBlue)    // Cross
-            addFace(.y, "□", .systemPink)    // Square
-
+        case .standard, .dualShock:
+            addPlayStationFaces()
             addFace(.l, "L1", .darkGray, thin: true, font: 16)
             addFace(.r, "R1", .darkGray, thin: true, font: 16)
             addFace(.l2, "L2", .darkGray, thin: true, font: 16)
             addFace(.r2, "R2", .darkGray, thin: true, font: 16)
+            addFace(.select, "SELECT", .darkGray, thin: true, font: 12)
+            addFace(.start, "START", .darkGray, thin: true, font: 12)
+
+        case .psp:
+            addPlayStationFaces()
+            addFace(.l, "L", .darkGray, thin: true, font: 16)
+            addFace(.r, "R", .darkGray, thin: true, font: 16)
             addFace(.select, "SELECT", .darkGray, thin: true, font: 12)
             addFace(.start, "START", .darkGray, thin: true, font: 12)
 
@@ -262,6 +387,19 @@ final class LibretroTouchControllerView: UIView {
             addFace(.r2, "R", .darkGray, thin: true, font: 16)
             addFace(.start, "START", .darkGray, thin: true, font: 12)
         }
+
+        for stick in layout.sticks {
+            let view = ThumbstickView(stick: stick)
+            addSubview(view)
+            thumbsticks.append(view)
+        }
+    }
+
+    private func addPlayStationFaces() {
+        addFace(.x, "△", .systemGreen)   // Triangle
+        addFace(.a, "○", .systemRed)     // Circle
+        addFace(.b, "✕", .systemBlue)    // Cross
+        addFace(.y, "□", .systemPink)    // Square
     }
 
     private func addFace(_ button: LibretroABI.JoypadButton,
@@ -290,8 +428,8 @@ final class LibretroTouchControllerView: UIView {
     }
 
     /// Positions four face buttons in a diamond on a 3×3 grid: RetroPad X top,
-    /// Y left, A right, B bottom. Shared by the PSX and Dreamcast layouts, which
-    /// only differ in their labels.
+    /// Y left, A right, B bottom. Shared by the PlayStation, PSP and Dreamcast
+    /// layouts, which only differ in their labels.
     private func layoutDiamondFaces(faceX: CGFloat, faceY: CGFloat, faceSize: CGFloat) {
         let cell = faceSize / 3
         face(.x)?.frame = CGRect(x: faceX + cell, y: faceY, width: cell, height: cell)
@@ -316,7 +454,9 @@ final class LibretroTouchControllerView: UIView {
         let btn = faceSize * 0.40
         let gap = faceSize * 0.06
         let totalW = btn * 3 + gap * 2
-        let startX = faceX + (faceSize - totalW) / 2
+        // The row is wider than the face area. Centring it pushed C past the
+        // right screen edge, so it ends at the area's right edge instead.
+        let startX = faceX + faceSize - totalW
         let cy = faceY + (faceSize - btn) / 2
         face(.y)?.frame = CGRect(x: startX, y: cy, width: btn, height: btn)                    // A
         face(.b)?.frame = CGRect(x: startX + btn + gap, y: cy, width: btn, height: btn)        // B
@@ -328,51 +468,23 @@ final class LibretroTouchControllerView: UIView {
         let h = bounds.height
         let safe = safeAreaInsets
 
-        let dpadSize = min(w, h) * 0.32
-        let dpadX = 24 + safe.left
-        let dpadY = h - dpadSize - 32 - safe.bottom
-        dpad.frame = CGRect(x: dpadX, y: dpadY, width: dpadSize, height: dpadSize)
-
-        let faceSize = dpadSize
-        let faceX = w - faceSize - 24 - safe.right
-        let faceY = dpadY
-
-        switch layout {
-        case .standard:
-            layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-
-            let shoulderW: CGFloat = 72
-            let shoulderH: CGFloat = 36
-            let shoulderGap: CGFloat = 8
-            let shoulderTopY = 16 + safe.top
-            let shoulderBottomY = shoulderTopY + shoulderH + shoulderGap
-            face(.l)?.frame  = CGRect(x: 24 + safe.left, y: shoulderTopY, width: shoulderW, height: shoulderH)
-            face(.l2)?.frame = CGRect(x: 24 + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-            face(.r)?.frame  = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
-            face(.r2)?.frame = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        case .dreamcast:
-            layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-
-            // Nur ein Trigger je Seite, deshalb keine zweite Reihe.
-            let shoulderW: CGFloat = 72
-            let shoulderH: CGFloat = 36
-            let shoulderY = 16 + safe.top
-            face(.l2)?.frame = CGRect(x: 24 + safe.left, y: shoulderY, width: shoulderW, height: shoulderH)
-            face(.r2)?.frame = CGRect(x: w - shoulderW - 24 - safe.right, y: shoulderY, width: shoulderW, height: shoulderH)
-        case .pcEngine:
-            layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-        case .genesis:
-            layoutGenesisFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-        }
-
         let centerW: CGFloat = 80
         let centerH: CGFloat = 32
         let centerY = h - centerH - 24 - safe.bottom
-        // Ohne Select steht Start allein und gehört mittig, nicht auf die alte
-        // rechte Hälfte des Select/Start-Paars.
-        let startX = layout == .dreamcast ? (w - centerW) / 2 : w / 2 + 8
-        face(.select)?.frame = CGRect(x: w / 2 - centerW - 8, y: centerY, width: centerW, height: centerH)
-        face(.start)?.frame  = CGRect(x: startX, y: centerY, width: centerW, height: centerH)
+        layoutCenterButtons(width: centerW, height: centerH, y: centerY)
+
+        let dpadSize = min(w, h) * 0.32
+        let stickSize = min(dpadSize * 0.75, 150)
+        let sticksTop = layoutSticks(size: stickSize, centerWidth: centerW, centerY: centerY)
+
+        // With sticks the D-pad and the face buttons move up to make room for
+        // them, the sticks sit inwards and would overlap otherwise.
+        let dpadBottom = sticksTop.map { $0 - 8 } ?? h - 32 - safe.bottom
+        let dpadY = dpadBottom - dpadSize
+        dpad.frame = CGRect(x: 24 + safe.left, y: dpadY, width: dpadSize, height: dpadSize)
+        layoutFaces(faceX: w - dpadSize - 24 - safe.right, faceY: dpadY, faceSize: dpadSize)
+
+        layoutShoulders(width: 72, height: 36, top: 16 + safe.top, left: 24 + safe.left, right: w - 24 - safe.right)
 
         let menuSize: CGFloat = 44
         menuButton.frame = CGRect(x: (w - menuSize) / 2, y: 16 + safe.top, width: menuSize, height: menuSize)
@@ -384,58 +496,67 @@ final class LibretroTouchControllerView: UIView {
         let w = bounds.width
         let h = bounds.height
         let safe = safeAreaInsets
+        let edgePad: CGFloat = 16
+
+        let centerW: CGFloat = 90
+        let centerH: CGFloat = 34
+        let centerY = h - centerH - edgePad - safe.bottom
+        layoutCenterButtons(width: centerW, height: centerH, y: centerY)
 
         let dpadSize = min(w, h) * 0.42
-        let edgePad: CGFloat = 16
-        let dpadX = edgePad + safe.left
         let dpadY = h - dpadSize - edgePad - safe.bottom
-        dpad.frame = CGRect(x: dpadX, y: dpadY, width: dpadSize, height: dpadSize)
+        dpad.frame = CGRect(x: edgePad + safe.left, y: dpadY, width: dpadSize, height: dpadSize)
+        layoutFaces(faceX: w - dpadSize - edgePad - safe.right, faceY: dpadY, faceSize: dpadSize)
 
-        let faceSize = dpadSize
-        let faceX = w - faceSize - edgePad - safe.right
-        let faceY = dpadY
+        _ = layoutSticks(size: min(dpadSize * 0.62, 150), centerWidth: centerW, centerY: centerY)
 
+        layoutShoulders(width: 84, height: 40, top: edgePad + safe.top, left: edgePad + safe.left, right: w - edgePad - safe.right)
+
+        let menuSize: CGFloat = 44
+        menuButton.frame = CGRect(x: (w - menuSize) / 2, y: edgePad + safe.top, width: menuSize, height: menuSize)
+    }
+
+    private func layoutFaces(faceX: CGFloat, faceY: CGFloat, faceSize: CGFloat) {
         switch layout {
-        case .standard:
+        case .standard, .dualShock, .psp, .dreamcast:
             layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-
-            // Schultertasten: L1 oben, L2 darunter — links. R1/R2 rechts.
-            let shoulderW: CGFloat = 84
-            let shoulderH: CGFloat = 40
-            let shoulderGap: CGFloat = 8
-            let shoulderTopY = edgePad + safe.top
-            let shoulderBottomY = shoulderTopY + shoulderH + shoulderGap
-            face(.l)?.frame  = CGRect(x: edgePad + safe.left, y: shoulderTopY, width: shoulderW, height: shoulderH)
-            face(.l2)?.frame = CGRect(x: edgePad + safe.left, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-            face(.r)?.frame  = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderTopY, width: shoulderW, height: shoulderH)
-            face(.r2)?.frame = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderBottomY, width: shoulderW, height: shoulderH)
-        case .dreamcast:
-            layoutDiamondFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
-
-            // L/R sind die einzigen Schultertasten, je eine pro Seite ganz oben.
-            let shoulderW: CGFloat = 84
-            let shoulderH: CGFloat = 40
-            let shoulderY = edgePad + safe.top
-            face(.l2)?.frame = CGRect(x: edgePad + safe.left, y: shoulderY, width: shoulderW, height: shoulderH)
-            face(.r2)?.frame = CGRect(x: w - shoulderW - edgePad - safe.right, y: shoulderY, width: shoulderW, height: shoulderH)
         case .pcEngine:
             layoutPCEFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
         case .genesis:
             layoutGenesisFaces(faceX: faceX, faceY: faceY, faceSize: faceSize)
         }
+    }
 
-        // Start/Select mittig unten.
-        let centerW: CGFloat = 90
-        let centerH: CGFloat = 34
-        let centerY = h - centerH - edgePad - safe.bottom
-        // Dreamcast hat kein Select: Start steht allein und mittig.
-        let startX = layout == .dreamcast ? (w - centerW) / 2 : w / 2 + 8
-        face(.select)?.frame = CGRect(x: w / 2 - centerW - 8, y: centerY, width: centerW, height: centerH)
-        face(.start)?.frame  = CGRect(x: startX, y: centerY, width: centerW, height: centerH)
+    /// Select and Start side by side at the bottom centre. Without Select,
+    /// Start stands alone and belongs in the middle.
+    private func layoutCenterButtons(width: CGFloat, height: CGFloat, y: CGFloat) {
+        let w = bounds.width
+        let startX = face(.select) == nil ? (w - width) / 2 : w / 2 + 8
+        face(.select)?.frame = CGRect(x: w / 2 - width - 8, y: y, width: width, height: height)
+        face(.start)?.frame = CGRect(x: startX, y: y, width: width, height: height)
+    }
 
-        // Menu zentriert oben.
-        let menuSize: CGFloat = 44
-        menuButton.frame = CGRect(x: (w - menuSize) / 2, y: edgePad + safe.top, width: menuSize, height: menuSize)
+    /// Sticks sit just above Select and Start, centred on their outer edges,
+    /// where a thumb reaches them from the D-pad or the face buttons. Returns
+    /// the top of the sticks, `nil` for a layout without any.
+    private func layoutSticks(size: CGFloat, centerWidth: CGFloat, centerY: CGFloat) -> CGFloat? {
+        guard !thumbsticks.isEmpty else { return nil }
+        let top = centerY - 8 - size
+        let offset = 8 + centerWidth
+        for view in thumbsticks {
+            let centerX = view.stick == .left ? bounds.width / 2 - offset : bounds.width / 2 + offset
+            view.frame = CGRect(x: centerX - size / 2, y: top, width: size, height: size)
+        }
+        return top
+    }
+
+    /// Shoulder rows from the top down, left pair member against the left edge.
+    private func layoutShoulders(width: CGFloat, height: CGFloat, top: CGFloat, left: CGFloat, right: CGFloat) {
+        for (row, pair) in layout.shoulderRows.enumerated() {
+            let y = top + CGFloat(row) * (height + 8)
+            face(pair.left)?.frame = CGRect(x: left, y: y, width: width, height: height)
+            face(pair.right)?.frame = CGRect(x: right - width, y: y, width: width, height: height)
+        }
     }
 
     @objc private func menuTapped() {
@@ -481,13 +602,16 @@ final class LibretroTouchControllerView: UIView {
         let key = ObjectIdentifier(touch)
         let point = touch.location(in: self)
 
+        if handleStick(touch: touch, at: point, ended: ended) { return }
+
         // D-Pad ownership: claimed by first touch that lands inside dpad.frame
         // (mit dpadSlop), released when that touch lifts (slide outside is allowed).
         // Ein Touch, der direkt auf einem Button liegt, gehoert diesem Button:
         // sonst verschluckt der dpadSlop-Rand angrenzende Buttons (z.B. Start).
         if dpadTouch == nil, !ended,
            dpad.frame.insetBy(dx: -dpadSlop, dy: -dpadSlop).contains(point),
-           !faceButtons.contains(where: { $0.frame.contains(point) }) {
+           !faceButtons.contains(where: { $0.frame.contains(point) }),
+           !thumbsticks.contains(where: { $0.frame.contains(point) }) {
             dpadTouch = touch
         }
         if dpadTouch === touch {
@@ -524,6 +648,53 @@ final class LibretroTouchControllerView: UIView {
         } else {
             faceTouchMap[key] = hit
         }
+    }
+
+    /// A stick belongs to the finger that first landed on it and follows that
+    /// finger anywhere until it lifts. Only a new touch can take a stick, a
+    /// finger sliding over from a button keeps pressing buttons. A touch right
+    /// on a button or the dpad stays theirs, the slop must not swallow Start.
+    private func handleStick(touch: UITouch, at point: CGPoint, ended: Bool) -> Bool {
+        let key = ObjectIdentifier(touch)
+        if stickTouchMap[key] == nil {
+            guard touch.phase == .began, !ended,
+                  !dpad.frame.contains(point),
+                  !faceButtons.contains(where: { $0.frame.contains(point) }),
+                  let free = thumbsticks.first(where: { view in
+                      view.frame.insetBy(dx: -stickSlop, dy: -stickSlop).contains(point)
+                          && !stickTouchMap.values.contains { $0 === view }
+                  })
+            else { return false }
+            stickTouchMap[key] = free
+            haptic.impactOccurred(intensity: 0.6)
+        }
+        guard let view = stickTouchMap[key] else { return false }
+        if ended {
+            stickTouchMap.removeValue(forKey: key)
+            moveStick(view, to: .zero)
+        } else {
+            moveStick(view, to: Self.stickVector(for: convert(point, to: view), in: view.bounds))
+        }
+        return true
+    }
+
+    private func moveStick(_ view: ThumbstickView, to vector: CGVector) {
+        view.show(vector)
+        onStick(view.stick, Double(vector.dx), Double(vector.dy))
+    }
+
+    /// Lets go of every button and stick this view is holding.
+    private func releaseAll() {
+        applyDpad(.none)
+        dpadTouch = nil
+        for button in Set(faceTouchMap.values.map(\.button)) {
+            onButton(button, false)
+        }
+        faceTouchMap.removeAll()
+        for view in stickTouchMap.values {
+            moveStick(view, to: .zero)
+        }
+        stickTouchMap.removeAll()
     }
 
     private var currentDpadButtons: Set<LibretroABI.JoypadButton> = []
