@@ -84,17 +84,17 @@ struct HomeView: View {
                     rom: { $0 }
                 )
                 HomeRomSection(
+                    title: "Recently Added",
+                    items: viewModel.recentlyAdded,
+                    isLoading: viewModel.isLoadingRecentlyAdded,
+                    rom: { $0 }
+                )
+                HomeRomSection(
                     title: "Recommended for You",
                     items: viewModel.recommendations,
                     isLoading: viewModel.isLoadingRecommendations,
                     rom: { $0.rom },
                     caption: { $0.seedRomName.map { "Because you played \($0)" } }
-                )
-                HomeRomSection(
-                    title: "Recently Added",
-                    items: viewModel.recentlyAdded,
-                    isLoading: viewModel.isLoadingRecentlyAdded,
-                    rom: { $0 }
                 )
                 HomePlatformSection(
                     platforms: viewModel.platforms,
