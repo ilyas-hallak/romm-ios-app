@@ -235,7 +235,7 @@ final class ExternalPlayCoordinator {
             // the pasteboard. Multi-file ROMs stay on the share sheet, since one
             // pasteboard item cannot carry a set.
             if playTarget.externalEmulatorID?.emulator.romDelivery == .pasteboard {
-                handOverViaPasteboard(url: url, romName: rom.name)
+                handOverViaPasteboard(url: url, romName: rom.name, platformSlug: rom.platformSlug)
                 return
             }
             openInItem = OpenInItem(url: url, tempDirectory: result.tempDirectory)
@@ -246,7 +246,7 @@ final class ExternalPlayCoordinator {
 
     /// Puts the ROM on the general pasteboard, for apps that only import through
     /// an item provider.
-    private func handOverViaPasteboard(url: URL, romName: String) {
+    private func handOverViaPasteboard(url: URL, romName: String, platformSlug: String) {
         let appName = targetDisplayName ?? "the external emulator"
         // The bytes go on themselves. A provider built from a file URL registers
         // public.file-url plus a promise, and neither survives: the URL points
@@ -257,8 +257,14 @@ final class ExternalPlayCoordinator {
         }
         // Exactly one type, the one the extension resolves to. A broad type such
         // as public.data can hurt: an importer matching by substring may settle
-        // on it and then find no extension to name the file after.
-        let romType = UTType(filenameExtension: url.pathExtension) ?? .data
+        // on it and then find no extension to name the file after. An emulator
+        // can override that guess, when the system's own type does not lead the
+        // target back to the right extension or platform.
+        let overrideIdentifier = playTarget.externalEmulatorID?.emulator
+            .pasteboardTypeIdentifier(forROMExtension: url.pathExtension, platformSlug: platformSlug)
+        let romType = overrideIdentifier.flatMap { UTType($0) }
+            ?? UTType(filenameExtension: url.pathExtension)
+            ?? .data
         // Eager, because a registered representation is produced on request, and
         // by then this process may be suspended with nobody left to answer.
         let provider = NSItemProvider(item: data as NSData, typeIdentifier: romType.identifier)
