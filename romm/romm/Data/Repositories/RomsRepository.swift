@@ -233,6 +233,27 @@ class RomsRepository: PRomsRepository {
         return response.roms
     }
 
+    func getRecommendations(limit: Int) async throws -> [Recommendation] {
+        logger.info("✨ Getting recommendations (limit: \(limit))")
+
+        do {
+            let recommendations = try await apiClient.getRecommendations(limit: limit)
+            // Keep the first occurrence of each rom id: the server orders by rank,
+            // and SwiftUI's ForEach can't cope with duplicate ids.
+            var seenRomIds = Set<Int>()
+            let domainRecommendations = recommendations.compactMap { item -> Recommendation? in
+                guard seenRomIds.insert(item.rom.id).inserted else { return nil }
+                return Recommendation(rom: RomMapper.mapFromAPI(item.rom, resolver: coverResolver), seedRomName: item.seedRomName)
+            }
+
+            logger.info("✅ Retrieved \(domainRecommendations.count) recommendations")
+            return domainRecommendations
+        } catch {
+            logger.error("❌ Error getting recommendations: \(error)")
+            throw RomError.networkError
+        }
+    }
+
     // MARK: - Favourites Collection
 
     /// Finds the user's own favourites collection, identified by the `is_favorite` flag.

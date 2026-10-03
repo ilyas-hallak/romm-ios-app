@@ -37,6 +37,7 @@ protocol PDependencyFactory {
     func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase
     func makeGetRomsUseCase() -> GetRomsUseCase
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase
     func makeToggleRomFavoriteUseCase() -> ToggleRomFavoriteUseCase
     func makeCheckRomFavoriteStatusUseCase() -> CheckRomFavoriteStatusUseCase
@@ -244,7 +245,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase {
         GetRomsWithFiltersUseCase(romsRepository: romsRepository)
     }
-    
+
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase {
+        GetRecommendationsUseCase(romsRepository: romsRepository)
+    }
+
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase {
         GetRomDetailsUseCase(romsRepository: romsRepository)
     }
