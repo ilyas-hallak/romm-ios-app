@@ -35,20 +35,6 @@ private final class FakeLocalROMs: PLocalROMRepository, @unchecked Sendable {
     func getDownloadedROMsCount() throws -> Int { roms.count }
 }
 
-private final class FakeHandoffStore: PExternalEmulatorHandoffStore, @unchecked Sendable {
-    var identifiers: [Int: String] = [:]
-
-    func hasHandedOff(romId: Int, to target: ExternalEmulatorID) -> Bool { false }
-    func markHandedOff(romId: Int, to target: ExternalEmulatorID) {}
-    func forget(romId: Int) {}
-    func hasCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID) -> Bool { false }
-    func markCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID) {}
-    func cachedGameIdentifier(romId: Int, kind: ExternalGameIdentifierKind) -> String? {
-        identifiers[romId]
-    }
-    func cacheGameIdentifier(_ identifier: String, romId: Int, kind: ExternalGameIdentifierKind) {}
-}
-
 struct ScanExternalSavesUseCaseTests {
 
     private func makeRoot() -> URL {

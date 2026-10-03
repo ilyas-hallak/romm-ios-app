@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Attaches everything a Play tap needs to reach an external emulator app: the
-/// system "Open in" menu, the share sheet for ROMs that menu cannot carry, the
-/// hint for targets that take the ROM off the pasteboard, and the error alert.
+/// system "Open in" menu, the share sheet for ROMs that menu cannot carry, and
+/// the pasteboard alerts (the copy hint and the "already in target?" question).
 ///
 /// The ROM detail screen wires its own instead, because there the menu has to
 /// be anchored to the Play button for the iPad popover.

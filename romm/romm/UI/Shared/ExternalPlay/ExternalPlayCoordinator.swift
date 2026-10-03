@@ -99,18 +99,14 @@ final class ExternalPlayCoordinator {
     ///   caller can use this as a guard ahead of its own launch path.
     func play(romId: Int) async -> Bool {
         guard let targetID = playTarget.externalEmulatorID else { return false }
+        // A handoff is already in flight (possibly from a relaunch confirmation
+        // whose host screen already cleared its own launching guard), so a
+        // second tap must not run alongside it and clobber its state.
+        guard !isLaunching else { return true }
         let target = targetID.emulator
 
-        guard externalAppLauncher.isInstalled(target) else {
-            errorMessage = "\(target.displayName) is not installed. "
-                + "Install it, or switch Play back to the built-in emulator in Settings."
-            return true
-        }
-
-        guard let resolved = try? getDownloadedROMUseCase.execute(romId: romId) else {
-            errorMessage = "Download this ROM before opening it in \(target.displayName)."
-            return true
-        }
+        guard installedOrError(target) else { return true }
+        guard let resolved = downloadedOrError(romId: romId, target: target) else { return true }
 
         // Unpacking, hashing and copying a disc image all take time, so the
         // Play spinner covers everything below.
@@ -122,24 +118,16 @@ final class ExternalPlayCoordinator {
             romId: romId, target: targetID, delivery: target.romDelivery, handoffStore: handoffStore
         ) {
         case .launchDirectly:
-            if await launchDirectly(romId: romId, resolved: resolved, target: target) {
-                return true
-            }
-            // The app turned the link down, so its library no longer holds the
-            // ROM. Hand it over again rather than leaving Play dead.
-            handoffStore.forget(romId: romId)
+            await relaunch(romId: romId, resolved: resolved, target: target)
 
         case .confirmBeforeRelaunching:
             relaunchConfirmation = PasteboardRelaunchConfirmation(
                 romId: romId, targetID: targetID, appName: target.displayName
             )
-            return true
 
         case .handOver:
-            break
+            await handOver(romId: romId, resolved: resolved, target: target)
         }
-
-        await handOver(romId: romId, resolved: resolved, target: target)
         return true
     }
 
@@ -149,8 +137,16 @@ final class ExternalPlayCoordinator {
         guard let confirmation = relaunchConfirmation else { return }
         relaunchConfirmation = nil
         handoffStore.markHandedOff(romId: confirmation.romId, to: confirmation.targetID)
+        let target = confirmation.targetID.emulator
+        guard installedOrError(target) else { return }
+        guard let resolved = downloadedOrError(romId: confirmation.romId, target: target) else { return }
+        // Set synchronously, before the Task even gets scheduled, so a Play tap
+        // landing in the gap before it runs sees the guard in `play()` and backs
+        // off instead of running alongside this.
+        isLaunching = true
         Task { [weak self] in
-            _ = await self?.play(romId: confirmation.romId)
+            defer { self?.isLaunching = false }
+            await self?.relaunch(romId: confirmation.romId, resolved: resolved, target: target)
         }
     }
 
@@ -159,11 +155,11 @@ final class ExternalPlayCoordinator {
         guard let confirmation = relaunchConfirmation else { return }
         relaunchConfirmation = nil
         let target = confirmation.targetID.emulator
-        guard let resolved = try? getDownloadedROMUseCase.execute(romId: confirmation.romId) else {
-            errorMessage = "Download this ROM before opening it in \(target.displayName)."
-            return
-        }
+        guard installedOrError(target) else { return }
+        guard let resolved = downloadedOrError(romId: confirmation.romId, target: target) else { return }
+        isLaunching = true
         Task { [weak self] in
+            defer { self?.isLaunching = false }
             await self?.handOver(romId: confirmation.romId, resolved: resolved, target: target)
         }
     }
@@ -220,6 +216,37 @@ final class ExternalPlayCoordinator {
     }
 
     // MARK: - Private
+
+    /// Whether the target app is installed, surfacing the standard error when
+    /// it is not.
+    private func installedOrError(_ target: any PExternalEmulator) -> Bool {
+        guard externalAppLauncher.isInstalled(target) else {
+            errorMessage = "\(target.displayName) is not installed. "
+                + "Install it, or switch Play back to the built-in emulator in Settings."
+            return false
+        }
+        return true
+    }
+
+    /// The ROM resolved from local storage, or nil with the "download it
+    /// first" error set.
+    private func downloadedOrError(romId: Int, target: any PExternalEmulator) -> ResolvedDownloadedROM? {
+        guard let resolved = try? getDownloadedROMUseCase.execute(romId: romId) else {
+            errorMessage = "Download this ROM before opening it in \(target.displayName)."
+            return nil
+        }
+        return resolved
+    }
+
+    /// Deep links a ROM already believed to be in the target's library,
+    /// handing it over again if the target turns the link down.
+    private func relaunch(romId: Int, resolved: ResolvedDownloadedROM, target: any PExternalEmulator) async {
+        if await launchDirectly(romId: romId, resolved: resolved, target: target) { return }
+        // The app turned the link down, so its library no longer holds the
+        // ROM. Hand it over again rather than leaving Play dead.
+        handoffStore.forget(romId: romId)
+        await handOver(romId: romId, resolved: resolved, target: target)
+    }
 
     /// Deep links a ROM already believed to be in the target's library.
     private func launchDirectly(
