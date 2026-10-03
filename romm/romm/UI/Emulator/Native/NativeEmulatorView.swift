@@ -74,7 +74,9 @@ struct NativeEmulatorView: View {
         .onChange(of: showMenu) { _, presented in
             if presented {
                 viewModel.session?.pause()
+                viewModel.session?.beginMenuNavigation()
             } else {
+                viewModel.session?.endMenuNavigation()
                 viewModel.session?.resume()
             }
         }

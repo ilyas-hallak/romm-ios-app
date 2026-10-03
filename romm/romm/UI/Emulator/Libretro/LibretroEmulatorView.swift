@@ -85,7 +85,9 @@ struct LibretroEmulatorView: View {
             // race with dlclose().
             if presented {
                 viewModel.session?.pause()
+                viewModel.session?.beginMenuNavigation()
             } else if !isQuitting {
+                viewModel.session?.endMenuNavigation()
                 viewModel.session?.resume()
             }
         }
@@ -124,10 +126,19 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
     @SwiftUI.State private var rumbleIntensity: RumbleIntensity
+    @SwiftUI.State private var focus: EmulatorMenuFocus<MenuItem>
 
     // 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`); slot 0 is a real, usable slot.
     private let slots = Array(0...20)
+
+    /// What a controller can reach. The settings rows are left out, they are
+    /// not something to change mid-game with a pad.
+    private enum MenuItem: Hashable {
+        case quit, done
+        case slot
+        case load, save, undoSave, undoLoad
+    }
 
     init(
         session: LibretroSession?,
@@ -155,21 +166,32 @@ private struct LibretroMenuSheet: View {
             return (slot, date)
         }.max(by: { $0.date < $1.date })?.slot ?? 0
         self._selectedSlot = SwiftUI.State(initialValue: mostRecent)
+        let initial: MenuItem = session?.hasState(slot: mostRecent) == true ? .load : .save
+        self._focus = SwiftUI.State(initialValue: EmulatorMenuFocus(
+            rows: [[.quit, .done], [.slot], [.load, .save, .undoSave, .undoLoad]],
+            initial: initial,
+            adjustableItems: [.slot]
+        ))
     }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 0) {
-                        detailHeader
-                        compactControls
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
-                        actionButtons
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            detailHeader
+                            compactControls
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                            actionButtons
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                        }
+                    }
+                    .onChange(of: focus.focused) { _, item in
+                        withAnimation { proxy.scrollTo(item) }
                     }
                 }
             }
@@ -179,12 +201,17 @@ private struct LibretroMenuSheet: View {
             .toolbarBackground(Color.black.opacity(0.9), for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Quit", role: .destructive) {
+                    Button(role: .destructive) {
                         showQuitConfirmation = true
+                    } label: {
+                        toolbarLabel("Quit", item: .quit)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done", action: onResume).bold()
+                    Button(action: onResume) {
+                        toolbarLabel("Done", item: .done)
+                    }
+                    .bold()
                 }
             }
             .alert(
@@ -194,9 +221,61 @@ private struct LibretroMenuSheet: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Quit", role: .destructive, action: onQuit)
             } message: {
-                Text("Unsaved progress will be lost.")
+                Text(focus.isVisible
+                     ? "Unsaved progress will be lost.\nPress A to quit or B to cancel."
+                     : "Unsaved progress will be lost.")
             }
         }
+        .onAppear {
+            session?.onMenuCommand = { handle($0) }
+        }
+        .onDisappear {
+            session?.onMenuCommand = nil
+        }
+    }
+
+    // MARK: - Controller
+
+    private func handle(_ command: EmulatorMenuCommand) {
+        if showQuitConfirmation {
+            handleQuitConfirmation(command)
+            return
+        }
+        switch focus.handle(command) {
+        case .activate(let item): activate(item)
+        case .adjust(_, let step): selectedSlot = min(max(selectedSlot + step, slots.first!), slots.last!)
+        case .dismiss: onResume()
+        case .none: break
+        }
+    }
+
+    /// The system alert cannot be steered with a pad, so its two choices are
+    /// answered here instead.
+    private func handleQuitConfirmation(_ command: EmulatorMenuCommand) {
+        switch command {
+        case .confirm: onQuit()
+        case .back: showQuitConfirmation = false
+        default: break
+        }
+    }
+
+    private func activate(_ item: MenuItem) {
+        switch item {
+        case .quit: showQuitConfirmation = true
+        case .done: onResume()
+        case .load where canLoad: load()
+        case .save: save()
+        case .undoSave where canUndoSave: undoSave()
+        case .undoLoad where canUndoLoad: undoLoad()
+        default: break
+        }
+    }
+
+    private func toolbarLabel(_ title: String, item: MenuItem) -> some View {
+        Text(title)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .emulatorMenuFocusRing(focus.isFocused(item), cornerRadius: 8)
     }
 
     private var detailHeader: some View {
@@ -254,8 +333,10 @@ private struct LibretroMenuSheet: View {
                     .background(Color.white.opacity(0.08))
                     .clipShape(Capsule())
                     .foregroundColor(.white)
+                    .emulatorMenuFocusRing(focus.isFocused(.slot), cornerRadius: 16)
                 }
             }
+            .id(MenuItem.slot)
             HStack {
                 Text("Aspect Ratio")
                     .font(.subheadline)
@@ -371,46 +452,66 @@ private struct LibretroMenuSheet: View {
                 icon: "tray.and.arrow.up",
                 tint: .accentColor,
                 filled: true,
-                disabled: session?.hasState(slot: selectedSlot) != true
-            ) {
-                perform { try session?.loadState(slot: selectedSlot) }
-                statusMessage = "Slot \(selectedSlot) loaded"
-                onResume()
-            }
+                disabled: !canLoad,
+                item: .load,
+                action: load
+            )
             stackedButton(
                 title: "Save",
                 icon: "tray.and.arrow.down",
                 tint: .accentColor,
                 filled: false,
-                disabled: false
-            ) {
-                perform { try session?.saveState(slot: selectedSlot) }
-                statusMessage = "Slot \(selectedSlot) saved"
-                refreshTick += 1
-            }
+                disabled: false,
+                item: .save,
+                action: save
+            )
             stackedButton(
                 title: "Undo Save",
                 icon: "arrow.uturn.backward",
                 tint: .orange,
                 filled: false,
-                disabled: session?.hasUndoSave(slot: selectedSlot) != true
-            ) {
-                perform { try session?.undoSave(slot: selectedSlot) }
-                statusMessage = "Save for slot \(selectedSlot) undone"
-                refreshTick += 1
-            }
+                disabled: !canUndoSave,
+                item: .undoSave,
+                action: undoSave
+            )
             stackedButton(
                 title: "Undo Load",
                 icon: "arrow.uturn.backward.circle",
                 tint: .orange,
                 filled: false,
-                disabled: session?.hasUndoLoad() != true
-            ) {
-                perform { try session?.undoLoad() }
-                statusMessage = "Load undone"
-                onResume()
-            }
+                disabled: !canUndoLoad,
+                item: .undoLoad,
+                action: undoLoad
+            )
         }
+        .id(MenuItem.load)
+    }
+
+    private var canLoad: Bool { session?.hasState(slot: selectedSlot) == true }
+    private var canUndoSave: Bool { session?.hasUndoSave(slot: selectedSlot) == true }
+    private var canUndoLoad: Bool { session?.hasUndoLoad() == true }
+
+    private func load() {
+        let slot = selectedSlot
+        guard perform(success: "Slot \(slot) loaded", { try session?.loadState(slot: slot) }) else { return }
+        onResume()
+    }
+
+    private func save() {
+        let slot = selectedSlot
+        perform(success: "Slot \(slot) saved", { try session?.saveState(slot: slot) })
+        refreshTick += 1
+    }
+
+    private func undoSave() {
+        let slot = selectedSlot
+        perform(success: "Save for slot \(slot) undone", { try session?.undoSave(slot: slot) })
+        refreshTick += 1
+    }
+
+    private func undoLoad() {
+        guard perform(success: "Load undone", { try session?.undoLoad() }) else { return }
+        onResume()
     }
 
     @ViewBuilder
@@ -420,6 +521,7 @@ private struct LibretroMenuSheet: View {
         tint: Color,
         filled: Bool,
         disabled: Bool,
+        item: MenuItem,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -444,16 +546,22 @@ private struct LibretroMenuSheet: View {
                     .stroke(filled ? Color.clear : tint.opacity(0.4), lineWidth: 1)
             )
             .opacity(disabled ? 0.35 : 1)
+            .emulatorMenuFocusRing(focus.isFocused(item))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
     }
 
-    private func perform(_ action: () throws -> Void) {
+    /// Shows `success` or the error, and tells the caller which one it was.
+    @discardableResult
+    private func perform(success: String, _ action: () throws -> Void) -> Bool {
         do {
             try action()
+            statusMessage = success
+            return true
         } catch {
             statusMessage = "Error: \(error.localizedDescription)"
+            return false
         }
     }
 }

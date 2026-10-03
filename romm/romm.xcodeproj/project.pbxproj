@@ -327,7 +327,7 @@
 				UI/Emulator/Native/NativeEmulatorSession.swift,
 				UI/Emulator/Native/NativeEmulatorView.swift,
 				UI/Emulator/Native/NativeEmulatorViewModel.swift,
-				UI/Emulator/Native/NativeMenuShortcutInput.swift,
+				UI/Emulator/Native/NativeMenuInput.swift,
 				UI/Emulator/Native/RemoteGameController.swift,
 				UI/Emulator/PreLaunch/PreLaunchSheet.swift,
 				UI/Emulator/SecondPlayer/SecondControllerManager.swift,

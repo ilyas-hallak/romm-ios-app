@@ -2,8 +2,9 @@
 import DeltaCore
 import GameController
 
-/// Watches a physical controller for the configured menu shortcut combo and
-/// reports it to the native (DeltaCore) session.
+/// The controller side of the in-game menu on the native (DeltaCore) engine:
+/// watches for the configured shortcut combo that opens the menu, and steers
+/// the menu while it is open.
 ///
 /// The libretro engine owns the gamepad itself and can read raw buttons.
 /// DeltaCore owns it here, so this hooks in as an *additional*
@@ -18,8 +19,8 @@ import GameController
 /// read `StandardGameControllerInput`. Registering with the game mapping instead
 /// would deliver inputs already translated to the running system (`snes.a` and
 /// friends), where a shoulder button is no longer recognisable as one. The
-/// face-button swap is deliberately not applied either: it only rewrites A/B and
-/// X/Y, which no shortcut uses, so the receiver survives a swap untouched.
+/// face-button swap is therefore not in the mapping and is applied by hand where
+/// the menu needs it.
 ///
 /// L3/R3 is the exception. `MFiGameController` never installs a handler for the
 /// two thumbstick clicks, so they never enter the mapping and no `.deltamapping`
@@ -27,14 +28,29 @@ import GameController
 /// off the `GCController`, which takes nothing away from DeltaCore precisely
 /// because it ignores them.
 @MainActor
-final class NativeMenuShortcutInput: NSObject, GameControllerReceiver {
+final class NativeMenuInput: NSObject, GameControllerReceiver {
 
     /// Fired once the configured combo is complete. DeltaCore's own `.menu`
     /// input reaches the session on its own path and is never part of a combo,
     /// so the two cannot trigger each other.
     var onMenuRequested: (() -> Void)?
 
+    /// Fired for every menu step while `isNavigatingMenu` is on.
+    var onMenuCommand: ((EmulatorMenuCommand) -> Void)?
+
+    /// While on, inputs become menu commands and the combo closes the menu
+    /// instead of opening it. Keeping the inputs away from the core is the
+    /// session's job, it unhooks the core while the menu is open.
+    var isNavigatingMenu = false {
+        didSet {
+            stickX.reset()
+            stickY.reset()
+            isMenuButtonPressedInMenu = false
+        }
+    }
+
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference?
+    private let faceButtonPreference: PGamepadFaceButtonPreference?
 
     /// Buttons currently held, used to detect the menu shortcut combo.
     private var pressedButtons: Set<StandardGameControllerInput> = []
@@ -47,10 +63,20 @@ final class NativeMenuShortcutInput: NSObject, GameControllerReceiver {
     /// session, while inputs arrive up to once a frame. Kept current by
     /// `reloadPreferences()`.
     private var comboButtons: Set<StandardGameControllerInput>
+    /// Cached for the same reason as `comboButtons`.
+    private var isFaceButtonSwapped: Bool
 
-    init(menuShortcutPreference: PEmulatorMenuShortcutPreference?) {
+    private var stickX = EmulatorMenuStickAxis(negative: .left, positive: .right)
+    private var stickY = EmulatorMenuStickAxis(negative: .down, positive: .up)
+    /// Set when Menu goes down inside the menu, so only a full press there
+    /// closes it. See `handleRelease(of:)`.
+    private var isMenuButtonPressedInMenu = false
+
+    init(menuShortcutPreference: PEmulatorMenuShortcutPreference?, faceButtonPreference: PGamepadFaceButtonPreference?) {
         self.menuShortcutPreference = menuShortcutPreference
+        self.faceButtonPreference = faceButtonPreference
         self.comboButtons = Self.comboButtons(for: menuShortcutPreference?.current ?? .none)
+        self.isFaceButtonSwapped = faceButtonPreference?.isSwapped ?? false
         super.init()
     }
 
@@ -78,15 +104,34 @@ final class NativeMenuShortcutInput: NSObject, GameControllerReceiver {
     func reset() {
         pressedButtons.removeAll()
         comboLatched = false
+        isMenuButtonPressedInMenu = false
+        stickX.reset()
+        stickY.reset()
     }
 
-    /// Picks up a shortcut changed in the in-game menu, live. Only the combo is
-    /// re-read, nothing about the running core has to be touched. The latch is
-    /// cleared so a button still held from the old combo cannot suppress the
-    /// first press of the new one.
+    /// Picks up a shortcut or face-button swap changed in the in-game menu, live.
+    /// The latch is cleared so a button still held from the old combo cannot
+    /// suppress the first press of the new one.
     func reloadPreferences() {
         comboButtons = Self.comboButtons(for: menuShortcutPreference?.current ?? .none)
+        isFaceButtonSwapped = faceButtonPreference?.isSwapped ?? false
         comboLatched = false
+    }
+
+    /// The menu step behind a button, or `nil` when it does nothing in the menu.
+    /// Confirm is the button labelled A: the bottom one on an Xbox-style pad, the
+    /// right one when the player has told us their labels are the other way round.
+    /// Menu is left out on purpose, see `handleRelease(of:)`.
+    nonisolated static func menuCommand(for button: StandardGameControllerInput, faceButtonsSwapped: Bool) -> EmulatorMenuCommand? {
+        switch button {
+        case .up: return .up
+        case .down: return .down
+        case .left: return .left
+        case .right: return .right
+        case .a: return faceButtonsSwapped ? .back : .confirm
+        case .b: return faceButtonsSwapped ? .confirm : .back
+        default: return nil
+        }
     }
 
     // MARK: - GameControllerReceiver
@@ -96,29 +141,28 @@ final class NativeMenuShortcutInput: NSObject, GameControllerReceiver {
     // `view.window` straight out of these methods, so main is the contract here.
 
     nonisolated func gameController(_ gameController: GameController, didActivate input: Input, value: Double) {
-        guard let button = Self.shortcutButton(for: input) else { return }
+        guard let button = StandardGameControllerInput(input: input) else { return }
         MainActor.assumeIsolated {
-            self.set(button, pressed: true)
+            if button.isContinuous {
+                self.updateStick(button, value: Float(value))
+            } else {
+                self.set(button, pressed: true)
+            }
         }
     }
 
     nonisolated func gameController(_ gameController: GameController, didDeactivate input: Input) {
-        guard let button = Self.shortcutButton(for: input) else { return }
+        guard let button = StandardGameControllerInput(input: input) else { return }
         MainActor.assumeIsolated {
-            self.set(button, pressed: false)
+            if button.isContinuous {
+                self.updateStick(button, value: 0)
+            } else {
+                self.set(button, pressed: false)
+            }
         }
     }
 
     // MARK: - Private helpers
-
-    /// The standard input behind a delivered input, or `nil` when it cannot take
-    /// part in a combo. Analog sticks are dropped here: they are continuous and
-    /// would churn the pressed set several times a frame for nothing.
-    private nonisolated static func shortcutButton(for input: Input) -> StandardGameControllerInput? {
-        guard let button = StandardGameControllerInput(input: input) else { return nil }
-        guard !button.isContinuous else { return nil }
-        return button
-    }
 
     /// Reads the two thumbstick clicks off the physical pad. Only `MFiGameController`
     /// has one, a keyboard controller simply has no sticks to click.
@@ -154,12 +198,56 @@ final class NativeMenuShortcutInput: NSObject, GameControllerReceiver {
         } else {
             pressedButtons.remove(button)
         }
+        if isNavigatingMenu {
+            if pressed {
+                handlePress(of: button)
+            } else {
+                handleRelease(of: button)
+            }
+        }
         updateMenuCombo()
     }
 
-    /// Fires `onMenuRequested` once when every button of the configured combo is
-    /// held. The buttons keep going to the core through the receivers registered
-    /// alongside this one, the combo is purely additive.
+    private func handlePress(of button: StandardGameControllerInput) {
+        if button == .menu {
+            isMenuButtonPressedInMenu = true
+        }
+        guard let command = Self.menuCommand(for: button, faceButtonsSwapped: isFaceButtonSwapped) else { return }
+        onMenuCommand?(command)
+    }
+
+    /// Menu closes on release, not on press. DeltaCore's `GameViewController`
+    /// opens the menu on the release of the same button, and it is back in the
+    /// receiver list by then: closing on the press would reopen the menu at once.
+    /// The press has to have happened inside the menu too, otherwise the release
+    /// that just opened it could close it again.
+    private func handleRelease(of button: StandardGameControllerInput) {
+        guard button == .menu, isMenuButtonPressedInMenu else { return }
+        isMenuButtonPressedInMenu = false
+        onMenuCommand?(.back)
+    }
+
+    /// The left stick steps through the menu like the D-pad. The right stick is
+    /// left alone, it is too easy to brush while reaching for the face buttons.
+    private func updateStick(_ input: StandardGameControllerInput, value: Float) {
+        guard isNavigatingMenu else { return }
+        let command: EmulatorMenuCommand?
+        switch input {
+        case .leftThumbstickLeft: command = stickX.update(half: .negative, magnitude: value)
+        case .leftThumbstickRight: command = stickX.update(half: .positive, magnitude: value)
+        case .leftThumbstickDown: command = stickY.update(half: .negative, magnitude: value)
+        case .leftThumbstickUp: command = stickY.update(half: .positive, magnitude: value)
+        default: command = nil
+        }
+        if let command {
+            onMenuCommand?(command)
+        }
+    }
+
+    /// Fires once when every button of the configured combo is held. Outside the
+    /// menu it opens it, and the buttons keep going to the core through the
+    /// receivers registered alongside this one. Inside the menu it closes it, so
+    /// the same shortcut works both ways.
     private func updateMenuCombo() {
         let combo = comboButtons
         guard !combo.isEmpty else {
@@ -172,7 +260,11 @@ final class NativeMenuShortcutInput: NSObject, GameControllerReceiver {
         }
         guard !comboLatched else { return }
         comboLatched = true
-        onMenuRequested?()
+        if isNavigatingMenu {
+            onMenuCommand?(.back)
+        } else {
+            onMenuRequested?()
+        }
     }
 
     private static func comboButtons(for shortcut: EmulatorMenuShortcut) -> Set<StandardGameControllerInput> {
