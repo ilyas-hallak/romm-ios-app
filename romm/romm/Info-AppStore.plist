@@ -76,7 +76,6 @@
 					<string>chd</string>
 					<string>pbp</string>
 					<string>cso</string>
-					<string>iso</string>
 				</array>
 			</dict>
 		</dict>
@@ -91,6 +90,16 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>de.ilyashallak.rommanagerplus.rom-file</string>
+				<string>com.rileytestut.delta.game.gba</string>
+				<string>com.rileytestut.delta.game.gbc</string>
+				<string>com.rileytestut.delta.game.nes</string>
+				<string>com.rileytestut.delta.game.snes</string>
+				<string>com.rileytestut.delta.game.n64</string>
+				<string>com.rileytestut.delta.game.ds</string>
+				<string>com.rileytestut.delta.game.genesis</string>
+				<string>public.zip-archive</string>
+				<string>org.7-zip.7-zip-archive</string>
+				<string>public.iso-image</string>
 			</array>
 		</dict>
 	</array>
