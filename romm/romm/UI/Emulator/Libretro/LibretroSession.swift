@@ -23,6 +23,9 @@ final class LibretroSession: NSObject {
     private(set) var isRumbleActive = false
 
     var onMenuRequested: (() -> Void)?
+    /// Menu steps from player one's pad while the menu is open. The other
+    /// players are muted then, but cannot steer it.
+    var onMenuCommand: ((EmulatorMenuCommand) -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
     /// SwiftUI layer can show a standalone menu button in their place.
     var onControlsHiddenChanged: ((Bool) -> Void)?
@@ -95,6 +98,9 @@ final class LibretroSession: NSObject {
         // pause a game that is not theirs to pause.
         controllerInputs[0].onMenuRequested = { [weak self] in
             self?.onMenuRequested?()
+        }
+        controllerInputs[0].onMenuCommand = { [weak self] command in
+            self?.onMenuCommand?(command)
         }
 
         // Wire connect/disconnect so the input bridge stays in sync.
@@ -289,6 +295,16 @@ final class LibretroSession: NSObject {
 
     func pause() { frontend.pause() }
     func resume() { frontend.resume() }
+
+    /// Hands the pads to the in-game menu. The frontend keeps reading the
+    /// button state while paused, so the bridges stop writing to it.
+    func beginMenuNavigation() {
+        controllerInputs.forEach { $0.isNavigatingMenu = true }
+    }
+
+    func endMenuNavigation() {
+        controllerInputs.forEach { $0.isNavigatingMenu = false }
+    }
 
     /// Re-applies the hidden-video state on returning to the foreground.
     /// A background trip can rebuild the external display scene without
