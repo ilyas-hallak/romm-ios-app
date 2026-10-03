@@ -116,3 +116,78 @@ struct PlayStationPortDeviceTests {
         #expect(LibretroSession.playerOneDevice(rumble: true, analogSticks: false) == LibretroABI.DEVICE_PSE_DUALSHOCK)
     }
 }
+
+@MainActor
+struct DualShockAnalogSwitchTests {
+
+    @Test func idleSwitchPressesNothing() {
+        #expect(!DualShockAnalogSwitch().isPressingCombo)
+    }
+
+    @Test func requestHoldsTheComboForOneFrame() {
+        var analogSwitch = DualShockAnalogSwitch()
+        analogSwitch.requestAnalog()
+        #expect(analogSwitch.isPressingCombo)
+
+        analogSwitch.frameDidRun()
+        #expect(!analogSwitch.isPressingCombo)
+    }
+
+    @Test func analogOnEndsTheRequest() {
+        var analogSwitch = DualShockAnalogSwitch()
+        analogSwitch.requestAnalog()
+        analogSwitch.frameDidRun()
+        analogSwitch.coreReported(analog: true)
+        analogSwitch.frameDidRun()
+
+        #expect(!analogSwitch.isPressingCombo)
+    }
+
+    @Test func analogOffPressesAgainAfterAReleasedFrame() {
+        var analogSwitch = DualShockAnalogSwitch()
+        analogSwitch.requestAnalog()
+        analogSwitch.coreReported(analog: false)
+        #expect(!analogSwitch.isPressingCombo)
+
+        analogSwitch.frameDidRun()
+        #expect(analogSwitch.isPressingCombo)
+    }
+
+    @Test func givesUpAfterTheRetry() {
+        var analogSwitch = DualShockAnalogSwitch()
+        analogSwitch.requestAnalog()
+        analogSwitch.coreReported(analog: false)
+        analogSwitch.frameDidRun()
+        analogSwitch.frameDidRun()
+        analogSwitch.coreReported(analog: false)
+        analogSwitch.frameDidRun()
+
+        #expect(!analogSwitch.isPressingCombo)
+    }
+
+    @Test func togglesWithoutARequestAreIgnored() {
+        var analogSwitch = DualShockAnalogSwitch()
+        analogSwitch.coreReported(analog: false)
+        analogSwitch.frameDidRun()
+        #expect(!analogSwitch.isPressingCombo)
+    }
+
+    @Test func readsOnlyTheToggleMessages() {
+        #expect(DualShockAnalogSwitch.reportedMode(in: "ANALOG ON") == true)
+        #expect(DualShockAnalogSwitch.reportedMode(in: "ANALOG OFF") == false)
+        #expect(DualShockAnalogSwitch.reportedMode(in: "Disk 1 inserted") == nil)
+    }
+
+    @Test func frontendSendsOnlyTheComboWhilePressing() {
+        let frontend = LibretroFrontend.shared
+        defer { frontend.clearAllButtons(player: 0) }
+        frontend.setButton(.a, pressed: true, player: 0)
+        frontend.requestDualShockAnalogMode()
+        defer { frontend.coreDidShowMessage("ANALOG ON") }
+
+        #expect(frontend.isButtonPressed(Int(LibretroABI.JoypadButton.l.rawValue), player: 0))
+        #expect(frontend.isButtonPressed(Int(LibretroABI.JoypadButton.r.rawValue), player: 0))
+        #expect(frontend.isButtonPressed(Int(LibretroABI.JoypadButton.r3.rawValue), player: 0))
+        #expect(!frontend.isButtonPressed(Int(LibretroABI.JoypadButton.a.rawValue), player: 0))
+    }
+}

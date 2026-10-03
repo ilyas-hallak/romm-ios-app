@@ -287,6 +287,7 @@ final class LibretroSession: NSObject {
                 print("[Libretro] rumble enabled (\(preference.intensity.rawValue))")
             }
 
+            switchPadToAnalogIfNeeded()
             frontend.startRunLoop()
         } catch let error as LibretroFrontend.FrontendError {
             print("[Libretro] start failed: \(error.diagnosticDescription)")
@@ -365,6 +366,14 @@ final class LibretroSession: NSObject {
         guard offersAnalogSticks else { return }
         viewController.controllerView.layout = .forCore(core, analogSticks: usesAnalogSticks)
         frontend.setPlayerOneDevice(Self.playerOneDevice(rumble: isRumbleActive, analogSticks: usesAnalogSticks))
+        switchPadToAnalogIfNeeded()
+    }
+
+    /// Needed after every load and pad swap: both leave the DualShock in
+    /// whatever mode the core or the save state brings, mostly digital.
+    private func switchPadToAnalogIfNeeded() {
+        guard usesAnalogSticks else { return }
+        frontend.requestDualShockAnalogMode()
     }
 
     /// Sticks and rumble both only exist on the DualShock, without either the
@@ -450,6 +459,7 @@ final class LibretroSession: NSObject {
         guard frontend.loadStateData(data) else {
             throw LibretroFrontend.FrontendError.symbolMissing("retro_unserialize")
         }
+        switchPadToAnalogIfNeeded()
         // Discard audio queued before the jump so sound doesn't trail the picture.
         frontend.flushAudio()
     }
@@ -463,6 +473,7 @@ final class LibretroSession: NSObject {
         guard frontend.loadStateData(data) else {
             throw LibretroFrontend.FrontendError.symbolMissing("retro_unserialize")
         }
+        switchPadToAnalogIfNeeded()
         try saveStates.clearUndoLoad(romId: romId)
     }
 

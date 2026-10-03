@@ -107,7 +107,23 @@ final class LibretroFrontend {
     /// Reads one button for the core, which asks by raw index.
     func isButtonPressed(_ id: Int, player: Int) -> Bool {
         guard player < Self.maxPlayers, id >= 0, id < 16 else { return false }
+        if player == 0, analogSwitch.isPressingCombo {
+            return DualShockAnalogSwitch.combo.contains { Int($0.rawValue) == id }
+        }
         return playerButtons[player][id]
+    }
+
+    private var analogSwitch = DualShockAnalogSwitch()
+
+    /// Switches the DualShock in port one to analog mode, see `DualShockAnalogSwitch`.
+    func requestDualShockAnalogMode() {
+        analogSwitch.requestAnalog()
+    }
+
+    func coreDidShowMessage(_ message: String) {
+        guard let analog = DualShockAnalogSwitch.reportedMode(in: message) else { return }
+        print("[Libretro] dualshock analog mode: \(analog ? "on" : "off")")
+        analogSwitch.coreReported(analog: analog)
     }
 
     /// Stick positions per player: left x, left y, right x, right y, in the
@@ -446,6 +462,7 @@ final class LibretroFrontend {
             // call and would run at double speed.
             guard !coreIsAheadOfAudio() else { throttled += 1; break }
             retro_run?()
+            analogSwitch.frameDidRun()
             runs += 1
         }
 
@@ -541,6 +558,7 @@ final class LibretroFrontend {
         // into freed text segments. The rumble hook goes with them: the session
         // that owns its haptics is on its way out too.
         onRumbleChanged = nil
+        analogSwitch = DualShockAnalogSwitch()
         retro_init = nil; retro_deinit = nil
         retro_get_system_info = nil; retro_get_system_av_info = nil
         retro_set_environment = nil; retro_set_video_refresh = nil

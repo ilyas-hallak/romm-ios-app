@@ -128,6 +128,11 @@ enum LibretroABI {
         var value: UnsafePointer<CChar>?
     }
 
+    struct Message {
+        var msg: UnsafePointer<CChar>?
+        var frames: UInt32
+    }
+
     /// retro_rumble_interface. The core only copies the function pointer out of
     /// this struct, so it may live on the stack.
     struct RumbleInterface {
