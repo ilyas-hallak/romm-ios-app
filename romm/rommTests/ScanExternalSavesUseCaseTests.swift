@@ -41,6 +41,8 @@ private final class FakeHandoffStore: PExternalEmulatorHandoffStore, @unchecked 
     func hasHandedOff(romId: Int, to target: ExternalEmulatorID) -> Bool { false }
     func markHandedOff(romId: Int, to target: ExternalEmulatorID) {}
     func forget(romId: Int) {}
+    func hasCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID) -> Bool { false }
+    func markCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID) {}
     func cachedGameIdentifier(romId: Int, kind: ExternalGameIdentifierKind) -> String? {
         identifiers[romId]
     }
