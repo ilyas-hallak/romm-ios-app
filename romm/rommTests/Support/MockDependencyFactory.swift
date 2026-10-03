@@ -207,6 +207,10 @@ class MockDependencyFactory: PDependencyFactory {
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase {
         GetRomsWithFiltersUseCase(romsRepository: romsRepository)
     }
+
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase {
+        GetRecommendationsUseCase(romsRepository: romsRepository)
+    }
     
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase {
         GetRomDetailsUseCase(romsRepository: romsRepository)

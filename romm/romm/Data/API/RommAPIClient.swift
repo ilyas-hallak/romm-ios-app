@@ -56,6 +56,9 @@ protocol PRommAPIClient {
     // ROM Search API Wrapper methods
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema
 
+    // Recommendations API Wrapper methods
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema]
+
     // Collections API Wrapper methods
     func getCollections(limit: Int?, offset: Int?) async throws -> [CollectionSchema]
     func getCollection(id: Int) async throws -> CollectionSchema

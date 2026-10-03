@@ -11,23 +11,27 @@ import Observation
 class HomeViewModel {
     var recentlyAdded: [Rom] = []
     var continuePlaying: [Rom] = []
+    var recommendations: [Recommendation] = []
     var platforms: [Platform] = []
     var collections: [Collection] = []
 
     var isLoadingRecentlyAdded = true
     var isLoadingContinuePlaying = true
+    var isLoadingRecommendations = true
     var isLoadingPlatforms = true
     var isLoadingCollections = true
 
     var hasStartedLoading = false
 
     private let getRomsWithFiltersUseCase: GetRomsWithFiltersUseCase
+    private let getRecommendationsUseCase: GetRecommendationsUseCase
     private let getPlatformsUseCase: GetPlatformsUseCase
     private let getCollectionsUseCase: GetCollectionsUseCase
     private let tokenProvider: PTokenProvider
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.getRomsWithFiltersUseCase = factory.makeGetRomsWithFiltersUseCase()
+        self.getRecommendationsUseCase = factory.makeGetRecommendationsUseCase()
         self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
         self.getCollectionsUseCase = factory.makeGetCollectionsUseCase()
         self.tokenProvider = factory.tokenProvider
@@ -45,12 +49,14 @@ class HomeViewModel {
         hasStartedLoading = true
         isLoadingRecentlyAdded = true
         isLoadingContinuePlaying = true
+        isLoadingRecommendations = true
         isLoadingPlatforms = true
         isLoadingCollections = true
 
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.fetchRecentlyAdded() }
             group.addTask { await self.fetchContinuePlaying() }
+            group.addTask { await self.fetchRecommendations() }
             group.addTask { await self.fetchPlatforms() }
             group.addTask { await self.fetchCollections() }
         }
@@ -87,6 +93,17 @@ class HomeViewModel {
         isLoadingContinuePlaying = false
     }
 
+    private func fetchRecommendations() async {
+        do {
+            // Older servers don't expose this endpoint yet (404), so the
+            // section simply stays hidden instead of surfacing an error.
+            recommendations = try await getRecommendationsUseCase.execute(limit: 20)
+        } catch {
+            recommendations = []
+        }
+        isLoadingRecommendations = false
+    }
+
     private func fetchPlatforms() async {
         do {
             let all = try await getPlatformsUseCase.execute()
@@ -108,7 +125,7 @@ class HomeViewModel {
     }
 
     private func prefetchCovers() {
-        var urls = (recentlyAdded + continuePlaying).compactMap { $0.listCoverURL }.compactMap { URL(string: $0) }
+        var urls = (recentlyAdded + continuePlaying + recommendations.map(\.rom)).compactMap { $0.listCoverURL }.compactMap { URL(string: $0) }
         urls += collections.compactMap { coverURL(for: $0) }.compactMap { URL(string: $0) }
         KingfisherCacheManager.shared.preloadImages(urls: urls)
     }

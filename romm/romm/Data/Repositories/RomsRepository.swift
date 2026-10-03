@@ -233,6 +233,23 @@ class RomsRepository: PRomsRepository {
         return response.roms
     }
 
+    func getRecommendations(limit: Int) async throws -> [Recommendation] {
+        logger.info("✨ Getting recommendations (limit: \(limit))")
+
+        do {
+            let recommendations = try await apiClient.getRecommendations(limit: limit)
+            let domainRecommendations = recommendations.map {
+                Recommendation(rom: RomMapper.mapFromAPI($0.rom, resolver: coverResolver), seedRomName: $0.seedRomName)
+            }
+
+            logger.info("✅ Retrieved \(domainRecommendations.count) recommendations")
+            return domainRecommendations
+        } catch {
+            logger.error("❌ Error getting recommendations: \(error)")
+            throw RomError.networkError
+        }
+    }
+
     // MARK: - Favourites Collection
 
     /// Finds the user's own favourites collection, identified by the `is_favorite` flag.

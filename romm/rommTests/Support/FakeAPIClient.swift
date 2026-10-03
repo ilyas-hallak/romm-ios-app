@@ -39,6 +39,10 @@ final class FakeAPIClient: PRommAPIClient {
     /// Id handed back by `addPlatform`, so tests can assert the new platform lands in the list.
     var addedPlatformId = 77
 
+    /// Response served by `getRecommendations`; records the requested limit so tests can assert it's passed through.
+    var recommendationsToReturn: [RecommendedRomSchema] = []
+    var recommendationsLimitRequested: Int?
+
     // MARK: - Favourites relevant
 
     func getCurrentUser() async throws -> UserSchema {
@@ -111,6 +115,11 @@ final class FakeAPIClient: PRommAPIClient {
     func getRoms(searchTerm: String?, platformId: Int?, limit: Int) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
     func getRomsWithFilters(searchTerm: String?, platformId: Int?, collectionId: Int?, limit: Int, offset: Int?, withCharIndex: Bool?, orderBy: String?, orderDir: String?, filters: RomFilters) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema] {
+        if let errorToThrow { throw errorToThrow }
+        recommendationsLimitRequested = limit
+        return recommendationsToReturn
+    }
     func getCollection(id: Int) async throws -> CollectionSchema { fatalError("not used in these tests") }
     func getVirtualCollections(type: String, limit: Int?) async throws -> [VirtualCollectionSchema] { fatalError("not used in these tests") }
     func getVirtualCollection(id: String) async throws -> VirtualCollectionSchema { fatalError("not used in these tests") }
