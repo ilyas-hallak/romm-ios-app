@@ -27,7 +27,11 @@ final class LibretroSession: NSObject {
     /// one with two sticks. PSP always has its stick.
     var offersAnalogSticks: Bool { core == .pcsxRearmed }
     private var usesAnalogSticks: Bool {
-        offersAnalogSticks && (analogSticksPreference?.isEnabled ?? false)
+        Self.usesAnalogSticks(core: core, analogSticksPreference: analogSticksPreference)
+    }
+
+    private static func usesAnalogSticks(core: LibretroCore, analogSticksPreference: PAnalogSticksPreference?) -> Bool {
+        core == .pcsxRearmed && (analogSticksPreference?.isEnabled ?? false)
     }
 
     var onMenuRequested: (() -> Void)?
@@ -77,7 +81,7 @@ final class LibretroSession: NSObject {
         self.viewController = LibretroGameViewController(
             controllerLayout: .forCore(
                 core,
-                analogSticks: core == .pcsxRearmed && (analogSticksPreference?.isEnabled ?? false)
+                analogSticks: Self.usesAnalogSticks(core: core, analogSticksPreference: analogSticksPreference)
             ),
             gameURL: gameURL,
             aspectRatioPreference: aspectRatioPreference,
@@ -365,15 +369,22 @@ final class LibretroSession: NSObject {
     func reloadAnalogSticks() {
         guard offersAnalogSticks else { return }
         viewController.controllerView.layout = .forCore(core, analogSticks: usesAnalogSticks)
-        frontend.setPlayerOneDevice(Self.playerOneDevice(rumble: isRumbleActive, analogSticks: usesAnalogSticks))
-        switchPadToAnalogIfNeeded()
+        let device = Self.playerOneDevice(rumble: isRumbleActive, analogSticks: usesAnalogSticks)
+        frontend.setPlayerOneDevice(device)
+        if usesAnalogSticks {
+            switchPadToAnalogIfNeeded()
+        } else if device == LibretroABI.DEVICE_PSE_DUALSHOCK {
+            // Rumble keeps the port on the DualShock even with sticks off, so the
+            // pad itself also needs to be switched back to digital.
+            frontend.requestDualShockMode(analog: false)
+        }
     }
 
     /// Needed after every load and pad swap: both leave the DualShock in
     /// whatever mode the core or the save state brings, mostly digital.
     private func switchPadToAnalogIfNeeded() {
         guard usesAnalogSticks else { return }
-        frontend.requestDualShockAnalogMode()
+        frontend.requestDualShockMode(analog: true)
     }
 
     /// Sticks and rumble both only exist on the DualShock, without either the

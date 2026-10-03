@@ -488,7 +488,7 @@ final class LibretroTouchControllerView: UIView {
         dpad.frame = CGRect(x: 24 + safe.left, y: dpadY, width: dpadSize, height: dpadSize)
         layoutFaces(faceX: w - dpadSize - 24 - safe.right, faceY: dpadY, faceSize: dpadSize)
 
-        layoutShoulders(width: 72, height: 36, top: 16 + safe.top, left: 24 + safe.left, right: w - 24 - safe.right)
+        layoutShoulderColumns(width: 72, height: 36, top: 16 + safe.top, left: 24 + safe.left, right: w - 24 - safe.right)
         layoutStickButtons(size: CGSize(width: 56, height: centerH), y: centerY, left: 24 + safe.left, right: w - 24 - safe.right)
 
         let menuSize: CGFloat = 44
@@ -519,7 +519,7 @@ final class LibretroTouchControllerView: UIView {
 
         _ = layoutSticks(size: min(dpadSize * 0.62, 150), centerWidth: centerW, centerY: centerY)
 
-        layoutShoulders(width: 84, height: 40, top: edgePad + safe.top, left: edgePad + safe.left, right: w - edgePad - safe.right)
+        layoutShoulderColumns(width: 84, height: 40, top: edgePad + safe.top, left: edgePad + safe.left, right: w - edgePad - safe.right)
 
         let menuSize: CGFloat = 44
         menuButton.frame = CGRect(x: (w - menuSize) / 2, y: edgePad + safe.top, width: menuSize, height: menuSize)
@@ -617,7 +617,7 @@ final class LibretroTouchControllerView: UIView {
     }
 
     /// Shoulder rows from the top down, left pair member against the left edge.
-    private func layoutShoulders(width: CGFloat, height: CGFloat, top: CGFloat, left: CGFloat, right: CGFloat) {
+    private func layoutShoulderColumns(width: CGFloat, height: CGFloat, top: CGFloat, left: CGFloat, right: CGFloat) {
         for (row, pair) in layout.shoulderRows.enumerated() {
             let y = top + CGFloat(row) * (height + 8)
             face(pair.left)?.frame = CGRect(x: left, y: y, width: width, height: height)

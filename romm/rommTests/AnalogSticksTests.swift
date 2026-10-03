@@ -117,6 +117,20 @@ struct PlayStationPortDeviceTests {
     }
 }
 
+/// Models one emulated frame the way `LibretroFrontend` drives it: the core
+/// polls `isPressingCombo` during `retro_run`, may synchronously report a
+/// toggle through `coreReported` from inside that same call, and only then
+/// does `frameDidRun` run.
+@MainActor
+private func runFrame(_ analogSwitch: inout DualShockAnalogSwitch, reports message: Bool? = nil) -> Bool {
+    let wasPressing = analogSwitch.isPressingCombo
+    if let message {
+        analogSwitch.coreReported(analog: message)
+    }
+    analogSwitch.frameDidRun()
+    return wasPressing
+}
+
 @MainActor
 struct DualShockAnalogSwitchTests {
 
@@ -126,49 +140,56 @@ struct DualShockAnalogSwitchTests {
 
     @Test func requestHoldsTheComboForOneFrame() {
         var analogSwitch = DualShockAnalogSwitch()
-        analogSwitch.requestAnalog()
+        analogSwitch.request(analog: true)
         #expect(analogSwitch.isPressingCombo)
 
-        analogSwitch.frameDidRun()
+        _ = runFrame(&analogSwitch)
         #expect(!analogSwitch.isPressingCombo)
     }
 
     @Test func analogOnEndsTheRequest() {
         var analogSwitch = DualShockAnalogSwitch()
-        analogSwitch.requestAnalog()
-        analogSwitch.frameDidRun()
-        analogSwitch.coreReported(analog: true)
-        analogSwitch.frameDidRun()
+        analogSwitch.request(analog: true)
 
+        // Frame 1: the combo is held, the core reports the target mode.
+        let pressed = runFrame(&analogSwitch, reports: true)
+        #expect(pressed)
         #expect(!analogSwitch.isPressingCombo)
     }
 
-    @Test func analogOffPressesAgainAfterAReleasedFrame() {
+    @Test func analogOffRetriesAfterOneReleasedFrame() {
         var analogSwitch = DualShockAnalogSwitch()
-        analogSwitch.requestAnalog()
-        analogSwitch.coreReported(analog: false)
+        analogSwitch.request(analog: true)
+
+        // Frame 1: combo held, core reports the opposite of the target.
+        let pressed1 = runFrame(&analogSwitch, reports: false)
+        #expect(pressed1)
         #expect(!analogSwitch.isPressingCombo)
 
-        analogSwitch.frameDidRun()
+        // Frame 2: the core must see the combo released this frame.
+        let pressed2 = runFrame(&analogSwitch)
+        #expect(!pressed2)
+
+        // Frame 3: only now is the combo pressed again.
         #expect(analogSwitch.isPressingCombo)
     }
 
     @Test func givesUpAfterTheRetry() {
         var analogSwitch = DualShockAnalogSwitch()
-        analogSwitch.requestAnalog()
-        analogSwitch.coreReported(analog: false)
-        analogSwitch.frameDidRun()
-        analogSwitch.frameDidRun()
-        analogSwitch.coreReported(analog: false)
-        analogSwitch.frameDidRun()
+        analogSwitch.request(analog: true)
+
+        _ = runFrame(&analogSwitch, reports: false)
+        _ = runFrame(&analogSwitch)
+        // Frame 3: the retry press.
+        #expect(analogSwitch.isPressingCombo)
+        _ = runFrame(&analogSwitch, reports: false)
 
         #expect(!analogSwitch.isPressingCombo)
     }
 
     @Test func togglesWithoutARequestAreIgnored() {
         var analogSwitch = DualShockAnalogSwitch()
-        analogSwitch.coreReported(analog: false)
-        analogSwitch.frameDidRun()
+        _ = runFrame(&analogSwitch, reports: false)
         #expect(!analogSwitch.isPressingCombo)
     }
 
@@ -182,12 +203,61 @@ struct DualShockAnalogSwitchTests {
         let frontend = LibretroFrontend.shared
         defer { frontend.clearAllButtons(player: 0) }
         frontend.setButton(.a, pressed: true, player: 0)
-        frontend.requestDualShockAnalogMode()
+        frontend.requestDualShockMode(analog: true)
         defer { frontend.coreDidShowMessage("ANALOG ON") }
 
         #expect(frontend.isButtonPressed(Int(LibretroABI.JoypadButton.l.rawValue), player: 0))
         #expect(frontend.isButtonPressed(Int(LibretroABI.JoypadButton.r.rawValue), player: 0))
         #expect(frontend.isButtonPressed(Int(LibretroABI.JoypadButton.r3.rawValue), player: 0))
         #expect(!frontend.isButtonPressed(Int(LibretroABI.JoypadButton.a.rawValue), player: 0))
+    }
+}
+
+struct AnalogSticksPreferenceStoreTests {
+    private func makeDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "test.\(UUID().uuidString)")!
+    }
+
+    @Test func offByDefault() {
+        let store = UserDefaultsAnalogSticksPreferenceStore(userDefaults: makeDefaults())
+        #expect(!store.isEnabled)
+    }
+
+    @Test func persistsAcrossInstances() {
+        let defaults = makeDefaults()
+        UserDefaultsAnalogSticksPreferenceStore(userDefaults: defaults).isEnabled = true
+        let reopened = UserDefaultsAnalogSticksPreferenceStore(userDefaults: defaults)
+        #expect(reopened.isEnabled)
+    }
+}
+
+@MainActor
+struct ShoulderRowLayoutTests {
+
+    @Test func dualShockHasTwoShoulderRows() {
+        let rows = LibretroTouchControllerView.Layout.dualShock.shoulderRows
+        #expect(rows.count == 2)
+        #expect(rows[0].left == .l && rows[0].right == .r)
+        #expect(rows[1].left == .l2 && rows[1].right == .r2)
+    }
+
+    @Test func pspHasOneShoulderRow() {
+        let rows = LibretroTouchControllerView.Layout.psp.shoulderRows
+        #expect(rows.count == 1)
+        #expect(rows[0].left == .l && rows[0].right == .r)
+    }
+}
+
+struct PhysicalStickInversionTests {
+
+    @Test func upOnTheControllerBecomesNegativeYForLibretro() {
+        let mapped = LibretroControllerInput.libretroStickValue(x: 0, y: 1)
+        #expect(mapped.y == -1)
+    }
+
+    @Test func xPassesThrough() {
+        let mapped = LibretroControllerInput.libretroStickValue(x: 0.5, y: 0)
+        #expect(mapped.x == 0.5)
+        #expect(mapped.y == 0)
     }
 }

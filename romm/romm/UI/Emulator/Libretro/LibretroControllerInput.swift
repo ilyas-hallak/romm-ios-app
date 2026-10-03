@@ -169,12 +169,17 @@ final class LibretroControllerInput {
         }
     }
 
-    /// GameController reports up as positive y, libretro wants it negative.
+    /// GameController reports up as positive y, libretro wants it negative; x passes through.
+    nonisolated static func libretroStickValue(x: Float, y: Float) -> (x: Double, y: Double) {
+        (Double(x), Double(-y))
+    }
+
     private func stickHandler(for stick: LibretroABI.AnalogStick) -> GCControllerDirectionPadValueChangedHandler {
         return { [weak self] _, x, y in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.frontend?.setStick(stick, x: Double(x), y: Double(-y), player: self.player)
+                let mapped = Self.libretroStickValue(x: x, y: y)
+                self.frontend?.setStick(stick, x: mapped.x, y: mapped.y, player: self.player)
             }
         }
     }

@@ -15,10 +15,10 @@ struct DualShockAnalogSwitch {
     static let combo: Set<LibretroABI.JoypadButton> = [.l, .r, .r3]
     static let coreOptionValue = "l1+r1+r3"
 
-    /// One retry covers the case where the pad was already in analog mode.
+    /// One retry covers the case where the pad was already in the target mode.
     private static let maxPresses = 2
 
-    private var wantsAnalog = false
+    private var targetAnalog: Bool?
     private var presses = 0
     private var gapFrames = 0
     private var holdFrames = 0
@@ -26,8 +26,8 @@ struct DualShockAnalogSwitch {
     /// True while the combo replaces the player's own buttons.
     var isPressingCombo: Bool { gapFrames == 0 && holdFrames > 0 }
 
-    mutating func requestAnalog() {
-        wantsAnalog = true
+    mutating func request(analog: Bool) {
+        targetAnalog = analog
         presses = 0
         press(afterGap: 0)
     }
@@ -43,18 +43,20 @@ struct DualShockAnalogSwitch {
 
     /// Feeds back the mode the core reported after a toggle.
     mutating func coreReported(analog: Bool) {
-        guard wantsAnalog else { return }
-        if analog || presses >= Self.maxPresses {
-            wantsAnalog = false
+        guard let target = targetAnalog else { return }
+        if analog == target || presses >= Self.maxPresses {
+            targetAnalog = nil
             holdFrames = 0
         } else {
-            // The core only sees a new press after a frame with the combo released.
-            press(afterGap: 1)
+            // The message comes from inside retro_run, so this frame's
+            // frameDidRun still follows. A gap of 2 leaves one released frame.
+            press(afterGap: 2)
         }
     }
 
     /// Reads the core's toggle message, nil for any other message.
     static func reportedMode(in message: String) -> Bool? {
+        // Exact texts PCSX ReARMed's update_input shows when the combo toggles the mode.
         switch message {
         case "ANALOG ON": return true
         case "ANALOG OFF": return false
