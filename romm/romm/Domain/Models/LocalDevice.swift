@@ -61,12 +61,6 @@ struct LocalDevice: PDevice, Codable {
         ByteCountFormatter.string(fromByteCount: totalStorageBytes, countStyle: .file)
     }
 
-    var storageUsagePercentage: Double {
-        guard totalStorageBytes > 0 else { return 0 }
-        let usedBytes = totalStorageBytes - availableStorageBytes
-        return Double(usedBytes) / Double(totalStorageBytes) * 100
-    }
-
     var hasLowStorage: Bool {
         // Consider storage low if less than 1GB available
         return availableStorageBytes < 1_000_000_000
