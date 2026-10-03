@@ -117,6 +117,7 @@ final class LibretroFrontend {
 
     /// Switches the DualShock in port one to analog mode, see `DualShockAnalogSwitch`.
     func requestDualShockAnalogMode() {
+        print("[Libretro] dualshock analog mode requested")
         analogSwitch.requestAnalog()
     }
 
