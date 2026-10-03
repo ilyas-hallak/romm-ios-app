@@ -351,6 +351,10 @@ final class LibretroTouchControllerView: UIView {
             addFace(.r2, "R2", .darkGray, thin: true, font: 16)
             addFace(.select, "SELECT", .darkGray, thin: true, font: 12)
             addFace(.start, "START", .darkGray, thin: true, font: 12)
+            if layout == .dualShock {
+                addFace(.l3, "L3", .darkGray, thin: true, font: 14)
+                addFace(.r3, "R3", .darkGray, thin: true, font: 14)
+            }
 
         case .psp:
             addPlayStationFaces()
@@ -485,6 +489,7 @@ final class LibretroTouchControllerView: UIView {
         layoutFaces(faceX: w - dpadSize - 24 - safe.right, faceY: dpadY, faceSize: dpadSize)
 
         layoutShoulders(width: 72, height: 36, top: 16 + safe.top, left: 24 + safe.left, right: w - 24 - safe.right)
+        layoutStickButtons(size: CGSize(width: 56, height: centerH), y: centerY, left: 24 + safe.left, right: w - 24 - safe.right)
 
         let menuSize: CGFloat = 44
         menuButton.frame = CGRect(x: (w - menuSize) / 2, y: 16 + safe.top, width: menuSize, height: menuSize)
@@ -493,6 +498,10 @@ final class LibretroTouchControllerView: UIView {
     /// Landscape: D-Pad unten-links, Face-Buttons unten-rechts, L1/L2 oben links übereinander,
     /// R1/R2 oben rechts übereinander, Start/Select unten-mittig, Menu oben Mitte.
     private func layoutLandscape() {
+        guard thumbsticks.isEmpty else {
+            layoutLandscapeWithSticks()
+            return
+        }
         let w = bounds.width
         let h = bounds.height
         let safe = safeAreaInsets
@@ -514,6 +523,63 @@ final class LibretroTouchControllerView: UIView {
 
         let menuSize: CGFloat = 44
         menuButton.frame = CGRect(x: (w - menuSize) / 2, y: edgePad + safe.top, width: menuSize, height: menuSize)
+    }
+
+    /// Like a real pad: shoulders in one row at the top with Select, the menu
+    /// and Start between them, D-pad and face buttons at mid height, the sticks
+    /// below and further in, L3 and R3 in the bottom corners.
+    private func layoutLandscapeWithSticks() {
+        let w = bounds.width
+        let h = bounds.height
+        let safe = safeAreaInsets
+        let edgePad: CGFloat = 16
+        let left = edgePad + safe.left
+        let right = w - edgePad - safe.right
+        let top = edgePad + safe.top
+        let bottom = h - edgePad - safe.bottom
+
+        let menuSize: CGFloat = 44
+        menuButton.frame = CGRect(x: (w - menuSize) / 2, y: top, width: menuSize, height: menuSize)
+        let centerW: CGFloat = 76
+        let centerH: CGFloat = 32
+        let centerY = top + (menuSize - centerH) / 2
+        face(.select)?.frame = CGRect(x: w / 2 - menuSize / 2 - 12 - centerW, y: centerY, width: centerW, height: centerH)
+        face(.start)?.frame = CGRect(x: w / 2 + menuSize / 2 + 12, y: centerY, width: centerW, height: centerH)
+
+        let shoulder = CGSize(width: 76, height: 40)
+        layoutShoulderRow(size: shoulder, y: top, left: left, right: right)
+
+        let stickButton = CGSize(width: 52, height: 40)
+        layoutStickButtons(size: stickButton, y: bottom - stickButton.height, left: left, right: right)
+
+        // D-pad and sticks share the height below the shoulders, the sticks
+        // start at the D-pad's centre so a thumb slides down onto them.
+        let available = bottom - (top + shoulder.height + 12)
+        let padSize = min(available * 0.49, 200)
+        let stickSize = min(available * 0.49, 180)
+        let padY = top + shoulder.height + 12
+        dpad.frame = CGRect(x: left, y: padY, width: padSize, height: padSize)
+        layoutFaces(faceX: right - padSize, faceY: padY, faceSize: padSize)
+
+        let stickY = bottom - stickSize
+        for view in thumbsticks {
+            let x = view.stick == .left ? left + padSize / 2 : right - padSize / 2 - stickSize
+            view.frame = CGRect(x: x, y: stickY, width: stickSize, height: stickSize)
+        }
+    }
+
+    /// All shoulders in one row per side, the second pair outermost (L2 L1, R1 R2).
+    private func layoutShoulderRow(size: CGSize, y: CGFloat, left: CGFloat, right: CGFloat) {
+        for (row, pair) in layout.shoulderRows.reversed().enumerated() {
+            let offset = CGFloat(row) * (size.width + 8)
+            face(pair.left)?.frame = CGRect(x: left + offset, y: y, width: size.width, height: size.height)
+            face(pair.right)?.frame = CGRect(x: right - offset - size.width, y: y, width: size.width, height: size.height)
+        }
+    }
+
+    private func layoutStickButtons(size: CGSize, y: CGFloat, left: CGFloat, right: CGFloat) {
+        face(.l3)?.frame = CGRect(x: left, y: y, width: size.width, height: size.height)
+        face(.r3)?.frame = CGRect(x: right - size.width, y: y, width: size.width, height: size.height)
     }
 
     private func layoutFaces(faceX: CGFloat, faceY: CGFloat, faceSize: CGFloat) {
