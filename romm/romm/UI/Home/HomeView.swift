@@ -80,14 +80,12 @@ struct HomeView: View {
                 HomeRomSection(
                     title: "Continue Playing",
                     items: viewModel.continuePlaying,
-                    isLoading: viewModel.isLoadingContinuePlaying,
-                    rom: { $0 }
+                    isLoading: viewModel.isLoadingContinuePlaying
                 )
                 HomeRomSection(
                     title: "Recently Added",
                     items: viewModel.recentlyAdded,
-                    isLoading: viewModel.isLoadingRecentlyAdded,
-                    rom: { $0 }
+                    isLoading: viewModel.isLoadingRecentlyAdded
                 )
                 HomeRomSection(
                     title: "Recommended for You",
@@ -201,6 +199,12 @@ private struct HomeRomSection<Item: Identifiable>: View {
                 }
             }
         }
+    }
+}
+
+private extension HomeRomSection where Item == Rom {
+    init(title: String, items: [Rom], isLoading: Bool) {
+        self.init(title: title, items: items, isLoading: isLoading, rom: { $0 })
     }
 }
 

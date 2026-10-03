@@ -97,7 +97,7 @@ class HomeViewModel {
         do {
             // Older servers don't expose this endpoint yet (404), so the
             // section simply stays hidden instead of surfacing an error.
-            recommendations = try await getRecommendationsUseCase.execute(limit: 20)
+            recommendations = try await getRecommendationsUseCase.execute()
         } catch {
             recommendations = []
         }

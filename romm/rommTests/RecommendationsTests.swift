@@ -12,8 +12,8 @@ import Foundation
 
 struct RecommendationsDecodingTests {
 
-    private func decode(_ json: String) throws -> [RecommendedRomSchema] {
-        try JSONDecoder().decode([RecommendedRomSchema].self, from: Data(json.utf8))
+    private func decodeLossy(_ json: String) throws -> [RecommendedRomSchema] {
+        try JSONDecoder().decode(LossyArray<RecommendedRomSchema>.self, from: Data(json.utf8)).elements
     }
 
     private func simpleRomJSON(id: Int, name: String) -> String {
@@ -72,77 +72,62 @@ struct RecommendationsDecodingTests {
           {
             "rom": \(simpleRomJSON(id: 1, name: "Metroid Fusion")),
             "score": 0.92,
-            "reasons": [
-              { "facet": "franchise", "value": "Metroid" },
-              { "facet": "genre", "value": "Platformer" }
-            ],
             "seed_rom_id": 42,
             "seed_rom_name": "Metroid Zero Mission"
           }
         ]
         """
-        let recommendations = try decode(json)
+        let recommendations = try decodeLossy(json)
         #expect(recommendations.count == 1)
         let first = recommendations[0]
         #expect(first.rom.id == 1)
         #expect(first.rom.name == "Metroid Fusion")
-        #expect(first.score == 0.92)
-        #expect(first.reasons.count == 2)
-        #expect(first.reasons[0].facet == "franchise")
-        #expect(first.reasons[0].value == "Metroid")
-        #expect(first.seedRomId == 42)
         #expect(first.seedRomName == "Metroid Zero Mission")
     }
 
-    @Test func seedRomFieldsDefaultToNilWhenMissing() throws {
+    @Test func seedRomNameDefaultsToNilWhenMissing() throws {
         let json = """
         [
           {
-            "rom": \(simpleRomJSON(id: 2, name: "Super Mario Advance")),
-            "score": 0.5,
-            "reasons": []
+            "rom": \(simpleRomJSON(id: 2, name: "Super Mario Advance"))
           }
         ]
         """
-        let recommendations = try decode(json)
+        let recommendations = try decodeLossy(json)
         #expect(recommendations.count == 1)
-        #expect(recommendations[0].seedRomId == nil)
         #expect(recommendations[0].seedRomName == nil)
     }
 
-    @Test func seedRomFieldsDecodeAsNilWhenExplicitlyNull() throws {
+    @Test func seedRomNameDecodesAsNilWhenExplicitlyNull() throws {
         let json = """
         [
           {
             "rom": \(simpleRomJSON(id: 3, name: "Golden Sun")),
-            "score": 0.75,
-            "reasons": [],
-            "seed_rom_id": null,
             "seed_rom_name": null
           }
         ]
         """
-        let recommendations = try decode(json)
-        #expect(recommendations[0].seedRomId == nil)
+        let recommendations = try decodeLossy(json)
         #expect(recommendations[0].seedRomName == nil)
     }
 
-    @Test func unknownFacetValueDecodesAsPlainString() throws {
+    @Test func skipsMalformedItemButKeepsValidOnesAroundIt() throws {
         let json = """
         [
           {
-            "rom": \(simpleRomJSON(id: 4, name: "Fire Emblem")),
-            "score": 0.6,
-            "reasons": [
-              { "facet": "a_future_facet_not_in_the_docs", "value": "something" }
-            ],
-            "seed_rom_name": "Fire Emblem: The Sacred Stones"
+            "rom": \(simpleRomJSON(id: 1, name: "Metroid Fusion")),
+            "seed_rom_name": "Metroid Zero Mission"
+          },
+          {
+            "rom": { "name": "Missing Id" }
+          },
+          {
+            "rom": \(simpleRomJSON(id: 3, name: "Golden Sun"))
           }
         ]
         """
-        let recommendations = try decode(json)
-        #expect(recommendations[0].reasons.first?.facet == "a_future_facet_not_in_the_docs")
-        #expect(recommendations[0].reasons.first?.value == "something")
+        let recommendations = try decodeLossy(json)
+        #expect(recommendations.map(\.rom.id) == [1, 3])
     }
 }
 
@@ -151,8 +136,8 @@ struct RomsRepositoryRecommendationsTests {
     @Test func mapsRecommendationsToDomainPreservingOrderAndSeedName() async throws {
         let api = FakeAPIClient()
         api.recommendationsToReturn = [
-            RecommendedRomSchema(rom: makeSimpleRom(id: 10, name: "Chrono Trigger"), score: 0.9, reasons: [], seedRomId: 1, seedRomName: "Chrono Cross"),
-            RecommendedRomSchema(rom: makeSimpleRom(id: 11, name: "Secret of Mana"), score: 0.8, reasons: [], seedRomId: nil, seedRomName: nil)
+            RecommendedRomSchema(rom: makeSimpleRom(id: 10, name: "Chrono Trigger"), seedRomName: "Chrono Cross"),
+            RecommendedRomSchema(rom: makeSimpleRom(id: 11, name: "Secret of Mana"), seedRomName: nil)
         ]
         let repository = RomsRepository(apiClient: api)
 
@@ -167,92 +152,32 @@ struct RomsRepositoryRecommendationsTests {
         #expect(recommendations[1].rom.name == "Secret of Mana")
         #expect(recommendations[1].seedRomName == nil)
     }
-}
 
-private func makeSimpleRom(id: Int, name: String) -> SimpleRomSchema {
-    SimpleRomSchema(
-        id: id,
-        igdbId: nil,
-        sgdbId: nil,
-        mobyId: nil,
-        ssId: nil,
-        raId: nil,
-        launchboxId: nil,
-        hasheousId: nil,
-        tgdbId: nil,
-        platformId: 1,
-        platformSlug: "snes",
-        platformFsSlug: "snes",
-        platformName: "Super Nintendo",
-        platformCustomName: nil,
-        platformDisplayName: "Super Nintendo",
-        fsName: "\(name).sfc",
-        fsNameNoTags: name,
-        fsNameNoExt: name,
-        fsExtension: "sfc",
-        fsPath: "snes/\(name).sfc",
-        fsSizeBytes: 1024,
-        name: name,
-        slug: name.lowercased().replacingOccurrences(of: " ", with: "-"),
-        summary: nil,
-        alternativeNames: [],
-        youtubeVideoId: nil,
-        metadatum: RomMetadataSchema(
-            romId: id,
-            genres: [],
-            franchises: [],
-            collections: [],
-            companies: [],
-            gameModes: [],
-            ageRatings: [],
-            firstReleaseDate: nil,
-            averageRating: nil
-        ),
-        igdbMetadata: nil,
-        mobyMetadata: nil,
-        ssMetadata: nil,
-        launchboxMetadata: nil,
-        hasheousMetadata: nil,
-        pathCoverSmall: nil,
-        pathCoverLarge: nil,
-        urlCover: nil,
-        hasManual: false,
-        pathManual: nil,
-        urlManual: nil,
-        isUnidentified: false,
-        isIdentified: true,
-        revision: nil,
-        regions: [],
-        languages: [],
-        tags: [],
-        crcHash: nil,
-        md5Hash: nil,
-        sha1Hash: nil,
-        multi: nil,
-        files: [],
-        fullPath: "snes/\(name).sfc",
-        createdAt: Date(timeIntervalSince1970: 0),
-        updatedAt: Date(timeIntervalSince1970: 0),
-        missingFromFs: false,
-        siblings: [],
-        romUser: RomUserSchema(
-            id: 1,
-            userId: 1,
-            romId: id,
-            createdAt: Date(timeIntervalSince1970: 0),
-            updatedAt: Date(timeIntervalSince1970: 0),
-            lastPlayed: nil,
-            noteRawMarkdown: nil,
-            noteIsPublic: nil,
-            isMainSibling: nil,
-            backlogged: false,
-            nowPlaying: false,
-            hidden: false,
-            rating: 0,
-            difficulty: 0,
-            completion: 0,
-            status: nil,
-            userUsername: "user1"
-        )
-    )
+    @Test func dedupesRecommendationsByRomIdKeepingFirstOccurrence() async throws {
+        let api = FakeAPIClient()
+        api.recommendationsToReturn = [
+            RecommendedRomSchema(rom: makeSimpleRom(id: 10, name: "Chrono Trigger"), seedRomName: "Chrono Cross"),
+            RecommendedRomSchema(rom: makeSimpleRom(id: 10, name: "Chrono Trigger"), seedRomName: "Secret of Mana"),
+            RecommendedRomSchema(rom: makeSimpleRom(id: 11, name: "Secret of Mana"), seedRomName: nil)
+        ]
+        let repository = RomsRepository(apiClient: api)
+
+        let recommendations = try await repository.getRecommendations(limit: 10)
+
+        #expect(recommendations.map(\.rom.id) == [10, 11])
+        #expect(recommendations[0].seedRomName == "Chrono Cross")
+    }
+
+    @Test func propagatesNetworkErrorWhenAPICallFails() async {
+        let api = FakeAPIClient()
+        api.errorToThrow = FakeAPIError()
+        let repository = RomsRepository(apiClient: api)
+
+        do {
+            _ = try await repository.getRecommendations(limit: 10)
+            Issue.record("expected RomError.networkError")
+        } catch {
+            #expect(error as? RomError == .networkError)
+        }
+    }
 }

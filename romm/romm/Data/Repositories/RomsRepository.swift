@@ -238,8 +238,12 @@ class RomsRepository: PRomsRepository {
 
         do {
             let recommendations = try await apiClient.getRecommendations(limit: limit)
-            let domainRecommendations = recommendations.map {
-                Recommendation(rom: RomMapper.mapFromAPI($0.rom, resolver: coverResolver), seedRomName: $0.seedRomName)
+            // Keep the first occurrence of each rom id: the server orders by rank,
+            // and SwiftUI's ForEach can't cope with duplicate ids.
+            var seenRomIds = Set<Int>()
+            let domainRecommendations = recommendations.compactMap { item -> Recommendation? in
+                guard seenRomIds.insert(item.rom.id).inserted else { return nil }
+                return Recommendation(rom: RomMapper.mapFromAPI(item.rom, resolver: coverResolver), seedRomName: item.seedRomName)
             }
 
             logger.info("✅ Retrieved \(domainRecommendations.count) recommendations")
