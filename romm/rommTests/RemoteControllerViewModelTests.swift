@@ -51,11 +51,13 @@ struct RemoteControllerViewModelTests {
         let (viewModel, service) = makeSut()
         service.simulateState(.connected(hostName: "Host"))
         service.simulateHosts([RemoteControllerHost(id: "1", name: "Host")])
+        service.simulateLayout(.deltaSkin(gameType: "n64"))
 
         viewModel.stop()
 
         #expect(viewModel.state == .idle)
         #expect(viewModel.hosts.isEmpty)
+        #expect(viewModel.layout == .standard)
         #expect(service.disconnectCount == 1)
         #expect(service.stopBrowsingCalled)
     }
