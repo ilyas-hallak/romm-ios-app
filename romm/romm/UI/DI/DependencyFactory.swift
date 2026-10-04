@@ -37,6 +37,7 @@ protocol PDependencyFactory {
     func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase
     func makeGetRomsUseCase() -> GetRomsUseCase
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase
     func makeToggleRomFavoriteUseCase() -> ToggleRomFavoriteUseCase
     func makeCheckRomFavoriteStatusUseCase() -> CheckRomFavoriteStatusUseCase
@@ -148,6 +149,7 @@ protocol PDependencyFactory {
     var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference { get }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
+    var analogSticksPreference: PAnalogSticksPreference { get }
     var rumblePreference: PRumblePreference { get }
     var emulatorBezelPreference: PEmulatorBezelPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
@@ -244,7 +246,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase {
         GetRomsWithFiltersUseCase(romsRepository: romsRepository)
     }
-    
+
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase {
+        GetRecommendationsUseCase(romsRepository: romsRepository)
+    }
+
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase {
         GetRomDetailsUseCase(romsRepository: romsRepository)
     }
@@ -467,6 +473,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = UserDefaultsEmulatorScreenPositionPreferenceStore()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
+    lazy var analogSticksPreference: PAnalogSticksPreference = UserDefaultsAnalogSticksPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
     lazy var emulatorBezelPreference: PEmulatorBezelPreference = UserDefaultsEmulatorBezelPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()

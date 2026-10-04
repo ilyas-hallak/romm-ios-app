@@ -79,13 +79,20 @@ struct HomeView: View {
                 UpdateAvailableBanner()
                 HomeRomSection(
                     title: "Continue Playing",
-                    roms: viewModel.continuePlaying,
+                    items: viewModel.continuePlaying,
                     isLoading: viewModel.isLoadingContinuePlaying
                 )
                 HomeRomSection(
                     title: "Recently Added",
-                    roms: viewModel.recentlyAdded,
+                    items: viewModel.recentlyAdded,
                     isLoading: viewModel.isLoadingRecentlyAdded
+                )
+                HomeRomSection(
+                    title: "Recommended for You",
+                    items: viewModel.recommendations,
+                    isLoading: viewModel.isLoadingRecommendations,
+                    rom: { $0.rom },
+                    caption: { $0.seedRomName.map { "Because you played \($0)" } }
                 )
                 HomePlatformSection(
                     platforms: viewModel.platforms,
@@ -141,13 +148,18 @@ private struct HomeSectionHeader: View {
     }
 }
 
-private struct HomeRomSection: View {
+/// Carousel of `BigRomCardView`s, generic over the item type so it can show
+/// plain roms (Continue Playing, Recently Added) or roms annotated with a
+/// caption (Recommended for You) without duplicating the layout.
+private struct HomeRomSection<Item: Identifiable>: View {
     let title: String
-    let roms: [Rom]
+    let items: [Item]
     let isLoading: Bool
+    let rom: (Item) -> Rom
+    var caption: ((Item) -> String?)? = nil
 
     var body: some View {
-        if isLoading || !roms.isEmpty {
+        if isLoading || !items.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 HomeSectionHeader(title: title)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -161,12 +173,24 @@ private struct HomeRomSection: View {
                                 }
                             }
                         } else {
-                            ForEach(roms) { rom in
-                                NavigationLink(destination: RomDetailView(rom: rom)) {
-                                    BigRomCardView(rom: rom)
-                                        .frame(width: 200)
+                            ForEach(items) { item in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    NavigationLink(destination: RomDetailView(rom: rom(item))) {
+                                        BigRomCardView(rom: rom(item))
+                                            .frame(width: 200)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    if let text = caption?(item) {
+                                        Text(text)
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                            .frame(width: 200, alignment: .leading)
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -175,6 +199,12 @@ private struct HomeRomSection: View {
                 }
             }
         }
+    }
+}
+
+private extension HomeRomSection where Item == Rom {
+    init(title: String, items: [Rom], isLoading: Bool) {
+        self.init(title: title, items: items, isLoading: isLoading, rom: { $0 })
     }
 }
 

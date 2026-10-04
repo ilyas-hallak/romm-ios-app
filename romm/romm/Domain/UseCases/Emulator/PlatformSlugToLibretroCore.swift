@@ -91,9 +91,7 @@ enum PlatformSlugToLibretroCore {
         // Must stay after the PS1 branch: none of its patterns match "psp" or
         // "playstation-portable", so the order is only about keeping the more
         // specific PlayStation checks first.
-        if s == "psp" || s == "sony-psp" || s == "psportable"
-            || s == "playstation-portable" || s == "playstationportable"
-            || s.contains("playstation portable") || s.contains("playstation-portable") {
+        if Platform.isPSP(slug: s) {
             return .ppsspp
         }
         return nil

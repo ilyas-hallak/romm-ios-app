@@ -115,4 +115,8 @@ private final class FavouriteRomsRepository: PRomsRepository {
     func getRomsWithFilters(platformId: Int?, searchTerm: String?, limit: Int, offset: Int, char: String?, orderBy: String?, orderDir: String?, collectionId: Int?, filters: RomFilters) async throws -> PaginatedRomsResponse {
         fatalError("not used in these tests")
     }
+
+    func getRecommendations(limit: Int) async throws -> [Recommendation] {
+        fatalError("not used in these tests")
+    }
 }

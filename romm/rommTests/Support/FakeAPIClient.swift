@@ -39,6 +39,12 @@ final class FakeAPIClient: PRommAPIClient {
     /// Id handed back by `addPlatform`, so tests can assert the new platform lands in the list.
     var addedPlatformId = 77
 
+    /// Response served by `getRecommendations`; records the requested limit so tests can assert it's passed through.
+    var recommendationsToReturn: [RecommendedRomSchema] = []
+    var recommendationsLimitRequested: Int?
+    /// Separate from `errorToThrow` so a test can fail recommendations without affecting other endpoints the same load hits.
+    var recommendationsErrorToThrow: Error?
+
     // MARK: - Favourites relevant
 
     func getCurrentUser() async throws -> UserSchema {
@@ -109,8 +115,17 @@ final class FakeAPIClient: PRommAPIClient {
     func getManualPDFData(manualURL: String) async throws -> Data { fatalError("not used in these tests") }
     func getRomDetails(id: Int) async throws -> DetailedRomSchema { fatalError("not used in these tests") }
     func getRoms(searchTerm: String?, platformId: Int?, limit: Int) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
-    func getRomsWithFilters(searchTerm: String?, platformId: Int?, collectionId: Int?, limit: Int, offset: Int?, withCharIndex: Bool?, orderBy: String?, orderDir: String?, filters: RomFilters) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
+    func getRomsWithFilters(searchTerm: String?, platformId: Int?, collectionId: Int?, limit: Int, offset: Int?, withCharIndex: Bool?, orderBy: String?, orderDir: String?, filters: RomFilters) async throws -> CustomLimitOffsetPageSimpleRomSchema {
+        if let errorToThrow { throw errorToThrow }
+        return CustomLimitOffsetPageSimpleRomSchema(items: [], total: 0, limit: limit, offset: offset, charIndex: [:])
+    }
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema] {
+        if let recommendationsErrorToThrow { throw recommendationsErrorToThrow }
+        if let errorToThrow { throw errorToThrow }
+        recommendationsLimitRequested = limit
+        return recommendationsToReturn
+    }
     func getCollection(id: Int) async throws -> CollectionSchema { fatalError("not used in these tests") }
     func getVirtualCollections(type: String, limit: Int?) async throws -> [VirtualCollectionSchema] { fatalError("not used in these tests") }
     func getVirtualCollection(id: String) async throws -> VirtualCollectionSchema { fatalError("not used in these tests") }
@@ -218,6 +233,94 @@ func makeUser(id: Int) -> UserSchema {
         lastActive: nil,
         createdAt: Date(timeIntervalSince1970: 0),
         updatedAt: Date(timeIntervalSince1970: 0)
+    )
+}
+
+func makeSimpleRom(id: Int, name: String) -> SimpleRomSchema {
+    SimpleRomSchema(
+        id: id,
+        igdbId: nil,
+        sgdbId: nil,
+        mobyId: nil,
+        ssId: nil,
+        raId: nil,
+        launchboxId: nil,
+        hasheousId: nil,
+        tgdbId: nil,
+        platformId: 1,
+        platformSlug: "snes",
+        platformFsSlug: "snes",
+        platformName: "Super Nintendo",
+        platformCustomName: nil,
+        platformDisplayName: "Super Nintendo",
+        fsName: "\(name).sfc",
+        fsNameNoTags: name,
+        fsNameNoExt: name,
+        fsExtension: "sfc",
+        fsPath: "snes/\(name).sfc",
+        fsSizeBytes: 1024,
+        name: name,
+        slug: name.lowercased().replacingOccurrences(of: " ", with: "-"),
+        summary: nil,
+        alternativeNames: [],
+        youtubeVideoId: nil,
+        metadatum: RomMetadataSchema(
+            romId: id,
+            genres: [],
+            franchises: [],
+            collections: [],
+            companies: [],
+            gameModes: [],
+            ageRatings: [],
+            firstReleaseDate: nil,
+            averageRating: nil
+        ),
+        igdbMetadata: nil,
+        mobyMetadata: nil,
+        ssMetadata: nil,
+        launchboxMetadata: nil,
+        hasheousMetadata: nil,
+        pathCoverSmall: nil,
+        pathCoverLarge: nil,
+        urlCover: nil,
+        hasManual: false,
+        pathManual: nil,
+        urlManual: nil,
+        isUnidentified: false,
+        isIdentified: true,
+        revision: nil,
+        regions: [],
+        languages: [],
+        tags: [],
+        crcHash: nil,
+        md5Hash: nil,
+        sha1Hash: nil,
+        multi: nil,
+        files: [],
+        fullPath: "snes/\(name).sfc",
+        createdAt: Date(timeIntervalSince1970: 0),
+        updatedAt: Date(timeIntervalSince1970: 0),
+        missingFromFs: false,
+        siblings: [],
+        romUser: RomUserSchema(
+            id: 1,
+            userId: 1,
+            romId: id,
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0),
+            lastPlayed: nil,
+            noteRawMarkdown: nil,
+            noteIsPublic: nil,
+            isMainSibling: nil,
+            backlogged: false,
+            nowPlaying: false,
+            hidden: false,
+            rating: 0,
+            difficulty: 0,
+            completion: 0,
+            status: nil,
+            userUsername: "user1"
+        )
     )
 }
 

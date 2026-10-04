@@ -79,6 +79,7 @@ private final class NoOpRomsRepository: PRomsRepository, @unchecked Sendable {
     func updateLastPlayed(romId: Int) async throws { lastPlayedRomIds.append(romId) }
     func searchRoms(query: String) async throws -> [Rom] { fatalError("not used in these tests") }
     func searchRomsLegacy(query: String) async throws -> [Rom] { fatalError("not used in these tests") }
+    func getRecommendations(limit: Int) async throws -> [Recommendation] { fatalError("not used in these tests") }
 }
 
 @MainActor

@@ -338,7 +338,7 @@ final class ExternalPlayCoordinator {
             // the pasteboard. Multi-file ROMs stay on the share sheet, since one
             // pasteboard item cannot carry a set.
             if let targetID = playTarget.externalEmulatorID, targetID.emulator.romDelivery == .pasteboard {
-                handOverViaPasteboard(url: url, romId: rom.id, romName: rom.name, targetID: targetID)
+                handOverViaPasteboard(url: url, rom: rom, targetID: targetID)
                 return
             }
             openInItem = OpenInItem(url: url, tempDirectory: result.tempDirectory)
@@ -349,7 +349,7 @@ final class ExternalPlayCoordinator {
 
     /// Puts the ROM on the general pasteboard, for apps that only import through
     /// an item provider.
-    private func handOverViaPasteboard(url: URL, romId: Int, romName: String, targetID: ExternalEmulatorID) {
+    private func handOverViaPasteboard(url: URL, rom: DownloadedROM, targetID: ExternalEmulatorID) {
         let appName = targetDisplayName ?? "the external emulator"
         // The bytes go on themselves. A provider built from a file URL registers
         // public.file-url plus a promise, and neither survives: the URL points
@@ -360,8 +360,14 @@ final class ExternalPlayCoordinator {
         }
         // Exactly one type, the one the extension resolves to. A broad type such
         // as public.data can hurt: an importer matching by substring may settle
-        // on it and then find no extension to name the file after.
-        let romType = UTType(filenameExtension: url.pathExtension) ?? .data
+        // on it and then find no extension to name the file after. An emulator
+        // can override that guess, when the system's own type does not lead the
+        // target back to the right extension or platform.
+        let overrideIdentifier = playTarget.externalEmulatorID?.emulator
+            .pasteboardTypeIdentifier(forROMExtension: url.pathExtension, platformSlug: rom.platformSlug)
+        let romType = overrideIdentifier.flatMap { UTType($0) }
+            ?? UTType(filenameExtension: url.pathExtension)
+            ?? .data
         // Eager, because a registered representation is produced on request, and
         // by then this process may be suspended with nobody left to answer.
         let provider = NSItemProvider(item: data as NSData, typeIdentifier: romType.identifier)
@@ -376,8 +382,8 @@ final class ExternalPlayCoordinator {
         // library. It is remembered as a weaker "went over once" instead, so
         // the next Play tap asks rather than copying over silently again.
         handoffRomId = nil
-        handoffStore.markCopiedToPasteboard(romId: romId, to: targetID)
-        pasteboardHandoff = PasteboardHandoffInfo(romName: romName, appName: appName)
+        handoffStore.markCopiedToPasteboard(romId: rom.id, to: targetID)
+        pasteboardHandoff = PasteboardHandoffInfo(romName: rom.name, appName: appName)
     }
 
     /// Reports the ROM as played to the server, best effort.

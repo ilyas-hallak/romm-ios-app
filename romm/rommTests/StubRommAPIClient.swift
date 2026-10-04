@@ -28,6 +28,7 @@ class StubRommAPIClient: PRommAPIClient {
     func getRoms( searchTerm: String?, platformId: Int?, limit: Int ) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("getRoms not stubbed") }
     func getRomsWithFilters( searchTerm: String?, platformId: Int?, collectionId: Int?, limit: Int, offset: Int?, withCharIndex: Bool?, orderBy: String?, orderDir: String?, filters: RomFilters ) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("getRomsWithFilters not stubbed") }
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("searchRomsWithOpenAPI not stubbed") }
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema] { fatalError("getRecommendations not stubbed") }
     func getCollections(limit: Int?, offset: Int?) async throws -> [CollectionSchema] { fatalError("getCollections not stubbed") }
     func getCollection(id: Int) async throws -> CollectionSchema { fatalError("getCollection not stubbed") }
     func getVirtualCollections(type: String, limit: Int?) async throws -> [VirtualCollectionSchema] { fatalError("getVirtualCollections not stubbed") }

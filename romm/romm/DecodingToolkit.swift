@@ -50,16 +50,28 @@ extension KeyedDecodingContainer {
 
     /// Lossy array decoding: skips invalid elements instead of failing the whole decode
     func decodeLossyArray<T: Decodable>(_ type: T.Type, forKey key: Key) -> [T] {
-        guard var container = try? nestedUnkeyedContainer(forKey: key) else { return [] }
-        var items: [T] = []
+        (try? decode(LossyArray<T>.self, forKey: key))?.elements ?? []
+    }
+}
+
+// MARK: - Lossy array decoding
+
+/// Decodes a JSON array, skipping elements that fail to decode instead of
+/// failing the whole array. Works for bare top-level arrays too.
+struct LossyArray<Element: Decodable>: Decodable {
+    let elements: [Element]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var items: [Element] = []
         while !container.isAtEnd {
-            if let value = try? container.decode(T.self) {
+            if let value = try? container.decode(Element.self) {
                 items.append(value)
             } else {
                 _ = try? container.decode(DiscardableValue.self) // skip invalid element
             }
         }
-        return items
+        elements = items
     }
 }
 
