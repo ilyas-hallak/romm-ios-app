@@ -36,10 +36,6 @@ final class CloudSaveSyncService {
     /// it in place is only safe while the server still agrees (see
     /// `batteryTarget`).
     private var serverBatteryUpdatedAt: Date?
-    /// Content hash the server holds for that row, as far as this session
-    /// knows. Lets `pushBatteryAsync` skip an upload that would not change a
-    /// single byte: an identical `PUT` still bumps the server's `updated_at`.
-    private var serverBatteryContentHash: String?
     /// Routes every state slot through the same decision logic `SaveSyncRunner`
     /// uses, so the two never grow different ideas of "changed".
     private let stateSyncCoordinator: StateSyncCoordinator
@@ -150,13 +146,9 @@ final class CloudSaveSyncService {
             // candidate) mirrors pullBattery()'s own tie-break below, instead
             // of letting whichever operation happens to sort last in the
             // response silently win and get overwritten by the next push.
-            let batteryCandidates = response.operations.filter { op in
-                op.romId == config.romId && op.saveId != nil && isBatteryOperation(op)
-            }
-            if let match = batteryCandidates.first(where: { $0.fileName == config.batteryFileName }) ?? batteryCandidates.first {
+            if let match = pickBatteryOperation(in: response.operations, requireSaveId: true) {
                 serverBatteryId = match.saveId
                 serverBatteryUpdatedAt = match.serverUpdatedAt
-                serverBatteryContentHash = match.serverContentHash
             }
             for op in response.operations where op.action == .download && op.romId == config.romId {
                 await applyDownload(op)
@@ -174,15 +166,7 @@ final class CloudSaveSyncService {
         var result: [ClientSaveState] = []
 
         if let battery = try? saveStore.readBattery(romId: config.romId), !battery.isEmpty {
-            result.append(ClientSaveState(
-                romId: config.romId,
-                fileName: config.batteryFileName,
-                slot: SaveSlot.battery,
-                emulator: config.emulator,
-                contentHash: SaveContentHash.of(battery),
-                updatedAt: saveStore.batteryModifiedAt(romId: config.romId) ?? Date(timeIntervalSince1970: 0),
-                fileSizeBytes: battery.count
-            ))
+            result.append(batteryClientState(data: battery))
         }
 
         let entries = (try? saveStore.listStates(romId: config.romId)) ?? []
@@ -213,6 +197,36 @@ final class CloudSaveSyncService {
         return !fileName.hasSuffix(".state") && (op.slot == nil || op.slot == SaveSlot.battery)
     }
 
+    /// Picks the one battery operation for this ROM out of a negotiate
+    /// response. There is no unique constraint on (rom_id, slot) server-side,
+    /// so more than one candidate can come back; the exact filename match
+    /// wins, else the first candidate, so the pick stays deterministic
+    /// instead of depending on response order. `requireSaveId` is set by the
+    /// pre-launch pull, which only cares about operations that name a row it
+    /// can later update in place; the push path also needs the upload-without
+    /// a row case, so it leaves this off.
+    private func pickBatteryOperation(in operations: [SyncOperationSchema], requireSaveId: Bool = false) -> SyncOperationSchema? {
+        let candidates = operations.filter { op in
+            op.romId == config.romId && isBatteryOperation(op) && (!requireSaveId || op.saveId != nil)
+        }
+        return candidates.first(where: { $0.fileName == config.batteryFileName }) ?? candidates.first
+    }
+
+    /// Negotiate payload entry for the battery file. Shared by the pre-launch
+    /// snapshot and the end-of-session push, which hands in the bytes it just
+    /// flushed to disk instead of re-reading them.
+    private func batteryClientState(data: Data) -> ClientSaveState {
+        ClientSaveState(
+            romId: config.romId,
+            fileName: config.batteryFileName,
+            slot: SaveSlot.battery,
+            emulator: config.emulator,
+            contentHash: SaveContentHash.of(data),
+            updatedAt: saveStore.batteryModifiedAt(romId: config.romId) ?? Date(timeIntervalSince1970: 0),
+            fileSizeBytes: data.count
+        )
+    }
+
     /// Applies a single `download` operation. States are intentionally left to
     /// `pullStates()` (its slot mapping is proven and the save/state id
     /// namespaces are ambiguous over negotiate), so only battery/save downloads
@@ -235,7 +249,6 @@ final class CloudSaveSyncService {
             }
             serverBatteryId = saveId
             serverBatteryUpdatedAt = op.serverUpdatedAt
-            serverBatteryContentHash = SaveContentHash.of(data)
             logger.info("Negotiate down: battery (\(data.count) bytes)")
             await confirmDownload(saveId: saveId, deviceId: deviceId)
         } catch {
@@ -250,7 +263,6 @@ final class CloudSaveSyncService {
             guard let match else { return }
             serverBatteryId = match.id
             serverBatteryUpdatedAt = match.updatedAt
-            serverBatteryContentHash = match.contentHash
 
             let localMTime = saveStore.batteryModifiedAt(romId: config.romId)
             if let localMTime, localMTime >= match.updatedAt { return }
@@ -261,7 +273,6 @@ final class CloudSaveSyncService {
             // Preserve server mtime so subsequent local-vs-server compares are
             // not skewed by device clock drift after the write-to-disk timestamp.
             try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
-            serverBatteryContentHash = SaveContentHash.of(data)
             logger.info("Battery pulled (\(data.count) bytes)")
             await confirmDownload(saveId: match.id, deviceId: deviceId)
         } catch {
@@ -305,23 +316,63 @@ final class CloudSaveSyncService {
     /// Does the actual battery upload/update `pushBattery` fires and forgets.
     /// Split out, and awaitable, so it can be driven directly (e.g. by tests)
     /// instead of only observed indirectly through its side effects.
+    ///
+    /// Lets the server's `negotiate` verdict decide what to do with the just
+    /// flushed bytes, the same way the pre-launch pull does, instead of the
+    /// client comparing timestamps itself. Falls back to the legacy
+    /// `batteryTarget()` path when there is no device id or negotiate itself
+    /// fails (old server, offline), so those servers keep working unchanged.
     func pushBatteryAsync(data: Data) async {
-        let cfg = config
-        // An identical PUT still bumps the server's updated_at, so a load-only
-        // session (quit without ever changing the battery) must not re-upload
-        // bytes the server already has.
-        if let knownHash = serverBatteryContentHash, SaveContentHash.of(data) == knownHash {
-            logger.info("Battery unchanged, push skipped")
+        guard let deviceId = await syncDevice.deviceId() else {
+            await pushBatteryViaLegacyTarget(data: data)
             return
         }
+        let response: SyncNegotiateResponse
+        do {
+            response = try await apiClient.negotiateSync(SyncNegotiateRequest(
+                deviceId: deviceId,
+                saves: [batteryClientState(data: data)],
+                romIds: [config.romId]
+            ))
+        } catch {
+            logger.warning("Negotiate failed at push, falling back: \(error.localizedDescription)")
+            await pushBatteryViaLegacyTarget(data: data)
+            return
+        }
+        guard let operation = pickBatteryOperation(in: response.operations) else {
+            logger.info("Battery push: negotiate named no verdict for this ROM")
+            return
+        }
+        await applyBatteryPush(operation, data: data, deviceId: deviceId)
+    }
+
+    /// Acts on the negotiate verdict for the battery file.
+    private func applyBatteryPush(_ operation: SyncOperationSchema, data: Data, deviceId: String) async {
+        switch operation.action {
+        case .noOp:
+            logger.info("Battery unchanged, push skipped")
+        case .upload:
+            await uploadBattery(data: data, deviceId: deviceId, serverId: operation.saveId)
+        case .conflict:
+            // A user-facing force option is a later step; for now the row is
+            // left alone rather than risking an overwrite of someone else's save.
+            logger.warning("Battery push skipped: negotiate reported a conflict (\(operation.reason ?? "-"))")
+        case .download:
+            // The server holds a newer save; the next launch's pull picks it up.
+            logger.info("Battery push skipped: server save is newer, next launch pulls it")
+        case .unknown:
+            logger.warning("Battery push skipped: unrecognized negotiate action")
+        }
+    }
+
+    /// `serverId` set means there is an existing server row to update in
+    /// place; nil means upload a fresh one. Shared by the negotiated push and
+    /// its legacy fallback, which only differ in how they arrive at `serverId`.
+    private func uploadBattery(data: Data, deviceId: String?, serverId: Int?) async {
+        let cfg = config
         do {
             let result: SaveSchema
-            switch await batteryTarget() {
-            case .leaveAlone(let reason):
-                logger.warning("Battery push skipped: \(reason)")
-                return
-            case .update(let serverId):
-                let deviceId = await syncDevice.deviceId()
+            if let serverId {
                 result = try await updateSaveUseCase.execute(
                     id: serverId,
                     emulator: cfg.emulator,
@@ -330,8 +381,7 @@ final class CloudSaveSyncService {
                     fileData: data,
                     screenshotData: nil
                 )
-            case .create:
-                let deviceId = await syncDevice.deviceId()
+            } else {
                 result = try await uploadSaveUseCase.execute(
                     romId: cfg.romId,
                     emulator: cfg.emulator,
@@ -348,7 +398,7 @@ final class CloudSaveSyncService {
                     screenshotData: nil
                 )
             }
-            recordBattery(result, pushedData: data)
+            recordBattery(result)
             recordAutoSync()
             logger.info("Battery pushed id=\(result.id)")
         } catch APIClientError.conflict {
@@ -357,6 +407,22 @@ final class CloudSaveSyncService {
             logger.warning("Battery push skipped: slot moved on the server (conflict)")
         } catch {
             logger.error("Battery push failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Pre-negotiate push path: client-side timestamp comparison against the
+    /// server row this session last read or wrote. Kept for servers negotiate
+    /// is unavailable on (no device id registered, or the call itself failed).
+    private func pushBatteryViaLegacyTarget(data: Data) async {
+        switch await batteryTarget() {
+        case .leaveAlone(let reason):
+            logger.warning("Battery push skipped: \(reason)")
+        case .update(let serverId):
+            let deviceId = await syncDevice.deviceId()
+            await uploadBattery(data: data, deviceId: deviceId, serverId: serverId)
+        case .create:
+            let deviceId = await syncDevice.deviceId()
+            await uploadBattery(data: data, deviceId: deviceId, serverId: nil)
         }
     }
 
@@ -431,15 +497,12 @@ final class CloudSaveSyncService {
     private func learnBatteryUpdatedAt() async {
         guard let serverId = serverBatteryId, serverBatteryUpdatedAt == nil else { return }
         guard let saves = try? await listSavesUseCase.execute(romId: config.romId) else { return }
-        let current = saves.first(where: { $0.id == serverId })
-        serverBatteryUpdatedAt = current?.updatedAt
-        serverBatteryContentHash = serverBatteryContentHash ?? current?.contentHash
+        serverBatteryUpdatedAt = saves.first(where: { $0.id == serverId })?.updatedAt
     }
 
-    private func recordBattery(_ save: SaveSchema, pushedData: Data) {
+    private func recordBattery(_ save: SaveSchema) {
         serverBatteryId = save.id
         serverBatteryUpdatedAt = save.updatedAt
-        serverBatteryContentHash = save.contentHash ?? SaveContentHash.of(pushedData)
     }
     private func recordAutoSync() { recordSyncUseCase.execute(romId: config.romId, trigger: .automatic) }
 }
