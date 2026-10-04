@@ -150,9 +150,15 @@ struct RemoteControllerView: View {
     /// The pad only reads as a gamepad sideways, so portrait is locked out for
     /// as long as this phone is one. A phone already held sideways keeps the
     /// side it is on, forcing one would flip it out of the player's hands.
+    /// Unlocking alone does not rotate back, so leaving turns an upright phone
+    /// back to portrait.
     private func applyOrientationLock(isPlaying: Bool) {
         guard isPlaying else {
-            OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
+            let isHeldUpright = !UIDevice.current.orientation.isLandscape
+            OrientationLock.set(
+                [.portrait, .landscapeLeft, .landscapeRight],
+                rotateTo: isHeldUpright ? .portrait : nil
+            )
             return
         }
         let isHeldSideways = OrientationLock.currentOrientation?.isLandscape ?? false
