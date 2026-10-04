@@ -13,6 +13,7 @@ private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable 
     var sessionIdToReturn: Int? = 1
     private(set) var reportedSaves: [ClientSaveState] = []
     private(set) var reportedDeviceId: String?
+    private(set) var reportedRomIds: [Int]?
     private(set) var negotiateCount = 0
 
     override func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse {
@@ -24,6 +25,7 @@ private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable 
         }
         reportedSaves = body.saves
         reportedDeviceId = body.deviceId
+        reportedRomIds = body.romIds
         return Self.response(operations, sessionId: sessionIdToReturn)
     }
 
@@ -172,7 +174,7 @@ struct SyncPreviewUseCaseTests {
         try store.writeBattery(romId: 7, data: Data([0xCA, 0xFE]))
         let client = FakeNegotiateClient()
 
-        _ = try await makeUseCase(store: store, client: client).execute()
+        _ = try await makeUseCase(store: store, client: client).execute(romIds: nil)
 
         #expect(client.reportedSaves.count == 1)
         #expect(client.reportedSaves.first?.slot == SaveSlot.battery)
@@ -187,7 +189,7 @@ struct SyncPreviewUseCaseTests {
         try store.writeBattery(romId: 7, data: Data())
         let client = FakeNegotiateClient()
 
-        _ = try await makeUseCase(store: store, client: client).execute()
+        _ = try await makeUseCase(store: store, client: client).execute(romIds: nil)
 
         #expect(client.reportedSaves.isEmpty)
     }
@@ -202,7 +204,7 @@ struct SyncPreviewUseCaseTests {
             operation(.conflict, romId: 3)
         ]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.uploads.map(\.romId) == [1])
         #expect(preview.downloads.map(\.romId) == [2])
@@ -214,7 +216,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.operations = [operation(.noOp, romId: 1)]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.isUpToDate)
     }
@@ -225,7 +227,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.operations = [operation(.noOp, romId: 1)]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.operations.map(\.romId) == [1])
         #expect(preview.operations.first?.direction == .noOp)
@@ -240,7 +242,7 @@ struct SyncPreviewUseCaseTests {
             operation(.download, romId: 2, fileName: "battery.sav")
         ]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.downloads.map(\.romId) == [2])
     }
@@ -258,7 +260,7 @@ struct SyncPreviewUseCaseTests {
             operation(.download, romId: 4, slot: nil)
         ]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.downloads.map(\.romId).sorted() == [3, 4])
     }
@@ -270,7 +272,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.operations = [operation(.unknown, romId: 1), operation(.upload, romId: 2)]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.operations.map(\.romId) == [2])
     }
@@ -279,7 +281,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.operations = [operation(.upload, romId: nil)]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.operations.isEmpty)
     }
@@ -290,7 +292,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.operations = [operation(.download, reason: "Server save is newer (no sync history)")]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.downloads.first?.reason == "Server save is newer (no sync history)")
     }
@@ -302,7 +304,7 @@ struct SyncPreviewUseCaseTests {
         token.serverURL = nil
 
         await #expect(throws: SyncPreviewError.notConnected) {
-            try await makeUseCase(store: makeStore(), token: token).execute()
+            try await makeUseCase(store: makeStore(), token: token).execute(romIds: nil)
         }
     }
 
@@ -311,7 +313,7 @@ struct SyncPreviewUseCaseTests {
         device.availability = .serverTooOld(version: "4.8.1")
 
         await #expect(throws: SyncPreviewError.serverTooOld(version: "4.8.1")) {
-            try await makeUseCase(store: makeStore(), device: device).execute()
+            try await makeUseCase(store: makeStore(), device: device).execute(romIds: nil)
         }
     }
 
@@ -322,7 +324,7 @@ struct SyncPreviewUseCaseTests {
         device.availability = .unknown
 
         await #expect(throws: SyncPreviewError.serverVersionUnknown) {
-            try await makeUseCase(store: makeStore(), device: device).execute()
+            try await makeUseCase(store: makeStore(), device: device).execute(romIds: nil)
         }
     }
 
@@ -331,7 +333,7 @@ struct SyncPreviewUseCaseTests {
         device.idToReturn = nil
 
         await #expect(throws: SyncPreviewError.deviceRegistrationFailed) {
-            try await makeUseCase(store: makeStore(), device: device).execute()
+            try await makeUseCase(store: makeStore(), device: device).execute(romIds: nil)
         }
     }
 
@@ -340,7 +342,7 @@ struct SyncPreviewUseCaseTests {
         client.errorToThrow = URLError(.timedOut)
 
         await #expect(throws: SyncPreviewError.self) {
-            try await makeUseCase(store: makeStore(), client: client).execute()
+            try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
         }
     }
 
@@ -354,7 +356,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.operations = [operation(.download, romId: 5, saveId: 77, serverContentHash: "abc123")]
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.downloads.first?.saveId == 77)
         #expect(preview.downloads.first?.serverContentHash == "abc123")
@@ -364,7 +366,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.sessionIdToReturn = 42
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.sessionId == "42")
     }
@@ -375,7 +377,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.sessionIdToReturn = nil
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.sessionId == nil)
     }
@@ -384,7 +386,7 @@ struct SyncPreviewUseCaseTests {
         let client = FakeNegotiateClient()
         client.operations = []
 
-        let preview = try await makeUseCase(store: makeStore(), client: client).execute()
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
         #expect(preview.operations.isEmpty)
         #expect(preview.uploads.isEmpty)
@@ -399,7 +401,7 @@ struct SyncPreviewUseCaseTests {
         try store.writeBattery(romId: 2, data: Data([0x02]))
         try store.writeBattery(romId: 3, data: Data()) // empty, not reported
 
-        let preview = try await makeUseCase(store: store, client: FakeNegotiateClient()).execute()
+        let preview = try await makeUseCase(store: store, client: FakeNegotiateClient()).execute(romIds: nil)
 
         #expect(preview.reportedSaveCount == 2)
     }
@@ -416,7 +418,7 @@ struct SyncPreviewUseCaseTests {
         store.batteryData[7] = Data([0xCA, 0xFE])
         let client = FakeNegotiateClient()
 
-        _ = try await makeUseCase(store: store, client: client).execute()
+        _ = try await makeUseCase(store: store, client: client).execute(romIds: nil)
 
         #expect(client.reportedSaves.first?.updatedAt == Date(timeIntervalSince1970: 0))
     }
@@ -435,7 +437,7 @@ struct SyncPreviewUseCaseTests {
         let device = FakeSyncDevice()
         device.idAfterForgetting = "device-2"
 
-        let preview = try await makeUseCase(store: store, client: client, device: device).execute()
+        let preview = try await makeUseCase(store: store, client: client, device: device).execute(romIds: nil)
 
         #expect(device.forgetCount == 1)
         #expect(client.negotiateCount == 2)
@@ -455,7 +457,7 @@ struct SyncPreviewUseCaseTests {
         device.idAfterForgetting = "device-2"
 
         await #expect(throws: SyncPreviewError.self) {
-            _ = try await makeUseCase(store: store, client: client, device: device).execute()
+            _ = try await makeUseCase(store: store, client: client, device: device).execute(romIds: nil)
         }
         #expect(client.negotiateCount == 2)
     }
@@ -470,7 +472,35 @@ struct SyncPreviewUseCaseTests {
         device.idAfterForgetting = nil
 
         await #expect(throws: SyncPreviewError.deviceRegistrationFailed) {
-            _ = try await makeUseCase(store: store, client: client, device: device).execute()
+            _ = try await makeUseCase(store: store, client: client, device: device).execute(romIds: nil)
         }
+    }
+
+    // MARK: - Scoping
+
+    @Test func aNilRomIdsReportsEveryBatterySaveAndSendsNoRomIdsFilter() async throws {
+        let store = FakeSaveStore()
+        store.romIds = [1, 2]
+        store.batteryData = [1: Data([0x01]), 2: Data([0x02])]
+        let client = FakeNegotiateClient()
+
+        let preview = try await makeUseCase(store: store, client: client).execute(romIds: nil)
+
+        #expect(preview.reportedSaveCount == 2)
+        #expect(client.reportedSaves.map(\.romId).sorted() == [1, 2])
+        #expect(client.reportedRomIds == nil)
+    }
+
+    @Test func scopedRomIdsLimitsReportedSavesAndForwardsTheFilter() async throws {
+        let store = FakeSaveStore()
+        store.romIds = [1, 2]
+        store.batteryData = [1: Data([0x01]), 2: Data([0x02])]
+        let client = FakeNegotiateClient()
+
+        let preview = try await makeUseCase(store: store, client: client).execute(romIds: [2])
+
+        #expect(preview.reportedSaveCount == 1)
+        #expect(client.reportedSaves.map(\.romId) == [2])
+        #expect(client.reportedRomIds == [2])
     }
 }

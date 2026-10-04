@@ -571,19 +571,25 @@ class MockDependencyFactory: PDependencyFactory {
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {
         SyncSaveViewModel(
             rom: rom,
+            previewUseCase: makeSyncPreviewUseCase(),
+            syncRunner: makeSaveSyncRunner(),
+            stateSyncCoordinator: makeStateSyncCoordinator(),
             listSavesUseCase: makeListServerSavesUseCase(),
-            listStatesUseCase: makeListServerStatesUseCase(),
             downloadSaveUseCase: makeDownloadSaveUseCase(),
-            downloadStateUseCase: makeDownloadStateUseCase(),
-            uploadSaveUseCase: makeUploadSaveUseCase(),
-            updateSaveUseCase: makeUpdateSaveUseCase(),
-            uploadStateUseCase: makeUploadStateUseCase(),
-            updateStateUseCase: makeUpdateStateUseCase(),
-            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
             saveStore: saveStore,
             syncDevice: syncDeviceRepository,
             recordSyncUseCase: makeRecordSyncUseCase(),
             getLastSyncUseCase: makeGetLastSyncUseCase()
+        )
+    }
+
+    private func makeStateSyncCoordinator() -> StateSyncCoordinator {
+        StateSyncCoordinator(
+            saveStore: saveStore,
+            listStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase()
         )
     }
 

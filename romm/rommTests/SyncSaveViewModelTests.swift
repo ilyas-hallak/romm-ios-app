@@ -4,6 +4,45 @@ import Foundation
 
 // MARK: - Fakes
 
+/// Scriptable stand-in for negotiate, scoped to one ROM: records the romIds
+/// filter it was called with so a test can confirm scoping, and whether it
+/// ran more than once per `syncThisGame()` call.
+private final class FakeSyncPreviewUseCase: PSyncPreviewUseCase, @unchecked Sendable {
+    var result: Result<SyncPreview, Error>
+    private(set) var callCount = 0
+    private(set) var lastRomIds: [Int]?
+
+    init(result: Result<SyncPreview, Error>) { self.result = result }
+
+    func execute(romIds: [Int]?) async throws -> SyncPreview {
+        callCount += 1
+        lastRomIds = romIds
+        return try result.get()
+    }
+}
+
+private final class FakeSaveSyncRunner: PSaveSyncRunner, @unchecked Sendable {
+    var reportToReturn = SaveSyncReport()
+    private(set) var callCount = 0
+    private(set) var lastStateRomIds: [Int]?
+
+    func run(preview: SyncPreview, externalScans: [ExternalEmulatorID: ExternalSaveScan], stateRomIds: [Int]?) async -> SaveSyncReport {
+        callCount += 1
+        lastStateRomIds = stateRomIds
+        return reportToReturn
+    }
+}
+
+private final class FakeListServerSavesUseCase: PListServerSavesUseCase, @unchecked Sendable {
+    var saves: [SaveSchema] = []
+    func execute(romId: Int) async throws -> [SaveSchema] { saves }
+}
+
+private final class FakeDownloadSaveUseCase: PDownloadSaveUseCase, @unchecked Sendable {
+    var data = Data()
+    func execute(id: Int, deviceId: String?, sessionId: String?) async throws -> Data { data }
+}
+
 private final class FakeSyncDeviceRepo: PSyncDeviceRepository, @unchecked Sendable {
     var deviceIdToReturn: String?
     func syncAPIAvailability() async -> SyncAPIAvailability { .available }
@@ -12,92 +51,52 @@ private final class FakeSyncDeviceRepo: PSyncDeviceRepository, @unchecked Sendab
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
 }
 
-private final class FakeUploadSaveUseCase: PUploadSaveUseCase, @unchecked Sendable {
-    var error: Error?
-    private(set) var calls: [(romId: Int, slot: String?, deviceId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String)] = []
-
-    func execute(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
-        if let error { throw error }
-        calls.append((romId, slot, deviceId, autocleanup, overwrite, fileName))
-        return Self.makeSchema(id: 999, romId: romId, fileName: fileName)
-    }
-
-    static func makeSchema(id: Int, romId: Int, fileName: String) -> SaveSchema {
-        SaveSchema(
-            id: id, romId: romId, userId: 1, fileName: fileName, fileNameNoTags: fileName,
-            fileNameNoExt: fileName, fileExtension: "sav", filePath: "", fileSizeBytes: 0,
-            fullPath: "", downloadPath: "", missingFromFs: false, createdAt: Date(),
-            updatedAt: Date(), emulator: nil, screenshot: nil
-        )
-    }
+private final class FakeRecordSyncUseCase: PRecordSyncUseCase, @unchecked Sendable {
+    private(set) var calls: [(romId: Int, trigger: SyncTrigger)] = []
+    func execute(romId: Int, trigger: SyncTrigger) { calls.append((romId, trigger)) }
 }
 
-private final class FakeUpdateSaveUseCase: PUpdateSaveUseCase, @unchecked Sendable {
-    private(set) var calls: [(id: Int, deviceId: String?, fileName: String)] = []
-    func execute(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
-        calls.append((id, deviceId, fileName))
-        return FakeUploadSaveUseCase.makeSchema(id: id, romId: 0, fileName: fileName)
-    }
+private final class FakeGetLastSyncUseCase: PGetLastSyncUseCase, @unchecked Sendable {
+    var metaToReturn: SyncMetadata?
+    func execute(romId: Int) -> SyncMetadata? { metaToReturn }
 }
 
-private final class UnusedListServerSavesUseCase: PListServerSavesUseCase {
-    func execute(romId: Int) async throws -> [SaveSchema] { [] }
-}
-
-private final class UnusedListServerStatesUseCase: PListServerStatesUseCase {
+/// Stub use cases so a real `StateSyncCoordinator` can be built without ever
+/// reaching the network; `statusSummary` itself is already covered by
+/// `StateSyncCoordinatorTests`, so these tests only need it to report `.inSync`.
+private final class StubListStatesUseCase: PListServerStatesUseCase, @unchecked Sendable {
     func execute(romId: Int) async throws -> [StateSchema] { [] }
 }
 
-private final class UnusedDownloadSaveUseCase: PDownloadSaveUseCase {
-    func execute(id: Int, deviceId: String?, sessionId: String?) async throws -> Data { Data() }
-}
-
-private final class UnusedDownloadStateUseCase: PDownloadStateUseCase {
-    func execute(id: Int) async throws -> Data { Data() }
-}
-
-private final class UnusedUploadStateUseCase: PUploadStateUseCase {
+private final class StubUploadStateUseCase: PUploadStateUseCase, @unchecked Sendable {
     func execute(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema {
         fatalError("not used in these tests")
     }
 }
 
-private final class UnusedUpdateStateUseCase: PUpdateStateUseCase {
+private final class StubUpdateStateUseCase: PUpdateStateUseCase, @unchecked Sendable {
     func execute(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema {
         fatalError("not used in these tests")
     }
 }
 
-private final class UnusedConfirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase {
-    func execute(id: Int, deviceId: String) async throws -> SaveSchema {
-        fatalError("not used in these tests")
-    }
-}
-
-private final class FakeRecordSyncUseCase: PRecordSyncUseCase {
-    func execute(romId: Int, trigger: SyncTrigger) {}
-}
-
-private final class FakeGetLastSyncUseCase: PGetLastSyncUseCase {
-    func execute(romId: Int) -> SyncMetadata? { nil }
+private final class StubDownloadStateUseCase: PDownloadStateUseCase, @unchecked Sendable {
+    func execute(id: Int) async throws -> Data { fatalError("not used in these tests") }
 }
 
 // MARK: - Tests
 
-/// The manual battery upload must identify itself with the `battery` slot and
-/// this device's id, so the server can pair it by `(rom_id, slot)` and apply
-/// per-device bookkeeping, and must win over whatever is already in that slot
-/// since the user explicitly asked for this upload (see
-/// `SaveSyncRunner.runBatteryUpload` for the same reasoning on the automatic path).
 @MainActor
 struct SyncSaveViewModelTests {
 
-    private func makeStore(romId: Int, data: Data) -> LocalSaveStoreRepository {
+    private func makeStore(romId: Int? = nil, batteryData: Data? = nil) -> LocalSaveStoreRepository {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("SyncSaveViewModelTests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         let store = LocalSaveStoreRepository(rootDirectory: tmp)
-        try? store.writeBattery(romId: romId, data: data)
+        if let romId, let batteryData {
+            try? store.writeBattery(romId: romId, data: batteryData)
+        }
         return store
     }
 
@@ -109,72 +108,232 @@ struct SyncSaveViewModelTests {
         )
     }
 
-    private func makeViewModel(
-        rom: DownloadedROM,
-        uploadSave: FakeUploadSaveUseCase,
-        updateSave: FakeUpdateSaveUseCase,
-        syncDevice: FakeSyncDeviceRepo,
-        store: PSaveStore
-    ) -> SyncSaveViewModel {
-        SyncSaveViewModel(
-            rom: rom,
-            listSavesUseCase: UnusedListServerSavesUseCase(),
-            listStatesUseCase: UnusedListServerStatesUseCase(),
-            downloadSaveUseCase: UnusedDownloadSaveUseCase(),
-            downloadStateUseCase: UnusedDownloadStateUseCase(),
-            uploadSaveUseCase: uploadSave,
-            updateSaveUseCase: updateSave,
-            uploadStateUseCase: UnusedUploadStateUseCase(),
-            updateStateUseCase: UnusedUpdateStateUseCase(),
-            confirmSaveDownloadUseCase: UnusedConfirmSaveDownloadUseCase(),
-            saveStore: store,
-            syncDevice: syncDevice,
-            recordSyncUseCase: FakeRecordSyncUseCase(),
-            getLastSyncUseCase: FakeGetLastSyncUseCase()
+    private func makePreview(romId: Int, operations: [SyncPreviewOperation] = []) -> SyncPreview {
+        SyncPreview(deviceId: "device-1", reportedSaveCount: 1, operations: operations)
+    }
+
+    private func makeOperation(romId: Int, direction: SyncPreviewOperation.Direction) -> SyncPreviewOperation {
+        SyncPreviewOperation(
+            romId: romId, direction: direction, serverFileName: "battery.sav", slot: SaveSlot.battery,
+            emulator: nil, reason: nil, serverUpdatedAt: nil
         )
     }
 
-    @Test func freshBatteryUploadSendsBatterySlotDeviceIdAndOverwrite() async throws {
-        let rom = makeRom()
-        let store = makeStore(romId: rom.id, data: Data([0x01, 0x02]))
-        let uploadSave = FakeUploadSaveUseCase()
-        let updateSave = FakeUpdateSaveUseCase()
-        let syncDevice = FakeSyncDeviceRepo()
-        syncDevice.deviceIdToReturn = "device-1"
-        let viewModel = makeViewModel(rom: rom, uploadSave: uploadSave, updateSave: updateSave, syncDevice: syncDevice, store: store)
-
-        // No existing server save for this ROM, so this goes straight to upload
-        // without routing through the overwrite-confirmation prompt.
-        viewModel.uploadLocalBattery()
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(uploadSave.calls.count == 1)
-        let call = try #require(uploadSave.calls.first)
-        #expect(call.slot == SaveSlot.battery)
-        #expect(call.deviceId == "device-1")
-        #expect(call.autocleanup == true)
-        #expect(call.overwrite == true)
-        #expect(updateSave.calls.isEmpty)
+    private func makeCoordinator(store: PSaveStore) -> StateSyncCoordinator {
+        StateSyncCoordinator(
+            saveStore: store,
+            listStatesUseCase: StubListStatesUseCase(),
+            uploadStateUseCase: StubUploadStateUseCase(),
+            updateStateUseCase: StubUpdateStateUseCase(),
+            downloadStateUseCase: StubDownloadStateUseCase()
+        )
     }
 
-    @Test func batteryUploadOverExistingRowUpdatesWithDeviceId() async throws {
-        let rom = makeRom()
-        let store = makeStore(romId: rom.id, data: Data([0x03]))
-        let uploadSave = FakeUploadSaveUseCase()
-        let updateSave = FakeUpdateSaveUseCase()
-        let syncDevice = FakeSyncDeviceRepo()
-        syncDevice.deviceIdToReturn = "device-2"
-        let viewModel = makeViewModel(rom: rom, uploadSave: uploadSave, updateSave: updateSave, syncDevice: syncDevice, store: store)
-        viewModel.serverSaves = [FakeUploadSaveUseCase.makeSchema(id: 42, romId: rom.id, fileName: "battery.sav")]
+    private func makeViewModel(
+        rom: DownloadedROM,
+        store: PSaveStore,
+        previewUseCase: FakeSyncPreviewUseCase,
+        syncRunner: FakeSaveSyncRunner,
+        listSavesUseCase: FakeListServerSavesUseCase = FakeListServerSavesUseCase(),
+        downloadSaveUseCase: FakeDownloadSaveUseCase = FakeDownloadSaveUseCase(),
+        syncDevice: FakeSyncDeviceRepo = FakeSyncDeviceRepo(),
+        recordSyncUseCase: FakeRecordSyncUseCase = FakeRecordSyncUseCase(),
+        getLastSyncUseCase: FakeGetLastSyncUseCase = FakeGetLastSyncUseCase()
+    ) -> SyncSaveViewModel {
+        SyncSaveViewModel(
+            rom: rom,
+            previewUseCase: previewUseCase,
+            syncRunner: syncRunner,
+            stateSyncCoordinator: makeCoordinator(store: store),
+            listSavesUseCase: listSavesUseCase,
+            downloadSaveUseCase: downloadSaveUseCase,
+            saveStore: store,
+            syncDevice: syncDevice,
+            recordSyncUseCase: recordSyncUseCase,
+            getLastSyncUseCase: getLastSyncUseCase
+        )
+    }
 
-        // An existing server save routes through the overwrite prompt first.
-        viewModel.uploadLocalBattery()
-        viewModel.confirmUpload(update: true)
+    // MARK: - load()
+
+    @Test func loadNegotiatesScopedToThisRomOnly() async throws {
+        let rom = makeRom(id: 7)
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(makePreview(romId: 7)))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        #expect(previewUseCase.lastRomIds == [7])
+        #expect(previewUseCase.callCount == 1)
+        #expect(viewModel.preview != nil)
+    }
+
+    @Test func loadSurfacesANegotiationFailure() async throws {
+        let rom = makeRom()
+        let previewUseCase = FakeSyncPreviewUseCase(result: .failure(SyncPreviewError.notConnected))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        guard case .failed(let error) = viewModel.state else {
+            Issue.record("expected .failed, got \(viewModel.state)")
+            return
+        }
+        #expect(error == .notConnected)
+    }
+
+    @Test func batteryStatusReflectsTheOnlyOperationInThePlan() async throws {
+        let rom = makeRom(id: 3)
+        let preview = makePreview(romId: 3, operations: [makeOperation(romId: 3, direction: .upload)])
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(preview))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.batteryStatus == .willUpload)
+    }
+
+    @Test func batteryStatusIsNoSaveYetWhenThePlanHasNoOperationForThisRom() async throws {
+        let rom = makeRom(id: 4)
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(makePreview(romId: 4)))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.batteryStatus == .noSaveYet)
+    }
+
+    // MARK: - syncThisGame()
+
+    @Test func syncThisGameRenegotiatesBeforeRunningAndScopesTheStatesPass() async throws {
+        let rom = makeRom(id: 9)
+        let preview = makePreview(romId: 9, operations: [makeOperation(romId: 9, direction: .upload)])
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(preview))
+        let syncRunner = FakeSaveSyncRunner()
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: syncRunner
+        )
+        await viewModel.load()
+
+        await viewModel.syncThisGame()
+
+        // Once for load(), once for the re-negotiate inside syncThisGame(),
+        // once more for the load() that follows the run.
+        #expect(previewUseCase.callCount == 3)
+        #expect(syncRunner.callCount == 1)
+        #expect(syncRunner.lastStateRomIds == [9])
+    }
+
+    @Test func syncThisGameRecordsAManualSync() async throws {
+        let rom = makeRom(id: 11)
+        let preview = makePreview(romId: 11, operations: [makeOperation(romId: 11, direction: .upload)])
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(preview))
+        let recordSyncUseCase = FakeRecordSyncUseCase()
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner(),
+            recordSyncUseCase: recordSyncUseCase
+        )
+        await viewModel.load()
+
+        await viewModel.syncThisGame()
+
+        #expect(recordSyncUseCase.calls.count == 1)
+        #expect(recordSyncUseCase.calls.first?.romId == 11)
+        #expect(recordSyncUseCase.calls.first?.trigger == .manual)
+    }
+
+    @Test func syncThisGameDoesNothingWhenAlreadyUpToDate() async throws {
+        let rom = makeRom(id: 12)
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(makePreview(romId: 12)))
+        let syncRunner = FakeSaveSyncRunner()
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: syncRunner
+        )
+        await viewModel.load()
+
+        #expect(viewModel.canSync == false)
+        await viewModel.syncThisGame()
+
+        #expect(syncRunner.callCount == 0)
+    }
+
+    // MARK: - Export
+
+    @Test func exportLocalBatterySharesTheLocalFile() async throws {
+        let rom = makeRom(id: 20)
+        let store = makeStore(romId: 20, batteryData: Data([0xAA, 0xBB]))
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(makePreview(romId: 20)))
+        let viewModel = makeViewModel(
+            rom: rom, store: store, previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        viewModel.exportLocalBattery()
+
+        let item = try #require(viewModel.exportItem)
+        #expect(try Data(contentsOf: item.url) == Data([0xAA, 0xBB]))
+        #expect(viewModel.errorMessage == nil)
+    }
+
+    @Test func exportLocalBatteryFailsWithNoLocalSave() async throws {
+        let rom = makeRom(id: 21)
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(makePreview(romId: 21)))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        viewModel.exportLocalBattery()
+
+        #expect(viewModel.exportItem == nil)
+        #expect(viewModel.errorMessage != nil)
+    }
+
+    @Test func exportServerBatteryDownloadsAndSharesTheServerFile() async throws {
+        let rom = makeRom(id: 22)
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(makePreview(romId: 22)))
+        let listSavesUseCase = FakeListServerSavesUseCase()
+        listSavesUseCase.saves = [makeSaveSchema(id: 55, romId: 22)]
+        let downloadSaveUseCase = FakeDownloadSaveUseCase()
+        downloadSaveUseCase.data = Data([0x01, 0x02, 0x03])
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner(),
+            listSavesUseCase: listSavesUseCase, downloadSaveUseCase: downloadSaveUseCase
+        )
+
+        viewModel.exportServerBattery()
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        #expect(uploadSave.calls.isEmpty)
-        #expect(updateSave.calls.count == 1)
-        #expect(updateSave.calls.first?.id == 42)
-        #expect(updateSave.calls.first?.deviceId == "device-2")
+        let item = try #require(viewModel.exportItem)
+        #expect(try Data(contentsOf: item.url) == Data([0x01, 0x02, 0x03]))
+    }
+
+    @Test func exportServerBatteryFailsWithNoServerSave() async throws {
+        let rom = makeRom(id: 23)
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(makePreview(romId: 23)))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        viewModel.exportServerBattery()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(viewModel.exportItem == nil)
+        #expect(viewModel.errorMessage != nil)
+    }
+
+    private func makeSaveSchema(id: Int, romId: Int) -> SaveSchema {
+        SaveSchema(
+            id: id, romId: romId, userId: 1, fileName: "battery.sav", fileNameNoTags: "battery",
+            fileNameNoExt: "battery", fileExtension: "sav", filePath: "", fileSizeBytes: 0,
+            fullPath: "", downloadPath: "", missingFromFs: false, createdAt: Date(),
+            updatedAt: Date(), emulator: nil, screenshot: nil
+        )
     }
 }

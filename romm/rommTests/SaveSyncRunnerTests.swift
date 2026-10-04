@@ -229,7 +229,7 @@ struct SaveSyncRunnerTests {
             reportedSaveCount: 0,
             operations: [conflictOp(romId: 5), conflictOp(romId: 6)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         let recorded = try #require(fakes.recordRun.recorded.last)
         #expect(recorded.conflicts == 2)
@@ -249,7 +249,7 @@ struct SaveSyncRunnerTests {
         let fakes = Fakes()
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [uploadOp(romId: 42)])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skipped == 1)
         #expect(report.uploaded == 0)
@@ -269,7 +269,7 @@ struct SaveSyncRunnerTests {
 
         let newerServerTime = Date(timeIntervalSince1970: 1_700_000_000)
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 1, operations: [uploadOp(romId: 7, serverUpdatedAt: newerServerTime)])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skipped == 1)
         #expect(fakes.uploadSave.calls.isEmpty)
@@ -286,7 +286,7 @@ struct SaveSyncRunnerTests {
         let fakes = Fakes()
 
         let preview = SyncPreview(deviceId: "device-42", reportedSaveCount: 1, operations: [uploadOp(romId: 1)], sessionId: "session-9")
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.uploadSave.calls.first?.deviceId == "device-42")
@@ -304,7 +304,7 @@ struct SaveSyncRunnerTests {
         let fakes = Fakes()
 
         let preview = SyncPreview(deviceId: "device-42", reportedSaveCount: 1, operations: [uploadOp(romId: 1)], sessionId: nil)
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.uploadSave.calls.first?.overwrite == true)
@@ -320,7 +320,7 @@ struct SaveSyncRunnerTests {
         fakes.uploadSave.errorForRomId[1] = APIClientError.conflict("slot moved")
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 1, operations: [uploadOp(romId: 1)])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skippedConflicts == 1)
         #expect(report.failed == 0)
@@ -343,7 +343,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 1,
             operations: [uploadOp(romId: 1, serverFileName: "Zelda [2026-09-15 10:00:00].srm")]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.uploadSave.calls.first?.fileName == BatterySaveFileName.fallback(romId: 1))
@@ -360,7 +360,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 1,
             operations: [uploadOp(romId: 1, serverFileName: nil)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.uploadSave.calls.first?.fileName == BatterySaveFileName.fallback(romId: 1))
@@ -382,7 +382,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(fakes.downloadSave.calls.map(\.id) == [9])
@@ -399,7 +399,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: Date(), saveId: nil)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skipped == 1)
         #expect(report.downloaded == 0)
@@ -424,7 +424,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: newerServerTime, saveId: 9, serverContentHash: matchingHash)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skipped == 1)
         #expect(report.downloaded == 0)
@@ -447,7 +447,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: newerServerTime, saveId: 9)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(try store.readBattery(romId: 2) == Data([0x01, 0x02, 0x03]))
@@ -465,7 +465,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(try store.readBattery(romId: 2) == Data([0x01, 0x02, 0x03]))
@@ -489,7 +489,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 1,
             operations: [downloadOp(romId: 2, serverUpdatedAt: staleServerTime, saveId: 9)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skipped == 1)
         #expect(report.downloaded == 0)
@@ -515,7 +515,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: Date(), saveId: 9, slot: "autosave")]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skipped == 1)
         #expect(fakes.downloadSave.calls.isEmpty)
@@ -534,7 +534,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9, slot: nil)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(try store.readBattery(romId: 2) == Data([0x01]))
@@ -559,7 +559,7 @@ struct SaveSyncRunnerTests {
                 downloadOp(romId: 159, serverUpdatedAt: Date(), saveId: 109, slot: "autosave")
             ]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 0)
         #expect(report.skipped == 2)
@@ -581,7 +581,7 @@ struct SaveSyncRunnerTests {
             deviceId: "device-7", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9)]
         )
-        _ = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        _ = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(fakes.confirmDownload.calls.count == 1)
         #expect(fakes.confirmDownload.calls.first?.id == 9)
@@ -601,7 +601,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 0,
             operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(report.failed == 0)
@@ -617,7 +617,7 @@ struct SaveSyncRunnerTests {
         let fakes = Fakes()
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [conflictOp(romId: 3)])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.skippedConflicts == 1)
         #expect(report.uploaded == 0)
@@ -638,7 +638,7 @@ struct SaveSyncRunnerTests {
             deviceId: "d1", reportedSaveCount: 2,
             operations: [uploadOp(romId: 10), uploadOp(romId: 11)]
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.failed == 1)
         #expect(report.uploaded == 1)
@@ -657,11 +657,26 @@ struct SaveSyncRunnerTests {
         let fakes = Fakes()
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.uploadState.calls.count == 1)
         #expect(fakes.uploadState.calls.first?.romId == 5)
+    }
+
+    /// `stateRomIds` scopes the whole states pass: a ROM this device holds a
+    /// local-only state for is skipped entirely when it is not in the list.
+    @Test func stateSyncOnlyChecksTheGivenRomIdsWhenScoped() async throws {
+        let store = makeStore()
+        try store.writeState(romId: 5, slot: 0, data: Data([0x10]))
+        try store.writeState(romId: 6, slot: 0, data: Data([0x11]))
+        let fakes = Fakes()
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: [6])
+
+        #expect(report.uploaded == 1)
+        #expect(fakes.uploadState.calls.map(\.romId) == [6])
     }
 
     /// A state the server has and this device does not is downloaded into the
@@ -680,7 +695,7 @@ struct SaveSyncRunnerTests {
         try store.writeBattery(romId: 6, data: Data([0x01]))
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(fakes.downloadState.requestedIds == [30])
@@ -709,7 +724,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = Data([0xBB])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.updateState.calls.count == 1)
@@ -734,7 +749,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = Data([0xBB])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(try store.readState(romId: 5, slot: 0) == Data([0xBB]))
@@ -757,7 +772,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = Data([0xAA])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 0)
         #expect(report.downloaded == 0)
@@ -783,7 +798,7 @@ struct SaveSyncRunnerTests {
         fakes.updateState.errorForId[30] = URLError(.timedOut)
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.failed == 1)
         #expect(report.uploaded == 0)
@@ -811,7 +826,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = Data([0xBB])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(fakes.updateState.calls.isEmpty)
         #expect(fakes.uploadState.calls.isEmpty)
@@ -837,7 +852,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = Data([0xCC])
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(try store.readState(romId: 5, slot: 0) == Data([0xCC]))
@@ -870,7 +885,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = oldContent
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.updateState.calls.first?.fileData == Data([0xAA]))
@@ -898,7 +913,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = newContent
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.downloaded == 1)
         #expect(try store.readState(romId: 5, slot: 0) == newContent)
@@ -921,7 +936,7 @@ struct SaveSyncRunnerTests {
         fakes.downloadState.dataForId[30] = content
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 0)
         #expect(report.downloaded == 0)
@@ -979,7 +994,7 @@ struct SaveSyncRunnerTests {
         ]
 
         let preview = SyncPreview(deviceId: "device-3", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans, stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.uploadSave.calls.count == 1)
@@ -1028,7 +1043,7 @@ struct SaveSyncRunnerTests {
         ]
 
         let preview = SyncPreview(deviceId: "device-4", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans, stateRomIds: nil)
 
         #expect(fakes.uploadSave.calls.isEmpty)
         #expect(report.externalApps[.retroarch] == SaveSyncReport.ExternalAppOutcome())
@@ -1061,7 +1076,7 @@ struct SaveSyncRunnerTests {
         ]
 
         let preview = SyncPreview(deviceId: "device-9", reportedSaveCount: 0, operations: [], sessionId: "session-1")
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans, stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(fakes.uploadSave.calls.first?.sessionId == nil)
@@ -1107,7 +1122,7 @@ struct SaveSyncRunnerTests {
         ]
 
         let preview = SyncPreview(deviceId: "device-9", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans, stateRomIds: nil)
 
         #expect(report.uploaded == 2)
         #expect(fakes.listSaves.requestedRomIds == [40])
@@ -1141,7 +1156,7 @@ struct SaveSyncRunnerTests {
         ]
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans, stateRomIds: nil)
 
         #expect(report.skippedConflicts == 1)
         #expect(report.failed == 0)
@@ -1188,7 +1203,7 @@ struct SaveSyncRunnerTests {
         ]
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans, stateRomIds: nil)
 
         #expect(report.failed == 1)
         #expect(report.uploaded == 1)
@@ -1209,7 +1224,7 @@ struct SaveSyncRunnerTests {
         fakes.listStates.errorForRomId[70] = URLError(.notConnectedToInternet)
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.failed == 0)
         #expect(report.errors.isEmpty)
@@ -1226,7 +1241,7 @@ struct SaveSyncRunnerTests {
         fakes.listStates.errorForRomId[71] = URLError(.notConnectedToInternet)
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 0, operations: [])
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.failed == 1)
         #expect(report.errors.count == 1)
@@ -1250,7 +1265,7 @@ struct SaveSyncRunnerTests {
             operations: [uploadOp(romId: 1), uploadOp(romId: 2)],
             sessionId: "session-1"
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(fakes.completeSession.calls.count == 1)
         #expect(fakes.completeSession.calls.first?.sessionId == "session-1")
@@ -1294,7 +1309,7 @@ struct SaveSyncRunnerTests {
             operations: [uploadOp(romId: 1)],
             sessionId: "session-1"
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans)
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: scans, stateRomIds: nil)
 
         // The report itself does count everything: 1 battery upload, 1 state
         // upload, 1 external upload.
@@ -1313,7 +1328,7 @@ struct SaveSyncRunnerTests {
         let fakes = Fakes()
 
         let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 1, operations: [uploadOp(romId: 1)])
-        _ = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        _ = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(fakes.completeSession.calls.isEmpty)
     }
@@ -1332,7 +1347,7 @@ struct SaveSyncRunnerTests {
             operations: [uploadOp(romId: 1)],
             sessionId: "session-1"
         )
-        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
         #expect(report.uploaded == 1)
         #expect(report.failed == 0)

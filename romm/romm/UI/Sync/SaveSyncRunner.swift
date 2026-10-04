@@ -33,6 +33,44 @@ struct SaveSyncReport: Equatable {
         /// save just did not make it up.
         var conflicts = 0
     }
+
+    /// One line describing what this run did. Shared between the overview and
+    /// the per-game sheet so the two never phrase the same report differently.
+    var summaryText: String {
+        if uploaded == 0, downloaded == 0, skippedConflicts == 0, skipped == 0, failed == 0 {
+            return String(localized: "Nothing to sync, everything is up to date.")
+        }
+        var parts = [
+            String(localized: "\(uploaded) uploaded"),
+            String(localized: "\(downloaded) downloaded")
+        ]
+        if skippedConflicts > 0 {
+            parts.append(Self.conflictsLeft(skippedConflicts))
+        }
+        if skipped > 0 {
+            parts.append(String(localized: "\(skipped) skipped"))
+        }
+        var summary = parts.joined(separator: ", ")
+        if failed > 0 {
+            summary += " " + String(localized: "(\(failed) failed)")
+        }
+        return summary
+    }
+
+    /// Failure messages, capped so one bad run cannot flood the screen.
+    var cappedErrors: [String] {
+        guard !errors.isEmpty else { return [] }
+        let shown = Array(errors.prefix(3))
+        let remaining = errors.count - shown.count
+        guard remaining > 0 else { return shown }
+        return shown + [String(localized: "and \(remaining) more")]
+    }
+
+    static func conflictsLeft(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "1 conflict left")
+            : String(localized: "\(count) conflicts left")
+    }
 }
 
 @MainActor
@@ -40,9 +78,12 @@ protocol PSaveSyncRunner {
     /// Runs `preview` (battery uploads/downloads for this device, conflicts
     /// left untouched) and, separately, uploads whatever the external apps'
     /// scans matched. One failure never stops the rest of the run.
+    /// `stateRomIds` scopes the save-states pass: `nil` checks every ROM this
+    /// device holds anything for, a concrete list limits it to those ROMs.
     func run(
         preview: SyncPreview,
-        externalScans: [ExternalEmulatorID: ExternalSaveScan]
+        externalScans: [ExternalEmulatorID: ExternalSaveScan],
+        stateRomIds: [Int]?
     ) async -> SaveSyncReport
 }
 
@@ -107,7 +148,8 @@ final class SaveSyncRunner: PSaveSyncRunner {
 
     func run(
         preview: SyncPreview,
-        externalScans: [ExternalEmulatorID: ExternalSaveScan]
+        externalScans: [ExternalEmulatorID: ExternalSaveScan],
+        stateRomIds: [Int]?
     ) async -> SaveSyncReport {
         var report = SaveSyncReport()
         report.skippedConflicts = preview.conflicts.count
@@ -133,7 +175,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
 
         // States are not part of the negotiate plan (see SyncPreviewUseCase),
         // so every ROM this device holds anything for is checked slot by slot.
-        let romIds = (try? saveStore.listRomIds()) ?? []
+        let romIds = stateRomIds ?? (try? saveStore.listRomIds()) ?? []
         for romId in romIds {
             for outcome in await runStatesSync(romId: romId) {
                 apply(outcome, to: &report)
