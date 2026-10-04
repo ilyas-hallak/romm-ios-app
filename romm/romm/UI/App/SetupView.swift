@@ -76,7 +76,7 @@ struct SetupView: View {
 
                     // Glass card
                     glassCard
-                        .padding(.horizontal, 40)
+                        .padding(.horizontal, 20)
 
                     // Footer
                     VStack(spacing: 6) {
