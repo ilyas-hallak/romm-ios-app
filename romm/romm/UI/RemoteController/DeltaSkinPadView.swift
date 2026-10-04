@@ -66,8 +66,10 @@ struct DeltaSkinPadView: UIViewRepresentable {
     }
 
     /// DeltaCore only picks the skin's image and item frames for the size it
-    /// first lays out at. The pad turns sideways right as it appears, so the
-    /// skin is set again whenever the size changes.
+    /// lays out at, so the skin is set again whenever the size changes. It also
+    /// builds the skin in one layout pass and places the items in the next, and
+    /// a view that arrives at its final size gets only one, which leaves the
+    /// thumbstick at zero size. Both passes are run here.
     final class SkinContainerView: UIView {
 
         let controllerView = ControllerView()
@@ -86,8 +88,10 @@ struct DeltaSkinPadView: UIViewRepresentable {
             super.layoutSubviews()
             guard bounds.size != laidOutSize else { return }
             laidOutSize = bounds.size
+            controllerView.layoutIfNeeded()
             let skin = controllerView.controllerSkin
             controllerView.controllerSkin = skin
+            controllerView.layoutIfNeeded()
         }
     }
 }
