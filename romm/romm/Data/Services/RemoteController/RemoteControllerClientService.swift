@@ -11,12 +11,14 @@ final class RemoteControllerClientService: PRemoteControllerClientService {
 
     var onHostsChanged: (([RemoteControllerHost]) -> Void)?
     var onStateChanged: ((RemoteControllerLinkState) -> Void)?
+    var onLayoutChanged: ((RemotePadLayout) -> Void)?
 
     private var browser: NWBrowser?
     private var connection: NWConnection?
     /// Endpoints keyed by the host id the UI hands back, so the UI never has to
     /// carry a network type around.
     private var endpoints: [String: NWEndpoint] = [:]
+    private var codec = RemoteControllerCodec()
 
     func startBrowsing() {
         guard browser == nil else { return }
@@ -59,14 +61,16 @@ final class RemoteControllerClientService: PRemoteControllerClientService {
             return
         }
         connection?.cancel()
-        let connection = NWConnection(to: endpoint, using: .tcp)
+        let connection = NWConnection(to: endpoint, using: Self.parameters)
         self.connection = connection
+        codec = RemoteControllerCodec()
         connection.stateUpdateHandler = { [weak self] state in
             MainActor.assumeIsolated {
                 guard let self, self.connection === connection else { return }
                 switch state {
                 case .ready:
                     self.write(.hello(padName: padName))
+                    self.receive(on: connection)
                     self.onStateChanged?(.connected(hostName: host.name))
                 // Waiting is where a denied local network permission ends up,
                 // it would otherwise sit on "connecting" for good.
@@ -96,7 +100,39 @@ final class RemoteControllerClientService: PRemoteControllerClientService {
         write(.button(button, pressed: pressed))
     }
 
+    func sendGameInput(_ name: String, value: Double) {
+        write(.gameInput(name: name, value: value))
+    }
+
     // MARK: - Private
+
+    /// A stick sends a stream of small writes, which Nagle's algorithm would
+    /// hold back and bundle. Every one of them is a frame the player feels.
+    private static var parameters: NWParameters {
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        return NWParameters(tls: nil, tcp: tcp)
+    }
+
+    /// Only the layout comes back from the host. A host that closes its end is
+    /// gone, cancelling sends the pad back to the list.
+    private func receive(on connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, isComplete, error in
+            MainActor.assumeIsolated {
+                guard let self, self.connection === connection else { return }
+                if let data, !data.isEmpty {
+                    for case .layout(let layout) in self.codec.decode(data) {
+                        self.onLayoutChanged?(layout)
+                    }
+                }
+                if isComplete || error != nil {
+                    connection.cancel()
+                    return
+                }
+                self.receive(on: connection)
+            }
+        }
+    }
 
     private func updateHosts(from results: Set<NWBrowser.Result>) {
         var endpoints: [String: NWEndpoint] = [:]

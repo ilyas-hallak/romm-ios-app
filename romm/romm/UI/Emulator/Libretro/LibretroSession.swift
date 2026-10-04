@@ -798,4 +798,9 @@ extension LibretroSession: PSecondPlayerInput {
     func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool) {
         frontend.setButton(button.libretroButton, pressed: pressed, player: Self.remotePadPlayer)
     }
+
+    /// The pad only draws a skin when told to, which never happens here.
+    func setSecondPlayerGameInput(_ name: String, value: Double) {}
+
+    var remotePadLayout: RemotePadLayout { .standard }
 }

@@ -36,6 +36,30 @@ struct RemoteControllerCodecTests {
 
     /// A peer that never sends a newline must not be able to grow the buffer
     /// without end.
+    /// The layout travels inside an enum with its own payload, the shape most
+    /// likely to break silently.
+    @Test func carriesTheLayoutAndSkinInputs() {
+        var codec = RemoteControllerCodec()
+        var chunk = Data()
+        chunk.append(RemoteControllerCodec.encode(.layout(.deltaSkin(gameType: "com.rileytestut.delta.game.n64")))!)
+        chunk.append(RemoteControllerCodec.encode(.layout(.standard))!)
+        chunk.append(RemoteControllerCodec.encode(.gameInput(name: "analogStickLeft", value: 0.5))!)
+        #expect(codec.decode(chunk) == [
+            .layout(.deltaSkin(gameType: "com.rileytestut.delta.game.n64")),
+            .layout(.standard),
+            .gameInput(name: "analogStickLeft", value: 0.5),
+        ])
+    }
+
+    /// An older pad drops what a newer host says, a newer pad keeps reading
+    /// after something it does not know yet.
+    @Test func skipsAMessageFromANewerVersion() {
+        var codec = RemoteControllerCodec()
+        var chunk = Data((#"{"rumble":{"strength":1}}"# + "\n").utf8)
+        chunk.append(RemoteControllerCodec.encode(.layout(.standard))!)
+        #expect(codec.decode(chunk) == [.layout(.standard)])
+    }
+
     @Test func dropsAnEndlessLine() {
         var codec = RemoteControllerCodec()
         let flood = Data(repeating: UInt8(ascii: "x"), count: RemoteControllerCodec.maxLineLength + 1)
@@ -107,11 +131,14 @@ struct LibretroPlayerPortTests {
 @MainActor
 private final class FakeRemoteControllerHostService: PRemoteControllerHostService {
     var onButton: ((RemoteGamepadButton, Bool) -> Void)?
+    var onGameInput: ((String, Double) -> Void)?
     var onPadChanged: ((String?) -> Void)?
     private(set) var advertisedName: String?
+    private(set) var sentLayouts: [RemotePadLayout] = []
 
     func startAdvertising(as hostName: String) { advertisedName = hostName }
     func stopAdvertising() { advertisedName = nil }
+    func send(_ layout: RemotePadLayout) { sentLayouts.append(layout) }
 
     func simulatePadJoined(_ name: String) {
         onPadChanged?(name)
@@ -126,10 +153,15 @@ private final class FakeRemoteControllerHostService: PRemoteControllerHostServic
 private final class SpySecondPlayerInput: PSecondPlayerInput {
     private(set) var connectionChanges: [Bool] = []
     private(set) var buttons: [(RemoteGamepadButton, Bool)] = []
+    private(set) var gameInputs: [(String, Double)] = []
+    var remotePadLayout: RemotePadLayout = .deltaSkin(gameType: "n64")
 
     func setSecondPlayerConnected(_ connected: Bool) { connectionChanges.append(connected) }
     func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool) {
         buttons.append((button, pressed))
+    }
+    func setSecondPlayerGameInput(_ name: String, value: Double) {
+        gameInputs.append((name, value))
     }
 }
 
@@ -186,6 +218,37 @@ struct SecondControllerManagerTests {
         service.simulatePadJoined("Pad")
         manager.setInput(nil)
         #expect(input.connectionChanges.last == false)
+    }
+
+    @Test func skinInputsReachTheRunningGame() {
+        let (manager, service) = makeManager()
+        let input = SpySecondPlayerInput()
+        manager.setInput(input)
+        service.simulatePadJoined("Pad")
+        service.onGameInput?("cUp", 1)
+        #expect(input.gameInputs.count == 1)
+        #expect(input.gameInputs.first?.0 == "cUp")
+        #expect(input.gameInputs.first?.1 == 1)
+    }
+
+    /// A pad joining mid game has missed the layout sent at the start.
+    @Test func aPadThatJoinsIsToldWhatToDraw() {
+        let (manager, service) = makeManager()
+        // Held here, the manager only keeps a weak reference.
+        let input = SpySecondPlayerInput()
+        manager.setInput(input)
+        service.simulatePadJoined("Pad")
+        #expect(service.sentLayouts.last == .deltaSkin(gameType: "n64"))
+    }
+
+    @Test func thePadFollowsTheGameAndFallsBackBetweenGames() {
+        let (manager, service) = makeManager()
+        service.simulatePadJoined("Pad")
+        #expect(service.sentLayouts == [.standard])
+        let input = SpySecondPlayerInput()
+        manager.setInput(input)
+        manager.setInput(nil)
+        #expect(service.sentLayouts == [.standard, .deltaSkin(gameType: "n64"), .standard])
     }
 
     @Test func advertisingFollowsTheSetting() {

@@ -30,10 +30,14 @@ final class SecondControllerManager: ObservableObject {
         hostService.onButton = { [weak self] button, pressed in
             self?.input?.setSecondPlayerButton(button, pressed: pressed)
         }
+        hostService.onGameInput = { [weak self] name, value in
+            self?.input?.setSecondPlayerGameInput(name, value: value)
+        }
         hostService.onPadChanged = { [weak self] name in
             guard let self else { return }
             self.padName = name
             self.input?.setSecondPlayerConnected(name != nil)
+            if name != nil { self.sendLayout() }
         }
     }
 
@@ -65,5 +69,11 @@ final class SecondControllerManager: ObservableObject {
         self.input?.setSecondPlayerConnected(false)
         self.input = input
         input?.setSecondPlayerConnected(isPadConnected)
+        sendLayout()
+    }
+
+    /// Between games the pad falls back to the generic one.
+    private func sendLayout() {
+        hostService.send(input?.remotePadLayout ?? .standard)
     }
 }

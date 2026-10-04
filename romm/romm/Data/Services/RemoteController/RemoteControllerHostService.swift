@@ -12,6 +12,7 @@ final class RemoteControllerHostService: PRemoteControllerHostService {
 
     private var connectedPadName: String?
     var onButton: ((RemoteGamepadButton, Bool) -> Void)?
+    var onGameInput: ((String, Double) -> Void)?
     var onPadChanged: ((String?) -> Void)?
 
     private var listener: NWListener?
@@ -49,6 +50,11 @@ final class RemoteControllerHostService: PRemoteControllerHostService {
         listener?.cancel()
         listener = nil
         dropPad()
+    }
+
+    func send(_ layout: RemotePadLayout) {
+        guard let connection, let data = RemoteControllerCodec.encode(.layout(layout)) else { return }
+        connection.send(content: data, completion: .contentProcessed { _ in })
     }
 
     // MARK: - One pad at a time
@@ -95,6 +101,11 @@ final class RemoteControllerHostService: PRemoteControllerHostService {
             onPadChanged?(padName)
         case .button(let button, let pressed):
             onButton?(button, pressed)
+        case .gameInput(let name, let value):
+            onGameInput?(name, value)
+        case .layout:
+            // Only the host decides the layout.
+            break
         }
     }
 
