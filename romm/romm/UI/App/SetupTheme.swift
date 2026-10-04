@@ -84,10 +84,10 @@ enum SetupTheme {
 // MARK: - Background
 
 struct SetupBackground: View {
+    // The blobs are wider than a phone, so they live in an overlay
+    // to keep them from widening the screen they sit behind.
     var body: some View {
-        ZStack {
-            SetupTheme.backgroundGradient
-
+        SetupTheme.backgroundGradient.overlay {
             // Purple glow, top-left
             Circle()
                 .fill(
@@ -110,6 +110,7 @@ struct SetupBackground: View {
                 .blur(radius: 55)
                 .offset(x: 190, y: 380)
         }
+        .clipped()
         .ignoresSafeArea()
     }
 }

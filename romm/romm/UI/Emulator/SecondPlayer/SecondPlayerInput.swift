@@ -8,6 +8,10 @@ protocol PSecondPlayerInput: AnyObject {
     /// that drops off mid press would otherwise stay held down in the core.
     func setSecondPlayerConnected(_ connected: Bool)
     func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool)
+    /// A skin input from a pad that draws `remotePadLayout`.
+    func setSecondPlayerGameInput(_ name: String, value: Double)
+    /// What the pad should draw while this game runs.
+    var remotePadLayout: RemotePadLayout { get }
 }
 
 extension PSecondPlayerInput {

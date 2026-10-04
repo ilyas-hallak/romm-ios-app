@@ -7,6 +7,9 @@ struct RemoteControllerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel = RemoteControllerViewModel()
+    @State private var isLeaveDialogShown = false
+    /// Loaded once per layout, reading a skin means unpacking an archive.
+    @State private var skin: RemotePadSkin?
 
     var body: some View {
         Group {
@@ -31,6 +34,21 @@ struct RemoteControllerView: View {
     private var padScreen: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+            if let skin {
+                skinPad(skin)
+            } else {
+                genericPad
+            }
+        }
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+        .onChange(of: viewModel.layout, initial: true) { _, layout in
+            skin = RemotePadSkin(layout: layout)
+        }
+    }
+
+    private var genericPad: some View {
+        ZStack {
             RemoteGamepadView { button, pressed in
                 viewModel.setButton(button, pressed: pressed)
             }
@@ -53,8 +71,25 @@ struct RemoteControllerView: View {
                 Spacer()
             }
         }
-        .statusBarHidden()
-        .persistentSystemOverlays(.hidden)
+    }
+
+    /// A skin fills the screen up to its corners, where the shoulder buttons
+    /// sit, so there is no room for a Leave button. Its own menu button takes
+    /// that job instead.
+    private func skinPad(_ skin: RemotePadSkin) -> some View {
+        DeltaSkinPadView(
+            skin: skin,
+            onInput: { name, value in viewModel.setGameInput(name, value: value) },
+            onMenu: { isLeaveDialogShown = true }
+        )
+        .ignoresSafeArea()
+        .confirmationDialog(
+            viewModel.hostName.map { "Playing on \($0)" } ?? "Playing",
+            isPresented: $isLeaveDialogShown,
+            titleVisibility: .visible
+        ) {
+            Button("Leave", role: .destructive) { viewModel.disconnect() }
+        }
     }
 
     // MARK: - Picking a host
@@ -115,9 +150,15 @@ struct RemoteControllerView: View {
     /// The pad only reads as a gamepad sideways, so portrait is locked out for
     /// as long as this phone is one. A phone already held sideways keeps the
     /// side it is on, forcing one would flip it out of the player's hands.
+    /// Unlocking alone does not rotate back, so leaving turns an upright phone
+    /// back to portrait.
     private func applyOrientationLock(isPlaying: Bool) {
         guard isPlaying else {
-            OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
+            let isHeldUpright = !UIDevice.current.orientation.isLandscape
+            OrientationLock.set(
+                [.portrait, .landscapeLeft, .landscapeRight],
+                rotateTo: isHeldUpright ? .portrait : nil
+            )
             return
         }
         let isHeldSideways = OrientationLock.currentOrientation?.isLandscape ?? false

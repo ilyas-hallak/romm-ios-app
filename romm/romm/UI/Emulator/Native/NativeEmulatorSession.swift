@@ -266,7 +266,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     /// The phone on the network that plays as the second player, while one is
     /// connected. Held strongly because DeltaCore keeps its controllers weakly.
-    private var remoteController: RemoteGameController?
+    private var remotePad: RemotePad?
 
     // MARK: - GameViewControllerDelegate
 
@@ -832,28 +832,46 @@ extension NativeEmulatorSession: PSecondPlayerInput {
     }
 
     func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool) {
-        remoteController?.set(button, pressed: pressed)
+        remotePad?.buttons.set(button, pressed: pressed)
+    }
+
+    func setSecondPlayerGameInput(_ name: String, value: Double) {
+        remotePad?.skin.set(name, value: value)
+    }
+
+    var remotePadLayout: RemotePadLayout { .deltaSkin(gameType: gameType.rawValue) }
+
+    /// Two controllers for one pad: an older pad sends generic buttons, which
+    /// keep resolving through the standard mapping as they always did, while a
+    /// pad that draws the skin sends the system's own input names.
+    private struct RemotePad {
+        let buttons: RemoteGameController
+        let skin: RemoteSkinGameController
     }
 
     private func attachRemoteController() {
-        guard remoteController == nil, let core = emulatorCore else { return }
-        let controller = RemoteGameController(
-            name: SecondControllerManager.shared.padName ?? "Remote pad",
-            playerIndex: Self.remotePadPlayer
+        guard remotePad == nil, let core = emulatorCore else { return }
+        let name = SecondControllerManager.shared.padName ?? "Remote pad"
+        let pad = RemotePad(
+            buttons: RemoteGameController(name: name, playerIndex: Self.remotePadPlayer),
+            skin: RemoteSkinGameController(name: name, playerIndex: Self.remotePadPlayer, gameType: gameType)
         )
         // Only the core, not the game view controller: the menu input belongs to
         // whoever holds the phone the game runs on.
-        controller.addReceiver(core, inputMapping: controller.defaultInputMapping)
-        remoteController = controller
+        pad.buttons.addReceiver(core, inputMapping: pad.buttons.defaultInputMapping)
+        pad.skin.addReceiver(core, inputMapping: pad.skin.defaultInputMapping)
+        remotePad = pad
     }
 
     private func detachRemoteController() {
-        guard let controller = remoteController else { return }
-        controller.releaseAll()
+        guard let pad = remotePad else { return }
+        pad.buttons.releaseAll()
+        pad.skin.releaseAll()
         if let core = emulatorCore {
-            controller.removeReceiver(core)
+            pad.buttons.removeReceiver(core)
+            pad.skin.removeReceiver(core)
         }
-        remoteController = nil
+        remotePad = nil
     }
 }
 #endif

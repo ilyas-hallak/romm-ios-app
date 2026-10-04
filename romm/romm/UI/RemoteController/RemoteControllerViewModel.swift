@@ -9,6 +9,9 @@ final class RemoteControllerViewModel {
 
     private(set) var hosts: [RemoteControllerHost] = []
     private(set) var state: RemoteControllerLinkState = .idle
+    /// What the host wants drawn. Back to the generic pad once the link is gone,
+    /// the next host may not say.
+    private(set) var layout: RemotePadLayout = .standard
 
     var isPlaying: Bool {
         if case .connected = state { return true }
@@ -37,7 +40,12 @@ final class RemoteControllerViewModel {
         self.service = service
         self.padName = padName ?? UIDevice.current.name
         service.onHostsChanged = { [weak self] hosts in self?.hosts = hosts }
-        service.onStateChanged = { [weak self] state in self?.state = state }
+        service.onStateChanged = { [weak self] state in
+            guard let self else { return }
+            self.state = state
+            if !self.isPlaying { self.layout = .standard }
+        }
+        service.onLayoutChanged = { [weak self] layout in self?.layout = layout }
     }
 
     func start() {
@@ -48,6 +56,7 @@ final class RemoteControllerViewModel {
         service.disconnect()
         service.stopBrowsing()
         state = .idle
+        layout = .standard
         hosts = []
     }
 
@@ -61,5 +70,9 @@ final class RemoteControllerViewModel {
 
     func setButton(_ button: RemoteGamepadButton, pressed: Bool) {
         service.send(button, pressed: pressed)
+    }
+
+    func setGameInput(_ name: String, value: Double) {
+        service.sendGameInput(name, value: value)
     }
 }
