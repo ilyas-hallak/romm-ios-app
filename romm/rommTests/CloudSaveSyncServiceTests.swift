@@ -696,6 +696,71 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.updateSave.calls.isEmpty)
     }
 
+    // MARK: - Push skipped when the content is unchanged
+
+    /// An identical PUT still bumps the server's `updated_at`, so a session
+    /// that only loaded and never actually changed the battery must not push
+    /// bytes the server already has (and the negotiate response told it so).
+    @Test func pushSkippedWhenDataMatchesTheHashLearnedFromNegotiate() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let content = Data([0xAA, 0xBB])
+        var operationJSON = negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
+        operationJSON["server_content_hash"] = SaveContentHash.of(content)
+        let client = NegotiateStubAPIClient(response: makeNegotiateResponse(operations: [operationJSON]))
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        await service.pushBatteryAsync(data: content)
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// Different bytes must still go out even though a hash is already known
+    /// for the row, or a genuine change would silently get lost.
+    @Test func pushHappensWhenDataDiffersFromTheKnownHash() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let oldContent = Data([0xAA, 0xBB])
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 77, romId: 1, fileName: "battery.sav")
+        ]
+        var operationJSON = negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
+        operationJSON["server_content_hash"] = SaveContentHash.of(oldContent)
+        let client = NegotiateStubAPIClient(response: makeNegotiateResponse(operations: [operationJSON]))
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        await service.pushBatteryAsync(data: Data([0xCC, 0xDD]))
+
+        #expect(fakes.updateSave.calls.count == 1)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// After a successful push the pushed bytes' hash becomes the known
+    /// server hash, so a second push of the same data right after is skipped
+    /// too, not just one learned ahead of time from negotiate.
+    @Test func secondIdenticalPushAfterASuccessfulPushIsSkipped() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let content = Data([0x11, 0x22])
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig())
+        await service.pushBatteryAsync(data: content)
+        #expect(fakes.uploadSave.calls.count == 1)
+
+        await service.pushBatteryAsync(data: content)
+
+        #expect(fakes.uploadSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.isEmpty)
+    }
+
     // MARK: - applyDownload only ever touches this device's own battery slot
 
     /// A `download` operation for a row parked under a different slot (e.g.
