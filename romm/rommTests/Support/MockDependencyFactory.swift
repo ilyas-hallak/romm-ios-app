@@ -106,8 +106,8 @@ class MockDependencyFactory: PDependencyFactory {
 
     // External emulator apps
     lazy var playTargetPreference: PPlayTargetPreference = UserDefaultsPlayTargetPreferenceStore()
-    lazy var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore = UserDefaultsExternalEmulatorHandoffStore()
-    lazy var externalAppLauncher: PExternalAppLauncher = UIExternalAppLauncher()
+    var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore
+    var externalAppLauncher: PExternalAppLauncher
 
     // MARK: - Changelog / Update Check
 
@@ -153,12 +153,16 @@ class MockDependencyFactory: PDependencyFactory {
         fileValidationService: PFileValidationService? = nil,
         transferHistoryRepository: PTransferHistoryRepository? = nil,
         localROMRepository: PLocalROMRepository? = nil,
-        saveSyncRunner: PSaveSyncRunner? = nil
+        saveSyncRunner: PSaveSyncRunner? = nil,
+        externalEmulatorHandoffStore: PExternalEmulatorHandoffStore? = nil,
+        externalAppLauncher: PExternalAppLauncher? = nil
     ) {
         // Resolve the API client first so every server-only repository shares it.
         // Defaults to a harmless fake, never the production client.
         let resolvedAPIClient = apiClient ?? FakeAPIClient()
         self.apiClient = resolvedAPIClient
+        self.externalEmulatorHandoffStore = externalEmulatorHandoffStore ?? UserDefaultsExternalEmulatorHandoffStore()
+        self.externalAppLauncher = externalAppLauncher ?? UIExternalAppLauncher()
 
         // Server-only repositories: real implementations are safe because they
         // can only reach the (fake) client, so use the injected double or build

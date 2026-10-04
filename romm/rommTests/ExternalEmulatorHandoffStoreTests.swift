@@ -106,6 +106,51 @@ struct ExternalEmulatorHandoffStoreTests {
         #expect(store.hasHandedOff(romId: 4, to: .retroarch))
         #expect(store.hasHandedOff(romId: 5, to: .retroarch))
     }
+
+    // MARK: - Pasteboard copy state
+
+    @Test func nothingIsCopiedToThePasteboardInitially() {
+        let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: makeDefaults())
+        #expect(!store.hasCopiedToPasteboard(romId: 1, to: .manicEmu))
+    }
+
+    @Test func remembersAPasteboardCopyPerRom() {
+        let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: makeDefaults())
+        store.markCopiedToPasteboard(romId: 1, to: .manicEmu)
+        #expect(store.hasCopiedToPasteboard(romId: 1, to: .manicEmu))
+        #expect(!store.hasCopiedToPasteboard(romId: 2, to: .manicEmu))
+    }
+
+    @Test func pasteboardCopyPersistsAcrossInstances() {
+        let defaults = makeDefaults()
+        UserDefaultsExternalEmulatorHandoffStore(userDefaults: defaults)
+            .markCopiedToPasteboard(romId: 7, to: .manicEmu)
+        let reopened = UserDefaultsExternalEmulatorHandoffStore(userDefaults: defaults)
+        #expect(reopened.hasCopiedToPasteboard(romId: 7, to: .manicEmu))
+    }
+
+    /// Dropped alongside the handoff state, so a deleted or re-downloaded ROM
+    /// does not keep asking about a copy that no longer means anything.
+    @Test func forgetAlsoDropsThePasteboardCopyState() {
+        let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: makeDefaults())
+        store.markCopiedToPasteboard(romId: 4, to: .manicEmu)
+        store.markCopiedToPasteboard(romId: 5, to: .manicEmu)
+
+        store.forget(romId: 4)
+
+        #expect(!store.hasCopiedToPasteboard(romId: 4, to: .manicEmu))
+        #expect(store.hasCopiedToPasteboard(romId: 5, to: .manicEmu))
+    }
+
+    /// A confirmed handoff is the stronger state. Marking it does not need to
+    /// clear the pasteboard-copy flag, `hasHandedOff` already takes priority.
+    @Test func markingHandedOffLeavesThePasteboardCopyFlagUntouched() {
+        let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: makeDefaults())
+        store.markCopiedToPasteboard(romId: 1, to: .manicEmu)
+        store.markHandedOff(romId: 1, to: .manicEmu)
+        #expect(store.hasHandedOff(romId: 1, to: .manicEmu))
+        #expect(store.hasCopiedToPasteboard(romId: 1, to: .manicEmu))
+    }
 }
 
 struct PlayTargetPreferenceTests {

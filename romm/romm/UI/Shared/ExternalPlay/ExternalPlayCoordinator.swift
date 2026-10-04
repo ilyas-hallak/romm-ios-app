@@ -9,6 +9,15 @@ struct PasteboardHandoffInfo: Identifiable, Equatable {
     let appName: String
 }
 
+/// A ROM that already went to this target's pasteboard once, asking whether it
+/// made it into the target's library or still needs copying again.
+struct PasteboardRelaunchConfirmation: Identifiable, Equatable {
+    let id = UUID()
+    let romId: Int
+    let targetID: ExternalEmulatorID
+    let appName: String
+}
+
 /// Routes a Play tap to the external emulator app the user picked, from any
 /// screen that offers Play.
 ///
@@ -29,6 +38,9 @@ final class ExternalPlayCoordinator {
     /// Set when the ROM went onto the pasteboard and the user has to paste it in
     /// the target app.
     var pasteboardHandoff: PasteboardHandoffInfo?
+    /// Set when a ROM already went to this target's pasteboard once, asking the
+    /// user whether to deep link in or copy it over again.
+    var relaunchConfirmation: PasteboardRelaunchConfirmation?
     /// Surfaced by the host screen; nil while nothing went wrong.
     var errorMessage: String?
     /// True while a ROM is being unpacked, hashed or handed over.
@@ -87,18 +99,14 @@ final class ExternalPlayCoordinator {
     ///   caller can use this as a guard ahead of its own launch path.
     func play(romId: Int) async -> Bool {
         guard let targetID = playTarget.externalEmulatorID else { return false }
+        // A handoff is already in flight (possibly from a relaunch confirmation
+        // whose host screen already cleared its own launching guard), so a
+        // second tap must not run alongside it and clobber its state.
+        guard !isLaunching else { return true }
         let target = targetID.emulator
 
-        guard externalAppLauncher.isInstalled(target) else {
-            errorMessage = "\(target.displayName) is not installed. "
-                + "Install it, or switch Play back to the built-in emulator in Settings."
-            return true
-        }
-
-        guard let resolved = try? getDownloadedROMUseCase.execute(romId: romId) else {
-            errorMessage = "Download this ROM before opening it in \(target.displayName)."
-            return true
-        }
+        guard installedOrError(target) else { return true }
+        guard let resolved = downloadedOrError(romId: romId, target: target) else { return true }
 
         // Unpacking, hashing and copying a disc image all take time, so the
         // Play spinner covers everything below.
@@ -106,36 +114,59 @@ final class ExternalPlayCoordinator {
         defer { isLaunching = false }
         await Task.yield()
 
-        if handoffStore.hasHandedOff(romId: romId, to: targetID) {
-            if let identifier = try? await gameIdentifier(for: resolved, emulator: target),
-               await externalAppLauncher.launch(target, gameIdentifier: identifier) {
-                logger.info("Launched ROM \(romId) in \(target.displayName)")
-                markPlayed(romId: romId)
-                return true
-            }
-            // The app turned the link down, so its library no longer holds the
-            // ROM. Hand it over again rather than leaving Play dead.
-            logger.info("\(target.displayName) rejected the deep link, handing the ROM over again")
-            handoffStore.forget(romId: romId)
-        }
+        switch ExternalPlayDecision.action(
+            romId: romId, target: targetID, delivery: target.romDelivery, handoffStore: handoffStore
+        ) {
+        case .launchDirectly:
+            await relaunch(romId: romId, resolved: resolved, target: target)
 
-        do {
-            let handoff = try await resolveExternalGameIdentifierUseCase.execute(
-                rom: resolved.rom,
-                baseURL: resolved.baseURL,
-                emulator: target
+        case .confirmBeforeRelaunching:
+            relaunchConfirmation = PasteboardRelaunchConfirmation(
+                romId: romId, targetID: targetID, appName: target.displayName
             )
-            handoffStore.cacheGameIdentifier(
-                handoff.gameIdentifier,
-                romId: romId,
-                kind: target.identifierKind
-            )
-            handoffRomId = romId
-            presentHandoff(of: resolved.rom, using: handoff)
-        } catch {
-            errorMessage = error.localizedDescription
+
+        case .handOver:
+            await handOver(romId: romId, resolved: resolved, target: target)
         }
         return true
+    }
+
+    /// The user confirmed this ROM already made it into the target's library,
+    /// so deep link straight in and remember it as handed off from now on.
+    func confirmAlreadyInTarget() {
+        guard let confirmation = relaunchConfirmation else { return }
+        relaunchConfirmation = nil
+        handoffStore.markHandedOff(romId: confirmation.romId, to: confirmation.targetID)
+        let target = confirmation.targetID.emulator
+        guard installedOrError(target) else { return }
+        guard let resolved = downloadedOrError(romId: confirmation.romId, target: target) else { return }
+        // Set synchronously, before the Task even gets scheduled, so a Play tap
+        // landing in the gap before it runs sees the guard in `play()` and backs
+        // off instead of running alongside this.
+        isLaunching = true
+        Task { [weak self] in
+            defer { self?.isLaunching = false }
+            await self?.relaunch(romId: confirmation.romId, resolved: resolved, target: target)
+        }
+    }
+
+    /// The user said the ROM is not in the target yet, so copy it over again.
+    func copyToTargetAgain() {
+        guard let confirmation = relaunchConfirmation else { return }
+        relaunchConfirmation = nil
+        let target = confirmation.targetID.emulator
+        guard installedOrError(target) else { return }
+        guard let resolved = downloadedOrError(romId: confirmation.romId, target: target) else { return }
+        isLaunching = true
+        Task { [weak self] in
+            defer { self?.isLaunching = false }
+            await self?.handOver(romId: confirmation.romId, resolved: resolved, target: target)
+        }
+    }
+
+    /// Dismisses the relaunch confirmation without doing anything.
+    func cancelRelaunchConfirmation() {
+        relaunchConfirmation = nil
     }
 
     /// Records that an "Open in" menu actually delivered the ROM, so the next Play
@@ -186,6 +217,78 @@ final class ExternalPlayCoordinator {
 
     // MARK: - Private
 
+    /// Whether the target app is installed, surfacing the standard error when
+    /// it is not.
+    private func installedOrError(_ target: any PExternalEmulator) -> Bool {
+        guard externalAppLauncher.isInstalled(target) else {
+            errorMessage = "\(target.displayName) is not installed. "
+                + "Install it, or switch Play back to the built-in emulator in Settings."
+            return false
+        }
+        return true
+    }
+
+    /// The ROM resolved from local storage, or nil with the "download it
+    /// first" error set.
+    private func downloadedOrError(romId: Int, target: any PExternalEmulator) -> ResolvedDownloadedROM? {
+        guard let resolved = try? getDownloadedROMUseCase.execute(romId: romId) else {
+            errorMessage = "Download this ROM before opening it in \(target.displayName)."
+            return nil
+        }
+        return resolved
+    }
+
+    /// Deep links a ROM already believed to be in the target's library,
+    /// handing it over again if the target turns the link down.
+    private func relaunch(romId: Int, resolved: ResolvedDownloadedROM, target: any PExternalEmulator) async {
+        if await launchDirectly(romId: romId, resolved: resolved, target: target) { return }
+        // The app turned the link down, so its library no longer holds the
+        // ROM. Hand it over again rather than leaving Play dead.
+        handoffStore.forget(romId: romId)
+        await handOver(romId: romId, resolved: resolved, target: target)
+    }
+
+    /// Deep links a ROM already believed to be in the target's library.
+    private func launchDirectly(
+        romId: Int,
+        resolved: ResolvedDownloadedROM,
+        target: any PExternalEmulator
+    ) async -> Bool {
+        guard let identifier = try? await gameIdentifier(for: resolved, emulator: target),
+              await externalAppLauncher.launch(target, gameIdentifier: identifier) else {
+            logger.info("\(target.displayName) rejected the deep link, handing the ROM over again")
+            return false
+        }
+        logger.info("Launched ROM \(romId) in \(target.displayName)")
+        markPlayed(romId: romId)
+        return true
+    }
+
+    /// Hands a ROM over to the target app for the first time, or again after a
+    /// rejected deep link or an unconfirmed pasteboard copy.
+    private func handOver(
+        romId: Int,
+        resolved: ResolvedDownloadedROM,
+        target: any PExternalEmulator
+    ) async {
+        do {
+            let handoff = try await resolveExternalGameIdentifierUseCase.execute(
+                rom: resolved.rom,
+                baseURL: resolved.baseURL,
+                emulator: target
+            )
+            handoffStore.cacheGameIdentifier(
+                handoff.gameIdentifier,
+                romId: romId,
+                kind: target.identifierKind
+            )
+            handoffRomId = romId
+            presentHandoff(of: resolved.rom, using: handoff)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// The identifier the target app will use, cached because hashing a ROM on
     /// every Play tap would put seconds between the tap and the game.
     private func gameIdentifier(
@@ -234,8 +337,8 @@ final class ExternalPlayCoordinator {
             // A target that cannot take a document from the menu gets it over
             // the pasteboard. Multi-file ROMs stay on the share sheet, since one
             // pasteboard item cannot carry a set.
-            if playTarget.externalEmulatorID?.emulator.romDelivery == .pasteboard {
-                handOverViaPasteboard(url: url, romName: rom.name, platformSlug: rom.platformSlug)
+            if let targetID = playTarget.externalEmulatorID, targetID.emulator.romDelivery == .pasteboard {
+                handOverViaPasteboard(url: url, rom: rom, targetID: targetID)
                 return
             }
             openInItem = OpenInItem(url: url, tempDirectory: result.tempDirectory)
@@ -246,7 +349,7 @@ final class ExternalPlayCoordinator {
 
     /// Puts the ROM on the general pasteboard, for apps that only import through
     /// an item provider.
-    private func handOverViaPasteboard(url: URL, romName: String, platformSlug: String) {
+    private func handOverViaPasteboard(url: URL, rom: DownloadedROM, targetID: ExternalEmulatorID) {
         let appName = targetDisplayName ?? "the external emulator"
         // The bytes go on themselves. A provider built from a file URL registers
         // public.file-url plus a promise, and neither survives: the URL points
@@ -261,7 +364,7 @@ final class ExternalPlayCoordinator {
         // can override that guess, when the system's own type does not lead the
         // target back to the right extension or platform.
         let overrideIdentifier = playTarget.externalEmulatorID?.emulator
-            .pasteboardTypeIdentifier(forROMExtension: url.pathExtension, platformSlug: platformSlug)
+            .pasteboardTypeIdentifier(forROMExtension: url.pathExtension, platformSlug: rom.platformSlug)
         let romType = overrideIdentifier.flatMap { UTType($0) }
             ?? UTType(filenameExtension: url.pathExtension)
             ?? .data
@@ -274,10 +377,13 @@ final class ExternalPlayCoordinator {
         UIPasteboard.general.itemProviders = [provider]
         logger.info("Put \(url.lastPathComponent) (\(data.count) bytes) on the pasteboard "
             + "for \(appName) (type=\(romType.identifier), name=\(provider.suggestedName ?? "-"))")
-        // Nothing reports back from the other app, so this must not count as
-        // handed over, or the next Play tap deep links into an empty library.
+        // Nothing reports back from the other app, so this must not count as a
+        // confirmed handoff, or the next Play tap deep links into an empty
+        // library. It is remembered as a weaker "went over once" instead, so
+        // the next Play tap asks rather than copying over silently again.
         handoffRomId = nil
-        pasteboardHandoff = PasteboardHandoffInfo(romName: romName, appName: appName)
+        handoffStore.markCopiedToPasteboard(romId: rom.id, to: targetID)
+        pasteboardHandoff = PasteboardHandoffInfo(romName: rom.name, appName: appName)
     }
 
     /// Reports the ROM as played to the server, best effort.
