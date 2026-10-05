@@ -150,8 +150,17 @@ final class CloudSaveSyncService {
                 serverBatteryId = match.saveId
                 serverBatteryUpdatedAt = match.serverUpdatedAt
             }
-            for op in response.operations where op.action == .download && op.romId == config.romId {
-                await applyDownload(op)
+            // Issue #208: a save uploaded through the web UI (or any other
+            // client) can land under a different slot, e.g. "autosave". The
+            // winning candidate across every non-null, non-state slot of this
+            // ROM is the one applied to the local battery; only `serverBatteryId`
+            // learning above stays restricted to this device's own slot.
+            let downloadCandidates = response.operations.filter {
+                $0.action == .download && $0.romId == config.romId && $0.slot != nil
+                    && $0.fileName?.hasSuffix(".state") != true
+            }
+            if let winner = BatteryDownloadPicker.pickNewest(downloadCandidates, updatedAt: { $0.serverUpdatedAt }) {
+                await applyDownload(winner)
             }
             return true
         } catch {
@@ -227,29 +236,35 @@ final class CloudSaveSyncService {
         )
     }
 
-    /// Applies a single `download` operation. States are intentionally left to
-    /// `pullStates()` (its slot mapping is proven and the save/state id
-    /// namespaces are ambiguous over negotiate), so only battery/save downloads
-    /// are handled here.
+    /// Applies a single `download` operation, already picked as the newest
+    /// candidate across this ROM's slots by `tryNegotiatedPull`. States are
+    /// intentionally left to `pullStates()` (its slot mapping is proven and
+    /// the save/state id namespaces are ambiguous over negotiate), so only
+    /// battery/save downloads are handled here.
     private func applyDownload(_ op: SyncOperationSchema) async {
-        guard let saveId = op.saveId, isBatteryOperation(op) else { return }
-        // Null-slot battery saves are never paired server-side (per the sync
-        // API), so a `download` can point at the server's own battery. Only
-        // overwrite a local battery when the server copy is provably newer,
-        // mirroring pullBattery() — otherwise we'd clobber newer local progress.
-        if let localMTime = saveStore.batteryModifiedAt(romId: config.romId) {
-            guard let serverDate = op.serverUpdatedAt, serverDate > localMTime else { return }
-        }
+        guard let saveId = op.saveId else { return }
+        let localMTime = saveStore.batteryModifiedAt(romId: config.romId)
+        let localIsBlank = (try? saveStore.readBattery(romId: config.romId)).flatMap { $0 }
+            .map(BatterySaveBlank.isBlank) ?? true
+        guard BatteryDownloadDecision.shouldApply(
+            candidateUpdatedAt: op.serverUpdatedAt, localModifiedAt: localMTime, localIsBlank: localIsBlank
+        ) else { return }
         do {
             let deviceId = await syncDevice.deviceId()
             let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
-            try saveStore.writeBattery(romId: config.romId, data: data)
+            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
+            try saveStore.writeBattery(romId: config.romId, data: trimmed)
             if let serverDate = op.serverUpdatedAt {
                 try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
             }
-            serverBatteryId = saveId
-            serverBatteryUpdatedAt = op.serverUpdatedAt
-            logger.info("Negotiate down: battery (\(data.count) bytes)")
+            // A foreign-slot row (e.g. a web upload under "autosave") must
+            // never become the row the next push PUTs into; only this
+            // device's own slot is ever learned as `serverBatteryId`.
+            if isBatteryOperation(op) {
+                serverBatteryId = saveId
+                serverBatteryUpdatedAt = op.serverUpdatedAt
+            }
+            logger.info("Negotiate down: battery (\(trimmed.count) bytes)")
             await confirmDownload(saveId: saveId, deviceId: deviceId)
         } catch {
             logger.error("Negotiate battery download failed (id=\(saveId)): \(error.localizedDescription)")
@@ -265,15 +280,20 @@ final class CloudSaveSyncService {
             serverBatteryUpdatedAt = match.updatedAt
 
             let localMTime = saveStore.batteryModifiedAt(romId: config.romId)
-            if let localMTime, localMTime >= match.updatedAt { return }
+            let localIsBlank = (try? saveStore.readBattery(romId: config.romId)).flatMap { $0 }
+                .map(BatterySaveBlank.isBlank) ?? true
+            guard BatteryDownloadDecision.shouldApply(
+                candidateUpdatedAt: match.updatedAt, localModifiedAt: localMTime, localIsBlank: localIsBlank
+            ) else { return }
 
             let deviceId = await syncDevice.deviceId()
             let data = try await downloadSaveUseCase.execute(id: match.id, deviceId: deviceId, sessionId: nil)
-            try saveStore.writeBattery(romId: config.romId, data: data)
+            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
+            try saveStore.writeBattery(romId: config.romId, data: trimmed)
             // Preserve server mtime so subsequent local-vs-server compares are
             // not skewed by device clock drift after the write-to-disk timestamp.
             try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
-            logger.info("Battery pulled (\(data.count) bytes)")
+            logger.info("Battery pulled (\(trimmed.count) bytes)")
             await confirmDownload(saveId: match.id, deviceId: deviceId)
         } catch {
             logger.error("Battery pull failed: \(error.localizedDescription)")
@@ -323,6 +343,10 @@ final class CloudSaveSyncService {
     /// `batteryTarget()` path when there is no device id or negotiate itself
     /// fails (old server, offline), so those servers keep working unchanged.
     func pushBatteryAsync(data: Data) async {
+        guard !BatterySaveBlank.isBlank(data) else {
+            logger.info("Battery push skipped: local save is blank")
+            return
+        }
         guard let deviceId = await syncDevice.deviceId() else {
             await pushBatteryViaLegacyTarget(data: data)
             return

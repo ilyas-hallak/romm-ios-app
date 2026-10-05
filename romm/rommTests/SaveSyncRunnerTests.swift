@@ -275,6 +275,21 @@ struct SaveSyncRunnerTests {
         #expect(fakes.uploadSave.calls.isEmpty)
     }
 
+    /// A battery that was never actually written to (every byte 0xFF) must
+    /// never go up, or it would overwrite a real server save with nothing
+    /// (issue #208).
+    @Test func skipsAnUploadWhenTheLocalBatteryIsBlank() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 7, data: Data(repeating: 0xFF, count: 0x8000))
+        let fakes = Fakes()
+
+        let preview = SyncPreview(deviceId: "d1", reportedSaveCount: 1, operations: [uploadOp(romId: 7)])
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
+
+        #expect(report.skipped == 1)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
     // MARK: - Battery upload sends device/session bookkeeping
 
     /// Every upload carries this device's id, the session negotiate opened
@@ -497,23 +512,65 @@ struct SaveSyncRunnerTests {
         #expect(fakes.downloadSave.calls.isEmpty)
     }
 
-    // MARK: - A download for a foreign slot must never touch the battery file
+    /// A GBA battery downloaded with mGBA's 16-byte RTC footer must have it
+    /// trimmed before being written, or the core silently treats it as empty.
+    @Test func downloadTrimsTheRTCFooterOffTheWrittenBattery() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.downloadSave.dataForId[9] = Data(repeating: 0x5A, count: 0x20000 + 16)
 
-    /// The server plans per (rom_id, slot). A device that only reports its
-    /// battery slot can still get back a download for this ROM's "autosave"
-    /// or "default" row from another client. Writing that into the battery
-    /// file would silently overwrite it with a save state or an unrelated
-    /// save, which is why this is checked directly against the file rather
-    /// than only against the report's counters.
-    @Test func downloadForAForeignSlotNeverWritesTheBatteryFile() async throws {
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 0,
+            operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9)]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
+
+        #expect(report.downloaded == 1)
+        #expect(try store.readBattery(romId: 2)?.count == 0x20000)
+    }
+
+    // MARK: - A download from any non-null slot is a valid battery candidate (issue #208)
+
+    /// A web upload (or any other client's save) can land under a slot other
+    /// than "battery" (e.g. "autosave"). Such a row is still a valid download
+    /// candidate for this ROM's battery; when it is genuinely newer than the
+    /// non-blank local file, it is applied.
+    @Test func downloadFromAForeignSlotAppliesWhenGenuinelyNewer() async throws {
         let store = makeStore()
         try store.writeBattery(romId: 2, data: Data([0xAA]))
+        let oldLocalTime = Date(timeIntervalSince1970: 1_600_000_000)
+        try store.setBatteryModifiedAt(romId: 2, date: oldLocalTime)
         let fakes = Fakes()
+        let newerServerTime = oldLocalTime.addingTimeInterval(3600)
         fakes.downloadSave.dataForId[9] = Data([0x01, 0x02, 0x03])
 
         let preview = SyncPreview(
             deviceId: "d1", reportedSaveCount: 0,
-            operations: [downloadOp(romId: 2, serverUpdatedAt: Date(), saveId: 9, slot: "autosave")]
+            operations: [downloadOp(romId: 2, serverUpdatedAt: newerServerTime, saveId: 9, slot: "autosave")]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
+
+        #expect(report.downloaded == 1)
+        #expect(fakes.downloadSave.calls.map(\.id) == [9])
+        #expect(try store.readBattery(romId: 2) == Data([0x01, 0x02, 0x03]))
+    }
+
+    /// A foreign-slot row that is older than a non-blank local battery is not
+    /// applied: nothing says this device's own save lost just because another
+    /// client also has a row for this ROM.
+    @Test func downloadFromAForeignSlotSkipsWhenLocalIsNewerAndNotBlank() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 2, data: Data([0xAA]))
+        let localTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.setBatteryModifiedAt(romId: 2, date: localTime)
+        let fakes = Fakes()
+        let olderServerTime = localTime.addingTimeInterval(-3600)
+        fakes.downloadSave.dataForId[9] = Data([0x01, 0x02, 0x03])
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 0,
+            operations: [downloadOp(romId: 2, serverUpdatedAt: olderServerTime, saveId: 9, slot: "autosave")]
         )
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
@@ -522,9 +579,30 @@ struct SaveSyncRunnerTests {
         #expect(try store.readBattery(romId: 2) == Data([0xAA]))
     }
 
-    /// A row with no slot at all predates slots and is still treated as a
-    /// battery save, matching the negotiate-side filter.
-    @Test func downloadWithNoSlotIsStillTreatedAsBattery() async throws {
+    /// A missing local battery never blocks a download from a foreign slot,
+    /// which is exactly the web-upload scenario in issue #208: the save
+    /// lands under `slot=autosave` and must still be pulled down even though
+    /// this device never had a battery file of its own yet.
+    @Test func downloadFromAForeignSlotAppliesWhenNoLocalBatteryExists() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.downloadSave.dataForId[9] = Data([0x01, 0x02, 0x03])
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 0,
+            operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9, slot: "autosave")]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
+
+        #expect(report.downloaded == 1)
+        #expect(try store.readBattery(romId: 2) == Data([0x01, 0x02, 0x03]))
+    }
+
+    /// A null slot is archival (pre-slot rows, or rows negotiate already
+    /// excludes from pairing) and is never a download candidate, unlike every
+    /// other slot.
+    @Test func downloadWithNoSlotIsArchivalAndSkipped() async throws {
         let store = makeStore()
         let fakes = Fakes()
         let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
@@ -536,35 +614,40 @@ struct SaveSyncRunnerTests {
         )
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
-        #expect(report.downloaded == 1)
-        #expect(try store.readBattery(romId: 2) == Data([0x01]))
+        #expect(report.skipped == 1)
+        #expect(fakes.downloadSave.calls.isEmpty)
+        #expect(try store.readBattery(romId: 2) == nil)
     }
 
     /// Reproduces a real server response: one ROM getting a battery upload
-    /// alongside download operations for its "default" and "autosave" rows
-    /// from another client. Only the battery row may be touched; the two
-    /// foreign-slot downloads must be skipped without ever calling download.
-    @Test func realWorldMultiSlotResponseOnlyTouchesTheBatteryRow() async throws {
+    /// alongside download operations for both its "default" and "autosave"
+    /// rows from another client. The runner only ever applies the newest of
+    /// several same-ROM download candidates, so only one download happens,
+    /// the loser dropped silently rather than counted as skipped.
+    @Test func realWorldMultiSlotResponseOnlyAppliesTheNewestCandidate() async throws {
         let store = makeStore()
         try store.writeBattery(romId: 159, data: Data([0xAA]))
+        let oldLocalTime = Date(timeIntervalSince1970: 1_600_000_000)
+        try store.setBatteryModifiedAt(romId: 159, date: oldLocalTime)
         let fakes = Fakes()
         fakes.downloadSave.dataForId[6] = Data([0xDE, 0xAD])
         fakes.downloadSave.dataForId[109] = Data([0xBE, 0xEF])
+        let defaultRowTime = oldLocalTime.addingTimeInterval(1800)
+        let autosaveRowTime = oldLocalTime.addingTimeInterval(3600)
 
         let preview = SyncPreview(
             deviceId: "d1", reportedSaveCount: 1,
             operations: [
                 uploadOp(romId: 159),
-                downloadOp(romId: 159, serverUpdatedAt: Date(), saveId: 6, slot: "default"),
-                downloadOp(romId: 159, serverUpdatedAt: Date(), saveId: 109, slot: "autosave")
+                downloadOp(romId: 159, serverUpdatedAt: defaultRowTime, saveId: 6, slot: "default"),
+                downloadOp(romId: 159, serverUpdatedAt: autosaveRowTime, saveId: 109, slot: "autosave")
             ]
         )
         let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
 
-        #expect(report.downloaded == 0)
-        #expect(report.skipped == 2)
-        #expect(fakes.downloadSave.calls.isEmpty)
-        #expect(try store.readBattery(romId: 159) == Data([0xAA]))
+        #expect(report.downloaded == 1)
+        #expect(fakes.downloadSave.calls.map(\.id) == [109])
+        #expect(try store.readBattery(romId: 159) == Data([0xBE, 0xEF]))
     }
 
     // MARK: - Download confirmation

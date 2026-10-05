@@ -167,7 +167,16 @@ final class SaveSyncRunner: PSaveSyncRunner {
             apply(outcome, to: &report)
             tally(outcome, completed: &negotiatedCompleted, failed: &negotiatedFailed)
         }
-        for op in preview.downloads {
+        // A preview can carry more than one download candidate per ROM (an
+        // autosave row and a battery row both planned, say); only the newest
+        // is ever applied, matching the picking `SyncPreviewUseCase` already
+        // does. Redone here too so this runner stays correct independent of
+        // whatever preview it is handed (see issue #208).
+        let downloadsByRomId = Dictionary(grouping: preview.downloads, by: \.romId)
+        let downloads = downloadsByRomId.values.compactMap {
+            BatteryDownloadPicker.pickNewest($0, updatedAt: \.serverUpdatedAt)
+        }
+        for op in downloads {
             let outcome = await runBatteryDownload(op, deviceId: preview.deviceId)
             apply(outcome, to: &report)
             tally(outcome, completed: &negotiatedCompleted, failed: &negotiatedFailed)
@@ -237,7 +246,8 @@ final class SaveSyncRunner: PSaveSyncRunner {
     /// the existing row handed back, see the sync API spec), so this never
     /// checks content hashes before uploading.
     private func runBatteryUpload(_ op: SyncPreviewOperation, deviceId: String, sessionId: String?) async -> StepOutcome {
-        guard let data = try? saveStore.readBattery(romId: op.romId), !data.isEmpty else {
+        guard let data = try? saveStore.readBattery(romId: op.romId), !data.isEmpty,
+              !BatterySaveBlank.isBlank(data) else {
             return .skipped
         }
         if let serverUpdatedAt = op.serverUpdatedAt {
@@ -291,11 +301,10 @@ final class SaveSyncRunner: PSaveSyncRunner {
             return .skipped
         }
 
-        // Defense in depth: the preview already drops non-battery slots, but
-        // this runs off whatever preview it is handed, and a foreign-slot
-        // download (e.g. this ROM's "autosave" or "default" row from another
-        // client) written here would silently clobber the local battery file.
-        if let slot = op.slot, slot != SaveSlot.battery {
+        // A null slot is archival (pre-slot servers, or rows negotiate already
+        // excludes from pairing), never a candidate. Any other slot (battery,
+        // autosave, a web upload's default, ...) is fair game: see issue #208.
+        guard op.slot != nil else {
             return .skipped
         }
 
@@ -312,15 +321,21 @@ final class SaveSyncRunner: PSaveSyncRunner {
 
         // The screen keeps its loaded plan across a leave-and-return, so it
         // can be stale by the time this runs, e.g. an automatic push already
-        // wrote a newer local battery in the meantime.
-        if let serverUpdatedAt = op.serverUpdatedAt,
-           let localMTime = saveStore.batteryModifiedAt(romId: op.romId), localMTime >= serverUpdatedAt {
+        // wrote a newer local battery in the meantime. A blank or missing
+        // local battery never blocks the download regardless of timestamps.
+        let localMTime = saveStore.batteryModifiedAt(romId: op.romId)
+        let localIsBlank = (try? saveStore.readBattery(romId: op.romId)).flatMap { $0 }
+            .map(BatterySaveBlank.isBlank) ?? true
+        guard BatteryDownloadDecision.shouldApply(
+            candidateUpdatedAt: op.serverUpdatedAt, localModifiedAt: localMTime, localIsBlank: localIsBlank
+        ) else {
             return .skipped
         }
 
         do {
             let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
-            try saveStore.writeBattery(romId: op.romId, data: data)
+            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
+            try saveStore.writeBattery(romId: op.romId, data: trimmed)
             // Preserve the server's timestamp, matching the automatic path, so
             // a later compare is not skewed by clock drift after the write.
             if let serverUpdatedAt = op.serverUpdatedAt {
