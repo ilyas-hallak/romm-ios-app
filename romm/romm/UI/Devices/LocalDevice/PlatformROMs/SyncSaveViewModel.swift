@@ -108,6 +108,13 @@ final class SyncSaveViewModel {
         return .inSync
     }
 
+    /// The conflicting server save's id, when the battery status is
+    /// `.conflict`, so the UI can open the resolution sheet for it.
+    var conflictSaveId: Int? {
+        guard batteryStatus == .conflict else { return nil }
+        return preview?.operations.first?.saveId
+    }
+
     // MARK: - Load
 
     func load() async {

@@ -583,6 +583,27 @@ class MockDependencyFactory: PDependencyFactory {
         )
     }
 
+    @MainActor func makeBatteryConflictResolver() -> PBatteryConflictResolver {
+        BatteryConflictResolver(
+            saveStore: saveStore,
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
+            syncDevice: syncDeviceRepository
+        )
+    }
+
+    @MainActor func makeBatteryConflictViewModel(romId: Int, saveId: Int, onResolved: @escaping () async -> Void) -> BatteryConflictViewModel {
+        BatteryConflictViewModel(
+            romId: romId,
+            saveId: saveId,
+            saveStore: saveStore,
+            listSavesUseCase: makeListServerSavesUseCase(),
+            resolver: makeBatteryConflictResolver(),
+            onResolved: onResolved
+        )
+    }
+
     private func makeStateSyncCoordinator() -> StateSyncCoordinator {
         StateSyncCoordinator(
             saveStore: saveStore,

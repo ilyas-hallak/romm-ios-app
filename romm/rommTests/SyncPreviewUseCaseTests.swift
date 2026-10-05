@@ -72,6 +72,7 @@ private final class FakeSaveStore: PSaveStore, @unchecked Sendable {
     func writeBattery(romId: Int, data: Data) throws { batteryData[romId] = data }
     func batteryModifiedAt(romId: Int) -> Date? { batteryModifiedAtByRomId[romId] }
     func setBatteryModifiedAt(romId: Int, date: Date) throws { batteryModifiedAtByRomId[romId] = date }
+    func backupBattery(romId: Int, data: Data, origin: BatteryBackupOrigin) throws {}
 
     func listStates(romId: Int) throws -> [SaveStateEntry] { [] }
     func readState(romId: Int, slot: Int) throws -> Data? { nil }

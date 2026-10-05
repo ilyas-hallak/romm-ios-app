@@ -52,6 +52,23 @@ final class LocalSaveStoreRepository: PSaveStore {
         try fileManager.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
     }
 
+    func backupBattery(romId: Int, data: Data, origin: BatteryBackupOrigin) throws {
+        let dir = SaveStorePaths.backupsDir(root: rootDirectory, romId: romId)
+        try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        let name = BatteryBackupNaming.fileName(at: Date(), origin: origin)
+        try data.write(to: dir.appendingPathComponent(name), options: .atomic)
+        try pruneBackups(romId: romId)
+    }
+
+    private func pruneBackups(romId: Int) throws {
+        let dir = SaveStorePaths.backupsDir(root: rootDirectory, romId: romId)
+        guard fileManager.fileExists(atPath: dir.path) else { return }
+        let names = try fileManager.contentsOfDirectory(atPath: dir.path)
+        for name in BatteryBackupNaming.namesToPrune(existing: names) {
+            removeIfExists(dir.appendingPathComponent(name))
+        }
+    }
+
     // MARK: - State
 
     func listStates(romId: Int) throws -> [SaveStateEntry] {

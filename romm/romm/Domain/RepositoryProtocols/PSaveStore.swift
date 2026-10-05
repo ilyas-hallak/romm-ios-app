@@ -13,6 +13,12 @@ protocol PSaveStore {
     func batteryModifiedAt(romId: Int) -> Date?
     func setBatteryModifiedAt(romId: Int, date: Date) throws
 
+    /// Snapshots `data` into this ROM's backups folder before a battery
+    /// conflict resolution overwrites something, pruning down to the newest
+    /// `BatteryBackupNaming.keepCount`. Throws on a write failure, so a caller
+    /// can abort the resolution instead of overwriting without a safety copy.
+    func backupBattery(romId: Int, data: Data, origin: BatteryBackupOrigin) throws
+
     func listStates(romId: Int) throws -> [SaveStateEntry]
     func readState(romId: Int, slot: Int) throws -> Data?
     func writeState(romId: Int, slot: Int, data: Data) throws
