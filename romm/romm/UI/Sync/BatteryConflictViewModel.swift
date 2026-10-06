@@ -12,7 +12,7 @@ final class BatteryConflictViewModel: Identifiable {
 
     /// One side's stats for display. `deviceName` is only ever set on the
     /// server side, when the save names the device that uploaded it.
-    struct Side: Equatable {
+    struct Side {
         let date: Date?
         let sizeBytes: Int?
         let deviceName: String?
@@ -90,6 +90,7 @@ final class BatteryConflictViewModel: Identifiable {
     }
 
     private func resolve(_ action: @escaping () async throws -> Void) async {
+        guard !isResolving else { return }
         isResolving = true
         defer { isResolving = false }
         do {

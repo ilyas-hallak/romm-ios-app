@@ -26,9 +26,13 @@ enum BatteryBackupNaming {
         return Array(existing.sorted().prefix(existing.count - keepCount))
     }
 
+    /// Fractional seconds so two backups taken within the same second (easy to
+    /// hit when a backup happens programmatically rather than by hand) still
+    /// get distinct, newest-first-sortable names instead of overwriting one
+    /// another.
     private static func iso8601(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
     }
 }

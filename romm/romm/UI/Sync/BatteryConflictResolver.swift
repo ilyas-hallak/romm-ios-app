@@ -5,11 +5,17 @@ import Foundation
 /// kept as a guard rather than a silent no-op.
 enum BatteryConflictResolutionError: Error, LocalizedError {
     case noLocalBattery
+    case localBatteryIsBlank
+    case noDeviceId
 
     var errorDescription: String? {
         switch self {
         case .noLocalBattery:
             return String(localized: "No local battery save to keep.")
+        case .localBatteryIsBlank:
+            return String(localized: "This device's save is blank and would overwrite the server's save with nothing.")
+        case .noDeviceId:
+            return String(localized: "This device could not be identified to the server. Reconnect and try again.")
         }
     }
 }
@@ -39,39 +45,56 @@ final class BatteryConflictResolver: PBatteryConflictResolver {
     private let downloadSaveUseCase: PDownloadSaveUseCase
     private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
     private let syncDevice: PSyncDeviceRepository
+    private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
 
     init(
         saveStore: PSaveStore,
         uploadSaveUseCase: PUploadSaveUseCase,
         downloadSaveUseCase: PDownloadSaveUseCase,
         confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase,
-        syncDevice: PSyncDeviceRepository
+        syncDevice: PSyncDeviceRepository,
+        getDownloadedROMUseCase: PGetDownloadedROMUseCase
     ) {
         self.saveStore = saveStore
         self.uploadSaveUseCase = uploadSaveUseCase
         self.downloadSaveUseCase = downloadSaveUseCase
         self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.syncDevice = syncDevice
+        self.getDownloadedROMUseCase = getDownloadedROMUseCase
     }
 
     func keepServer(romId: Int, saveId: Int, serverUpdatedAt: Date?) async throws {
+        guard let deviceId = await syncDevice.deviceId() else {
+            throw BatteryConflictResolutionError.noDeviceId
+        }
         try backupLocalBatteryIfNeeded(romId: romId)
 
-        let deviceId = await syncDevice.deviceId()
         let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
-        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
+        let platformSlug = try? getDownloadedROMUseCase.execute(romId: romId).rom.platformSlug
+        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: platformSlug)
         try saveStore.writeBattery(romId: romId, data: trimmed)
         if let serverUpdatedAt {
             try? saveStore.setBatteryModifiedAt(romId: romId, date: serverUpdatedAt)
         }
-        if let deviceId {
-            _ = try? await confirmSaveDownloadUseCase.execute(id: saveId, deviceId: deviceId)
+        do {
+            _ = try await confirmSaveDownloadUseCase.execute(id: saveId, deviceId: deviceId)
+        } catch {
+            logger.warning("Download confirmation failed (save \(saveId)): \(error.localizedDescription)")
         }
         logger.info("Conflict resolved for ROM \(romId): kept server (save \(saveId))")
     }
 
     func keepThisDevice(romId: Int, saveId: Int) async throws {
-        let deviceId = await syncDevice.deviceId()
+        guard let deviceId = await syncDevice.deviceId() else {
+            throw BatteryConflictResolutionError.noDeviceId
+        }
+        guard let local = try saveStore.readBattery(romId: romId) else {
+            throw BatteryConflictResolutionError.noLocalBattery
+        }
+        guard !BatterySaveBlank.isBlank(local) else {
+            throw BatteryConflictResolutionError.localBatteryIsBlank
+        }
+
         // Downloaded and, when it holds anything, backed up before the local
         // save takes its place: once the upload below lands, this row's
         // current content is gone from the server's own history for this
@@ -81,9 +104,6 @@ final class BatteryConflictResolver: PBatteryConflictResolver {
             try saveStore.backupBattery(romId: romId, data: serverData, origin: .server)
         }
 
-        guard let local = try saveStore.readBattery(romId: romId), !local.isEmpty else {
-            throw BatteryConflictResolutionError.noLocalBattery
-        }
         // A fresh POST rather than a PUT on the known row: the row only just
         // lost a conflict, meaning it moved since this device's baseline, so
         // replacing it in place would skip the very guard that caught that.

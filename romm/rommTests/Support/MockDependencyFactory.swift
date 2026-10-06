@@ -589,7 +589,8 @@ class MockDependencyFactory: PDependencyFactory {
             uploadSaveUseCase: makeUploadSaveUseCase(),
             downloadSaveUseCase: makeDownloadSaveUseCase(),
             confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
-            syncDevice: syncDeviceRepository
+            syncDevice: syncDeviceRepository,
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
         )
     }
 

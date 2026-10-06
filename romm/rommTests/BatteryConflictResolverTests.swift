@@ -56,22 +56,42 @@ private final class FakeConflictConfirmSaveDownloadUseCase: PConfirmSaveDownload
 
 @Suite
 struct BatteryBackupNamingTests {
-    @Test func fileNameIncludesOriginAndISOTimestamp() {
+    @Test func fileNameIncludesOriginAndISOTimestampWithMilliseconds() {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let name = BatteryBackupNaming.fileName(at: date, origin: .local)
-        #expect(name == "battery-2023-11-14T22:13:20Z-local.sav")
+        #expect(name == "battery-2023-11-14T22:13:20.000Z-local.sav")
+    }
+
+    @Test func fileNameDiffersForTwoDatesInTheSameSecond() {
+        let first = BatteryBackupNaming.fileName(at: Date(timeIntervalSince1970: 1_700_000_000.123), origin: .local)
+        let second = BatteryBackupNaming.fileName(at: Date(timeIntervalSince1970: 1_700_000_000.456), origin: .local)
+        #expect(first != second)
+        // Lexical order must still track chronological order so pruning keeps
+        // the right one.
+        #expect([first, second].sorted() == [first, second])
     }
 
     @Test func namesToPruneKeepsOnlyNewestWhenOverLimit() {
-        let existing = (0..<12).map { "battery-2024-01-\(String(format: "%02d", $0 + 1))T00:00:00Z-local.sav" }
+        let existing = (0..<12).map { "battery-2024-01-\(String(format: "%02d", $0 + 1))T00:00:00.000Z-local.sav" }
         let toPrune = BatteryBackupNaming.namesToPrune(existing: existing)
         #expect(toPrune.count == 2)
         #expect(toPrune == existing.sorted().prefix(2).map { $0 })
     }
 
     @Test func namesToPruneIsEmptyWhenAtOrUnderLimit() {
-        let existing = (0..<10).map { "battery-2024-01-\(String(format: "%02d", $0 + 1))T00:00:00Z-local.sav" }
+        let existing = (0..<10).map { "battery-2024-01-\(String(format: "%02d", $0 + 1))T00:00:00.000Z-local.sav" }
         #expect(BatteryBackupNaming.namesToPrune(existing: existing).isEmpty)
+    }
+
+    /// Files written before this fix used the old, second-resolution name.
+    /// A directory holding both shapes must still prune oldest-first.
+    @Test func namesToPruneHandlesAMixOfOldAndNewFormats() {
+        let oldFormat = (1...6).map { "battery-2024-01-\(String(format: "%02d", $0))T00:00:00Z-local.sav" }
+        let newFormat = (7...12).map { "battery-2024-01-\(String(format: "%02d", $0))T00:00:00.000Z-local.sav" }
+        let existing = oldFormat + newFormat
+        let toPrune = BatteryBackupNaming.namesToPrune(existing: existing)
+        #expect(toPrune.count == 2)
+        #expect(Set(toPrune) == Set(oldFormat.prefix(2)))
     }
 }
 
@@ -118,9 +138,10 @@ struct BatteryConflictResolverTests {
         let download = FakeConflictDownloadSaveUseCase()
         let confirm = FakeConflictConfirmSaveDownloadUseCase()
         let syncDevice = FakeConflictSyncDeviceRepository()
+        let getDownloadedROM = FakeConflictGetDownloadedROMUseCase()
     }
 
-    /// 0 whether the backups folder is empty or was never created.
+    /// Returns 0 whether the backups folder is empty or was never created.
     private func backupCount(in dir: URL) throws -> Int {
         guard FileManager.default.fileExists(atPath: dir.path) else { return 0 }
         return try FileManager.default.contentsOfDirectory(atPath: dir.path).count
@@ -132,7 +153,8 @@ struct BatteryConflictResolverTests {
             uploadSaveUseCase: fakes.upload,
             downloadSaveUseCase: fakes.download,
             confirmSaveDownloadUseCase: fakes.confirm,
-            syncDevice: fakes.syncDevice
+            syncDevice: fakes.syncDevice,
+            getDownloadedROMUseCase: fakes.getDownloadedROM
         )
     }
 
@@ -143,6 +165,7 @@ struct BatteryConflictResolverTests {
         // 512 (a valid GBA size) + 16-byte footer, so trimming must strip it.
         let serverData = Data(repeating: 0xCD, count: 512) + Data(repeating: 0, count: 16)
         fakes.download.dataForId[42] = serverData
+        fakes.getDownloadedROM.platformSlugByRomId[1] = "gba"
         let resolver = makeResolver(store: store, fakes: fakes)
 
         try await resolver.keepServer(romId: 1, saveId: 42, serverUpdatedAt: Date(timeIntervalSince1970: 1_700_000_000))
@@ -158,6 +181,53 @@ struct BatteryConflictResolverTests {
         let backups = try FileManager.default.contentsOfDirectory(atPath: backupsDir.path)
         #expect(backups.count == 1)
         #expect(backups.first?.contains("-local.sav") == true)
+    }
+
+    @Test func keepServerKeepsTheFooterSizeOnOtherPlatforms() async throws {
+        let (store, _) = makeStore()
+        try store.writeBattery(romId: 1, data: Data(repeating: 0xAB, count: 512))
+        let fakes = Fakes()
+        // 8208 bytes would be 0x2000 + footer on GBA, but this is a SNES save.
+        let serverData = Data(repeating: 0xCD, count: 8208)
+        fakes.download.dataForId[42] = serverData
+        fakes.getDownloadedROM.platformSlugByRomId[1] = "snes"
+        let resolver = makeResolver(store: store, fakes: fakes)
+
+        try await resolver.keepServer(romId: 1, saveId: 42, serverUpdatedAt: nil)
+
+        #expect(try store.readBattery(romId: 1) == serverData)
+    }
+
+    @Test func keepServerStampsTheFileWithTheServersUpdatedAt() async throws {
+        let (store, _) = makeStore()
+        try store.writeBattery(romId: 1, data: Data(repeating: 0xAB, count: 512))
+        let fakes = Fakes()
+        fakes.download.dataForId[42] = Data(repeating: 0xCD, count: 512)
+        let resolver = makeResolver(store: store, fakes: fakes)
+        let serverUpdatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        try await resolver.keepServer(romId: 1, saveId: 42, serverUpdatedAt: serverUpdatedAt)
+
+        let mtime = try #require(store.batteryModifiedAt(romId: 1))
+        #expect(abs(mtime.timeIntervalSince(serverUpdatedAt)) < 1)
+    }
+
+    @Test func keepServerAbortsWhenDeviceIdIsNil() async throws {
+        let (store, root) = makeStore()
+        try store.writeBattery(romId: 1, data: Data(repeating: 0xAB, count: 512))
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = nil
+        fakes.download.dataForId[42] = Data(repeating: 0xCD, count: 512)
+        let resolver = makeResolver(store: store, fakes: fakes)
+
+        await #expect(throws: BatteryConflictResolutionError.self) {
+            try await resolver.keepServer(romId: 1, saveId: 42, serverUpdatedAt: nil)
+        }
+
+        #expect(try store.readBattery(romId: 1) == Data(repeating: 0xAB, count: 512))
+        #expect(fakes.download.calls.isEmpty)
+        #expect(fakes.confirm.calls.isEmpty)
+        #expect(try backupCount(in: SaveStorePaths.backupsDir(root: root, romId: 1)) == 0)
     }
 
     @Test func keepServerSkipsBackupWhenLocalIsBlank() async throws {
@@ -232,6 +302,41 @@ struct BatteryConflictResolverTests {
         #expect(fakes.upload.calls.count == 1)
     }
 
+    @Test func keepThisDeviceRejectsABlankLocalSave() async throws {
+        let (store, root) = makeStore()
+        try store.writeBattery(romId: 1, data: Data(repeating: 0xFF, count: 512))
+        let fakes = Fakes()
+        fakes.download.dataForId[42] = Data(repeating: 0x99, count: 200)
+        let resolver = makeResolver(store: store, fakes: fakes)
+
+        await #expect(throws: BatteryConflictResolutionError.self) {
+            try await resolver.keepThisDevice(romId: 1, saveId: 42)
+        }
+
+        // Nothing downloaded, backed up, or uploaded: a blank local save must
+        // never be allowed to clobber the server's row.
+        #expect(fakes.download.calls.isEmpty)
+        #expect(fakes.upload.calls.isEmpty)
+        #expect(try backupCount(in: SaveStorePaths.backupsDir(root: root, romId: 1)) == 0)
+    }
+
+    @Test func keepThisDeviceAbortsWhenDeviceIdIsNil() async throws {
+        let (store, root) = makeStore()
+        try store.writeBattery(romId: 1, data: Data(repeating: 0x42, count: 100))
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = nil
+        fakes.download.dataForId[42] = Data(repeating: 0x99, count: 200)
+        let resolver = makeResolver(store: store, fakes: fakes)
+
+        await #expect(throws: BatteryConflictResolutionError.self) {
+            try await resolver.keepThisDevice(romId: 1, saveId: 42)
+        }
+
+        #expect(fakes.download.calls.isEmpty)
+        #expect(fakes.upload.calls.isEmpty)
+        #expect(try backupCount(in: SaveStorePaths.backupsDir(root: root, romId: 1)) == 0)
+    }
+
     @Test func keepThisDeviceAbortsWhenNoLocalBattery() async throws {
         let (store, _) = makeStore()
         let fakes = Fakes()
@@ -294,4 +399,17 @@ private final class FailingBackupSaveStore: PSaveStore {
     func readUndoLoadThumbnail(romId: Int) throws -> Data? { try wrapping.readUndoLoadThumbnail(romId: romId) }
     func hasUndoLoad(romId: Int) -> Bool { wrapping.hasUndoLoad(romId: romId) }
     func clearUndoLoad(romId: Int) throws { try wrapping.clearUndoLoad(romId: romId) }
+}
+
+private final class FakeConflictGetDownloadedROMUseCase: PGetDownloadedROMUseCase, @unchecked Sendable {
+    var platformSlugByRomId: [Int: String] = [:]
+
+    func execute(romId: Int) throws -> ResolvedDownloadedROM {
+        guard let platformSlug = platformSlugByRomId[romId] else { throw GetDownloadedROMError.notDownloaded }
+        let rom = DownloadedROM(
+            id: romId, name: "Test ROM", platformName: platformSlug, platformSlug: platformSlug,
+            downloadedAt: Date(), totalSizeBytes: 0, localDirectory: "", files: [], urlCover: nil
+        )
+        return ResolvedDownloadedROM(rom: rom, baseURL: URL(fileURLWithPath: "/tmp"))
+    }
 }
