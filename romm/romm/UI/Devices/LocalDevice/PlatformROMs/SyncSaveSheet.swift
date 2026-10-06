@@ -170,7 +170,7 @@ struct SyncSaveSheet: View {
                 Label("Export Local Battery Save", systemImage: "square.and.arrow.up")
             }
             Button {
-                viewModel.exportServerBattery()
+                Task { await viewModel.exportServerBattery() }
             } label: {
                 HStack {
                     Label("Export Server Battery Save", systemImage: "square.and.arrow.up")

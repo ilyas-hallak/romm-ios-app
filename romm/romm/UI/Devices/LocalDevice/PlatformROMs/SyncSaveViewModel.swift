@@ -16,8 +16,9 @@ final class SyncSaveViewModel {
     }
 
     /// The battery save's status row, derived from the negotiated plan for
-    /// this ROM (always 0 or 1 operation, since only the battery slot is
-    /// reported, see `SyncPreviewUseCase`).
+    /// this ROM. The plan can hold more than one battery operation (see
+    /// `batteryStatus` below), so this is a verdict over all of them, not a
+    /// single operation's direction.
     enum BatteryStatus: Equatable {
         case inSync
         case willUpload
@@ -37,7 +38,6 @@ final class SyncSaveViewModel {
 
     // Export
     var exportItem: ExportSaveItem?
-    var isExportingLocalBattery = false
     var isExportingServerSave = false
     private var exportTempURL: URL?
 
@@ -80,11 +80,6 @@ final class SyncSaveViewModel {
         return nil
     }
 
-    var isLoading: Bool {
-        if case .loading = state { return true }
-        return false
-    }
-
     /// Whether "Sync This Game" has anything to try: a loaded plan with
     /// battery work, or states this ROM holds something out of sync for.
     var canSync: Bool {
@@ -99,15 +94,18 @@ final class SyncSaveViewModel {
     var lastSyncSummary: String? { lastSyncReport?.summaryText }
     var lastSyncErrors: [String] { lastSyncReport?.cappedErrors ?? [] }
 
+    /// Conflicts outrank downloads, which outrank uploads, the same precedence
+    /// `SaveSyncStatus.init(preview:)` uses: a ROM can have more than one
+    /// battery operation (rows with `slot == nil` ride alongside `battery`,
+    /// and the server has no unique constraint on (rom_id, slot)), so picking
+    /// just the first operation could hide a conflict behind an earlier upload.
     var batteryStatus: BatteryStatus? {
         guard let preview else { return nil }
-        guard let op = preview.operations.first else { return .noSaveYet }
-        switch op.direction {
-        case .upload: return .willUpload
-        case .download: return .willDownload
-        case .conflict: return .conflict
-        case .noOp: return .inSync
-        }
+        guard !preview.operations.isEmpty else { return .noSaveYet }
+        if !preview.conflicts.isEmpty { return .conflict }
+        if !preview.downloads.isEmpty { return .willDownload }
+        if !preview.uploads.isEmpty { return .willUpload }
+        return .inSync
     }
 
     // MARK: - Load
@@ -163,27 +161,25 @@ final class SyncSaveViewModel {
 
     /// Downloads the server's battery save for this ROM and exports it via
     /// share sheet as .srm.
-    func exportServerBattery() {
+    func exportServerBattery() async {
         guard !isExportingServerSave else { return }
         isExportingServerSave = true
-        Task {
-            defer { isExportingServerSave = false }
-            do {
-                guard let save = try await listSavesUseCase.execute(romId: rom.id).first else {
-                    errorMessage = "No server save found."
-                    return
-                }
-                if save.missingFromFs {
-                    errorMessage = "File missing on server — upload it again."
-                    return
-                }
-                let deviceId = await syncDevice.deviceId()
-                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: deviceId, sessionId: nil)
-                guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
-                presentExport(data: data, baseName: save.fileNameNoExt)
-            } catch {
-                errorMessage = "Export failed: \(error.localizedDescription)"
+        defer { isExportingServerSave = false }
+        do {
+            guard let save = try await listSavesUseCase.execute(romId: rom.id).first else {
+                errorMessage = "No server save found."
+                return
             }
+            if save.missingFromFs {
+                errorMessage = "File missing on server — upload it again."
+                return
+            }
+            let deviceId = await syncDevice.deviceId()
+            let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: deviceId, sessionId: nil)
+            guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
+            presentExport(data: data, baseName: save.fileNameNoExt)
+        } catch {
+            errorMessage = "Export failed: \(error.localizedDescription)"
         }
     }
 

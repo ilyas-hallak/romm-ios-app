@@ -211,6 +211,38 @@ struct SyncSaveViewModelTests {
         #expect(viewModel.batteryStatus == .noSaveYet)
     }
 
+    @Test func batteryStatusIsConflictEvenWhenItIsNotTheFirstOperation() async throws {
+        let rom = makeRom(id: 5)
+        let preview = makePreview(romId: 5, operations: [
+            makeOperation(romId: 5, direction: .noOp),
+            makeOperation(romId: 5, direction: .conflict)
+        ])
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(preview))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.batteryStatus == .conflict)
+    }
+
+    @Test func batteryStatusPrefersDownloadOverUploadWhenBothArePlanned() async throws {
+        let rom = makeRom(id: 6)
+        let preview = makePreview(romId: 6, operations: [
+            makeOperation(romId: 6, direction: .upload),
+            makeOperation(romId: 6, direction: .download)
+        ])
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(preview))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.batteryStatus == .willDownload)
+    }
+
     // MARK: - syncThisGame()
 
     @Test func syncThisGameRenegotiatesBeforeRunningAndScopesTheStatesPass() async throws {
@@ -307,8 +339,7 @@ struct SyncSaveViewModelTests {
             listSavesUseCase: listSavesUseCase, downloadSaveUseCase: downloadSaveUseCase
         )
 
-        viewModel.exportServerBattery()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await viewModel.exportServerBattery()
 
         let item = try #require(viewModel.exportItem)
         #expect(try Data(contentsOf: item.url) == Data([0x01, 0x02, 0x03]))
@@ -321,8 +352,7 @@ struct SyncSaveViewModelTests {
             rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
         )
 
-        viewModel.exportServerBattery()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await viewModel.exportServerBattery()
 
         #expect(viewModel.exportItem == nil)
         #expect(viewModel.errorMessage != nil)
