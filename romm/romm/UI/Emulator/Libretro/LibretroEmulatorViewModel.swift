@@ -94,7 +94,8 @@ final class LibretroEmulatorViewModel {
             let cloudSync = factory.makeCloudSaveSyncService(
                 romId: rom.id,
                 emulator: "libretro-\(core.dylibName)",
-                batteryFileName: batteryFileName
+                batteryFileName: batteryFileName,
+                platformSlug: rom.platformSlug
             )
             let s = LibretroSession(
                 gameURL: url,

@@ -110,6 +110,9 @@ final class SaveSyncRunner: PSaveSyncRunner {
     private let completeSyncSessionUseCase: PCompleteSyncSessionUseCase
     private let externalSaveFolderStore: PExternalSaveFolderStore
     private let recordRunUseCase: PRecordSaveSyncRunUseCase
+    /// Resolves a ROM's platform slug to gate the GBA RTC footer trim;
+    /// local-only, no network, so cheap to call per download.
+    private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
     /// Routes every state slot through the same decision logic
     /// `CloudSaveSyncService` uses, so the two never grow different ideas of
     /// "changed".
@@ -127,7 +130,8 @@ final class SaveSyncRunner: PSaveSyncRunner {
         downloadStateUseCase: PDownloadStateUseCase,
         completeSyncSessionUseCase: PCompleteSyncSessionUseCase,
         externalSaveFolderStore: PExternalSaveFolderStore,
-        recordRunUseCase: PRecordSaveSyncRunUseCase
+        recordRunUseCase: PRecordSaveSyncRunUseCase,
+        getDownloadedROMUseCase: PGetDownloadedROMUseCase
     ) {
         self.saveStore = saveStore
         self.uploadSaveUseCase = uploadSaveUseCase
@@ -137,6 +141,7 @@ final class SaveSyncRunner: PSaveSyncRunner {
         self.completeSyncSessionUseCase = completeSyncSessionUseCase
         self.externalSaveFolderStore = externalSaveFolderStore
         self.recordRunUseCase = recordRunUseCase
+        self.getDownloadedROMUseCase = getDownloadedROMUseCase
         self.stateSyncCoordinator = StateSyncCoordinator(
             saveStore: saveStore,
             listStatesUseCase: listServerStatesUseCase,
@@ -324,29 +329,38 @@ final class SaveSyncRunner: PSaveSyncRunner {
         // wrote a newer local battery in the meantime. A blank or missing
         // local battery never blocks the download regardless of timestamps.
         let localMTime = saveStore.batteryModifiedAt(romId: op.romId)
-        let localIsBlank = (try? saveStore.readBattery(romId: op.romId)).flatMap { $0 }
-            .map(BatterySaveBlank.isBlank) ?? true
+        let localIsBlank = BatteryLocalBattery.isBlankOrMissing(in: saveStore, romId: op.romId)
         guard BatteryDownloadDecision.shouldApply(
             candidateUpdatedAt: op.serverUpdatedAt, localModifiedAt: localMTime, localIsBlank: localIsBlank
         ) else {
             return .skipped
         }
 
+        let outcome: StepOutcome
         do {
             let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
-            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
-            try saveStore.writeBattery(romId: op.romId, data: trimmed)
-            // Preserve the server's timestamp, matching the automatic path, so
-            // a later compare is not skewed by clock drift after the write.
-            if let serverUpdatedAt = op.serverUpdatedAt {
-                try? saveStore.setBatteryModifiedAt(romId: op.romId, date: serverUpdatedAt)
+            let platformSlug = try? getDownloadedROMUseCase.execute(romId: op.romId).rom.platformSlug
+            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: platformSlug)
+            if BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank) {
+                try saveStore.writeBattery(romId: op.romId, data: trimmed)
+                // Preserve the server's timestamp, matching the automatic path, so
+                // a later compare is not skewed by clock drift after the write.
+                if let serverUpdatedAt = op.serverUpdatedAt {
+                    try? saveStore.setBatteryModifiedAt(romId: op.romId, date: serverUpdatedAt)
+                }
+                outcome = .downloaded
+            } else {
+                // A blank candidate must never overwrite a real local save,
+                // but the server still has to be told this id was seen, or
+                // it keeps replanning the same download forever.
+                outcome = .skipped
             }
         } catch {
             return .failed("ROM \(op.romId): battery download failed (\(error.localizedDescription))")
         }
 
         await confirmDownload(saveId: saveId, deviceId: deviceId)
-        return .downloaded
+        return outcome
     }
 
     /// Tells the server this device now has the save's content. Best-effort:

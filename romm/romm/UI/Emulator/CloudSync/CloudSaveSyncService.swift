@@ -17,6 +17,15 @@ final class CloudSaveSyncService {
         /// File-stem used for battery uploads. Web frontend identifies battery
         /// saves by filename; keep this stable across uploads for the same ROM.
         let batteryFileName: String
+        /// Gates the GBA RTC footer trim on download; nil (unknown) never trims.
+        let platformSlug: String?
+
+        init(romId: Int, emulator: String, batteryFileName: String, platformSlug: String? = nil) {
+            self.romId = romId
+            self.emulator = emulator
+            self.batteryFileName = batteryFileName
+            self.platformSlug = platformSlug
+        }
     }
 
     private let config: Config
@@ -244,18 +253,22 @@ final class CloudSaveSyncService {
     private func applyDownload(_ op: SyncOperationSchema) async {
         guard let saveId = op.saveId else { return }
         let localMTime = saveStore.batteryModifiedAt(romId: config.romId)
-        let localIsBlank = (try? saveStore.readBattery(romId: config.romId)).flatMap { $0 }
-            .map(BatterySaveBlank.isBlank) ?? true
+        let localIsBlank = BatteryLocalBattery.isBlankOrMissing(in: saveStore, romId: config.romId)
         guard BatteryDownloadDecision.shouldApply(
             candidateUpdatedAt: op.serverUpdatedAt, localModifiedAt: localMTime, localIsBlank: localIsBlank
         ) else { return }
         do {
             let deviceId = await syncDevice.deviceId()
             let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
-            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
-            try saveStore.writeBattery(romId: config.romId, data: trimmed)
-            if let serverDate = op.serverUpdatedAt {
-                try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
+            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: config.platformSlug)
+            if BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank) {
+                try saveStore.writeBattery(romId: config.romId, data: trimmed)
+                if let serverDate = op.serverUpdatedAt {
+                    try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
+                }
+                logger.info("Negotiate down: battery (\(trimmed.count) bytes)")
+            } else {
+                logger.info("Negotiate down: candidate battery is blank, keeping the local save")
             }
             // A foreign-slot row (e.g. a web upload under "autosave") must
             // never become the row the next push PUTs into; only this
@@ -264,7 +277,6 @@ final class CloudSaveSyncService {
                 serverBatteryId = saveId
                 serverBatteryUpdatedAt = op.serverUpdatedAt
             }
-            logger.info("Negotiate down: battery (\(trimmed.count) bytes)")
             await confirmDownload(saveId: saveId, deviceId: deviceId)
         } catch {
             logger.error("Negotiate battery download failed (id=\(saveId)): \(error.localizedDescription)")
@@ -280,20 +292,23 @@ final class CloudSaveSyncService {
             serverBatteryUpdatedAt = match.updatedAt
 
             let localMTime = saveStore.batteryModifiedAt(romId: config.romId)
-            let localIsBlank = (try? saveStore.readBattery(romId: config.romId)).flatMap { $0 }
-                .map(BatterySaveBlank.isBlank) ?? true
+            let localIsBlank = BatteryLocalBattery.isBlankOrMissing(in: saveStore, romId: config.romId)
             guard BatteryDownloadDecision.shouldApply(
                 candidateUpdatedAt: match.updatedAt, localModifiedAt: localMTime, localIsBlank: localIsBlank
             ) else { return }
 
             let deviceId = await syncDevice.deviceId()
             let data = try await downloadSaveUseCase.execute(id: match.id, deviceId: deviceId, sessionId: nil)
-            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
-            try saveStore.writeBattery(romId: config.romId, data: trimmed)
-            // Preserve server mtime so subsequent local-vs-server compares are
-            // not skewed by device clock drift after the write-to-disk timestamp.
-            try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
-            logger.info("Battery pulled (\(trimmed.count) bytes)")
+            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: config.platformSlug)
+            if BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank) {
+                try saveStore.writeBattery(romId: config.romId, data: trimmed)
+                // Preserve server mtime so subsequent local-vs-server compares are
+                // not skewed by device clock drift after the write-to-disk timestamp.
+                try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
+                logger.info("Battery pulled (\(trimmed.count) bytes)")
+            } else {
+                logger.info("Battery pull: candidate is blank, keeping the local save")
+            }
             await confirmDownload(saveId: match.id, deviceId: deviceId)
         } catch {
             logger.error("Battery pull failed: \(error.localizedDescription)")

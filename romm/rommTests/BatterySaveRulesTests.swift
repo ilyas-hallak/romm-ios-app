@@ -31,20 +31,34 @@ struct BatterySaveRulesTests {
 
     @Test func trimsA16ByteFooterOffAValidFlashSize() {
         let data = Data(repeating: 0xAB, count: 0x20000 + 16)
-        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
+        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: "gba")
         #expect(trimmed.count == 0x20000)
     }
 
     @Test func leavesAnExactValidSizeUnchanged() {
         let data = Data(repeating: 0xAB, count: 0x20000)
-        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
+        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: "gba")
         #expect(trimmed.count == 0x20000)
     }
 
     @Test func leavesAnOddSizeUnchanged() {
         let data = Data(repeating: 0xAB, count: 12345)
-        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data)
+        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: "gba")
         #expect(trimmed.count == 12345)
+    }
+
+    @Test func doesNotTrimOnANonGBAPlatformEvenAtACollidingSize() {
+        // An 8192-byte SNES save plus 16 bytes lands on the same size as a
+        // GBA flash save's footer; only the platform must decide here.
+        let data = Data(repeating: 0xAB, count: 0x2000 + 16)
+        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: "snes")
+        #expect(trimmed.count == 0x2000 + 16)
+    }
+
+    @Test func doesNotTrimWhenThePlatformIsUnknown() {
+        let data = Data(repeating: 0xAB, count: 0x20000 + 16)
+        let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: nil)
+        #expect(trimmed.count == 0x20000 + 16)
     }
 
     // MARK: - BatteryDownloadPicker
@@ -116,5 +130,40 @@ struct BatterySaveRulesTests {
             localIsBlank: false
         )
         #expect(!applies)
+    }
+
+    // MARK: - BatteryDownloadDecision.mayReplaceLocal
+
+    @Test func aBlankDownloadMayNotReplaceANonBlankLocalBattery() {
+        let mayReplace = BatteryDownloadDecision.mayReplaceLocal(
+            downloaded: Data(repeating: 0xFF, count: 0x2000), localIsBlank: false
+        )
+        #expect(!mayReplace)
+    }
+
+    @Test func aBlankDownloadMayReplaceABlankOrMissingLocalBattery() {
+        let mayReplace = BatteryDownloadDecision.mayReplaceLocal(
+            downloaded: Data(repeating: 0x00, count: 0x2000), localIsBlank: true
+        )
+        #expect(mayReplace)
+    }
+
+    @Test func aNonBlankDownloadAlwaysMayReplaceTheLocalBattery() {
+        var data = Data(repeating: 0xFF, count: 0x2000)
+        data[0] = 0x01
+        #expect(BatteryDownloadDecision.mayReplaceLocal(downloaded: data, localIsBlank: false))
+        #expect(BatteryDownloadDecision.mayReplaceLocal(downloaded: data, localIsBlank: true))
+    }
+
+    // MARK: - BatterySaveBlank.isBlank(orMissing:)
+
+    @Test func missingLocalDataIsBlank() {
+        #expect(BatterySaveBlank.isBlank(orMissing: nil))
+    }
+
+    @Test func presentNonBlankLocalDataIsNotBlank() {
+        var data = Data(repeating: 0x00, count: 16)
+        data[3] = 0x9
+        #expect(!BatterySaveBlank.isBlank(orMissing: data))
     }
 }

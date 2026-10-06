@@ -14,6 +14,22 @@ enum BatterySaveBlank {
         guard !data.isEmpty else { return true }
         return data.allSatisfy { $0 == 0xFF } || data.allSatisfy { $0 == 0x00 }
     }
+
+    /// Nil (no local file yet) counts as blank too, matching every call site
+    /// that treats "missing" and "blank" the same way.
+    static func isBlank(orMissing data: Data?) -> Bool {
+        data.map(isBlank) ?? true
+    }
+}
+
+/// Whether this ROM's local battery file is missing, unreadable, or blank:
+/// nothing worth keeping. Shared so every download site reads the file and
+/// checks it the same way instead of three slightly different copies.
+enum BatteryLocalBattery {
+    static func isBlankOrMissing(in saveStore: PSaveStore, romId: Int) -> Bool {
+        let data = (try? saveStore.readBattery(romId: romId)).flatMap { $0 }
+        return BatterySaveBlank.isBlank(orMissing: data)
+    }
 }
 
 /// Trims the 16-byte real-time-clock footer some tools (mGBA) append to a GBA
@@ -21,15 +37,16 @@ enum BatterySaveBlank {
 /// `CPUReadBatteryFile`) and silently ignores anything else, so a footer left
 /// in place reads back as an empty save.
 ///
-/// Sized rather than platform-gated: the call sites that write a downloaded
-/// battery (`CloudSaveSyncService`, `SaveSyncRunner`) only know the ROM id and
-/// the emulator tag, not the platform, and none of the valid sizes below plus
-/// 16 collides with another platform's save size, so this never misfires.
+/// Gated on the platform: some of the valid sizes below collide with another
+/// platform's own save size plus 16 bytes (an 8192-byte SNES save matches
+/// 0x2000 + 16), so trimming by size alone would corrupt a real save on those
+/// platforms. A `nil` or unrecognized slug never trims.
 enum GBABatteryFooter {
     static let validSizes: Set<Int> = [512, 0x2000, 0x8000, 0x10000, 0x20000]
     static let footerSize = 16
 
-    static func trimmingRTCFooter(from data: Data) -> Data {
+    static func trimmingRTCFooter(from data: Data, platformSlug: String?) -> Data {
+        guard let platformSlug, PlatformSlugToGameType.map(platformSlug) == .gba else { return data }
         guard validSizes.contains(data.count - footerSize) else { return data }
         return data.prefix(data.count - footerSize)
     }
@@ -52,5 +69,15 @@ enum BatteryDownloadDecision {
         guard let localModifiedAt, !localIsBlank else { return true }
         guard let candidateUpdatedAt else { return false }
         return candidateUpdatedAt > localModifiedAt
+    }
+
+    /// The second gate, after `shouldApply` said to go ahead and the bytes are
+    /// actually in hand: a candidate that turns out to be blank (a web upload
+    /// saved before the game was ever played, or any other foreign-slot row
+    /// with nothing in it) must never overwrite a local battery that has a
+    /// real save in it. `shouldApply` only knows timestamps, so this is
+    /// checked again once the downloaded data itself is known.
+    static func mayReplaceLocal(downloaded: Data, localIsBlank: Bool) -> Bool {
+        localIsBlank || !BatterySaveBlank.isBlank(downloaded)
     }
 }

@@ -205,8 +205,11 @@ struct CloudSaveSyncServiceTests {
         return LocalSaveStoreRepository(rootDirectory: tmp)
     }
 
-    private func makeConfig(romId: Int = 1, emulator: String = "delta-ios", batteryFileName: String = "battery.sav") -> CloudSaveSyncService.Config {
-        .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName)
+    private func makeConfig(
+        romId: Int = 1, emulator: String = "delta-ios", batteryFileName: String = "battery.sav",
+        platformSlug: String? = nil
+    ) -> CloudSaveSyncService.Config {
+        .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName, platformSlug: platformSlug)
     }
 
     private struct Fakes {
@@ -269,6 +272,29 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.confirmDownload.calls.count == 1)
         #expect(fakes.confirmDownload.calls.first?.id == 42)
         #expect(fakes.confirmDownload.calls.first?.deviceId == "device-1")
+    }
+
+    /// Same guard as the negotiated path, for the legacy list-based pull: a
+    /// blank server save must never overwrite a real local battery, but the
+    /// download is still confirmed so the server stops replanning it.
+    @Test func pullBatteryDoesNotOverwriteANonBlankLocalWithABlankServerSave() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0x01, 0x02, 0x03]))
+        try store.setBatteryModifiedAt(romId: 1, date: Date(timeIntervalSince1970: 1_000))
+
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 42, romId: 1, fileName: "battery.sav", updatedAt: serverTime)
+        ]
+        fakes.downloadSave.dataForId[42] = Data(repeating: 0x00, count: 0x2000)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig())
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readBattery(romId: 1) == Data([0x01, 0x02, 0x03]))
+        #expect(fakes.confirmDownload.calls.map(\.id) == [42])
     }
 
     /// The confirmation is best effort: a failure there must not undo the
@@ -881,13 +907,15 @@ struct CloudSaveSyncServiceTests {
             negotiateOperationJSON(action: .upload, romId: 1, fileName: "battery.sav")
         ])
         let client = NegotiateStubAPIClient(calls: [{ pullResponse }, { pushResponse }])
-        fakes.downloadSave.dataForId[999] = Data([0xFF])
+        // Not all-0xFF/all-0x00, so this counts as a real save, not a blank
+        // candidate that Fix 1's blank-guard would have to reject.
+        fakes.downloadSave.dataForId[999] = Data([0x12, 0x34])
 
         let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
         await service.pullBeforeLaunch()
 
         #expect(fakes.downloadSave.calls.map(\.id) == [999])
-        #expect(try store.readBattery(romId: 1) == Data([0xFF]))
+        #expect(try store.readBattery(romId: 1) == Data([0x12, 0x34]))
         #expect(fakes.confirmDownload.calls.map(\.id) == [999])
 
         // serverBatteryId must not have been adopted from the foreign-slot
@@ -966,10 +994,60 @@ struct CloudSaveSyncServiceTests {
         let client = NegotiateStubAPIClient(response: pullResponse)
         fakes.downloadSave.dataForId[999] = Data(repeating: 0x5A, count: 0x20000 + 16)
 
-        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(platformSlug: "gba"), apiClient: client)
         await service.pullBeforeLaunch()
 
         #expect(try store.readBattery(romId: 1)?.count == 0x20000)
+    }
+
+    /// Only applies for the GBA platform: an untagged (or non-GBA) config
+    /// must never trim, since another platform's own save can collide with a
+    /// GBA size plus the footer (see `GBABatteryFooter`).
+    @Test func applyDownloadDoesNotTrimWhenThePlatformIsNotGBA() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "autosave.sav", saveId: 999, slot: "autosave",
+                serverUpdatedAt: serverTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: pullResponse)
+        fakes.downloadSave.dataForId[999] = Data(repeating: 0x5A, count: 0x2000 + 16)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(platformSlug: "snes"), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readBattery(romId: 1)?.count == 0x2000 + 16)
+    }
+
+    /// A blank candidate from a foreign slot must never overwrite a real
+    /// local save, but the download still has to be confirmed or the server
+    /// keeps replanning it (issue #209 follow-up).
+    @Test func applyDownloadDoesNotOverwriteANonBlankLocalBatteryWithABlankCandidate() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0x01, 0x02, 0x03]))
+        try store.setBatteryModifiedAt(romId: 1, date: Date(timeIntervalSince1970: 1_000))
+
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "autosave.sav", saveId: 999, slot: "autosave",
+                serverUpdatedAt: serverTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: pullResponse)
+        fakes.downloadSave.dataForId[999] = Data(repeating: 0xFF, count: 0x2000)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readBattery(romId: 1) == Data([0x01, 0x02, 0x03]))
+        #expect(fakes.confirmDownload.calls.map(\.id) == [999])
     }
 
     // MARK: - pushBatteryAsync never uploads a blank battery

@@ -40,6 +40,22 @@ private final class FakeDownloadSaveUseCase: PDownloadSaveUseCase, @unchecked Se
     }
 }
 
+/// Resolves a ROM's platform slug the same way `SaveSyncRunner` would through
+/// the real local-ROM lookup. Absent from `platformSlugByRomId` (as for a ROM
+/// this device never downloaded) throws, matching `GetDownloadedROMUseCase`.
+private final class FakeGetDownloadedROMUseCase: PGetDownloadedROMUseCase, @unchecked Sendable {
+    var platformSlugByRomId: [Int: String] = [:]
+
+    func execute(romId: Int) throws -> ResolvedDownloadedROM {
+        guard let platformSlug = platformSlugByRomId[romId] else { throw GetDownloadedROMError.notDownloaded }
+        let rom = DownloadedROM(
+            id: romId, name: "Test ROM", platformName: platformSlug, platformSlug: platformSlug,
+            downloadedAt: Date(), totalSizeBytes: 0, localDirectory: "", files: [], urlCover: nil
+        )
+        return ResolvedDownloadedROM(rom: rom, baseURL: URL(fileURLWithPath: "/tmp"))
+    }
+}
+
 private final class FakeConfirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase, @unchecked Sendable {
     var error: Error?
     private(set) var calls: [(id: Int, deviceId: String)] = []
@@ -197,6 +213,7 @@ struct SaveSyncRunnerTests {
         let completeSession = FakeCompleteSyncSessionUseCase()
         let folderStore = FakeExternalSaveFolderStore()
         let recordRun = FakeRecordSaveSyncRunUseCase()
+        let getDownloadedROM = FakeGetDownloadedROMUseCase()
     }
 
     private func makeRunner(store: PSaveStore, fakes: Fakes) -> SaveSyncRunner {
@@ -212,7 +229,8 @@ struct SaveSyncRunnerTests {
             downloadStateUseCase: fakes.downloadState,
             completeSyncSessionUseCase: fakes.completeSession,
             externalSaveFolderStore: fakes.folderStore,
-            recordRunUseCase: fakes.recordRun
+            recordRunUseCase: fakes.recordRun,
+            getDownloadedROMUseCase: fakes.getDownloadedROM
         )
     }
 
@@ -517,6 +535,7 @@ struct SaveSyncRunnerTests {
     @Test func downloadTrimsTheRTCFooterOffTheWrittenBattery() async throws {
         let store = makeStore()
         let fakes = Fakes()
+        fakes.getDownloadedROM.platformSlugByRomId[2] = "gba"
         let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
         fakes.downloadSave.dataForId[9] = Data(repeating: 0x5A, count: 0x20000 + 16)
 
@@ -528,6 +547,49 @@ struct SaveSyncRunnerTests {
 
         #expect(report.downloaded == 1)
         #expect(try store.readBattery(romId: 2)?.count == 0x20000)
+    }
+
+    /// Without a resolvable GBA platform, the trim must not apply, or a
+    /// colliding save size on another platform (e.g. an 8192-byte SNES save)
+    /// would be corrupted.
+    @Test func downloadDoesNotTrimWhenTheROMsPlatformIsNotGBA() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.getDownloadedROM.platformSlugByRomId[2] = "snes"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.downloadSave.dataForId[9] = Data(repeating: 0x5A, count: 0x2000 + 16)
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 0,
+            operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9)]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
+
+        #expect(report.downloaded == 1)
+        #expect(try store.readBattery(romId: 2)?.count == 0x2000 + 16)
+    }
+
+    /// A blank candidate must never overwrite a real local battery, but the
+    /// download is still confirmed so the server stops replanning it.
+    @Test func downloadDoesNotOverwriteANonBlankLocalBatteryWithABlankCandidate() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 2, data: Data([0x01, 0x02, 0x03]))
+        try store.setBatteryModifiedAt(romId: 2, date: Date(timeIntervalSince1970: 1_000))
+
+        let fakes = Fakes()
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.downloadSave.dataForId[9] = Data(repeating: 0xFF, count: 0x2000)
+
+        let preview = SyncPreview(
+            deviceId: "d1", reportedSaveCount: 0,
+            operations: [downloadOp(romId: 2, serverUpdatedAt: serverTime, saveId: 9)]
+        )
+        let report = await makeRunner(store: store, fakes: fakes).run(preview: preview, externalScans: [:], stateRomIds: nil)
+
+        #expect(report.skipped == 1)
+        #expect(report.downloaded == 0)
+        #expect(try store.readBattery(romId: 2) == Data([0x01, 0x02, 0x03]))
+        #expect(fakes.confirmDownload.calls.map(\.id) == [9])
     }
 
     // MARK: - A download from any non-null slot is a valid battery candidate (issue #208)

@@ -145,7 +145,8 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
     /// download.
     private func previewOperations(from operations: [SyncOperationSchema]) -> [SyncPreviewOperation] {
         let eligible = operations.filter { $0.romId != nil && $0.fileName?.hasSuffix(".state") != true }
-        let byRomId = Dictionary(grouping: eligible, by: { $0.romId ?? 0 })
+        // The filter above guarantees romId is non-nil for every row here.
+        let byRomId = Dictionary(grouping: eligible, by: { $0.romId! })
 
         return byRomId.flatMap { romId, opsForRom -> [SyncPreviewOperation] in
             let download = qualifyingDownload(romId: romId, in: opsForRom)
@@ -178,7 +179,7 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
 
         let localData = (try? saveStore.readBattery(romId: romId)).flatMap { $0 }
         let localModifiedAt = saveStore.batteryModifiedAt(romId: romId)
-        let localIsBlank = localData.map(BatterySaveBlank.isBlank) ?? true
+        let localIsBlank = BatterySaveBlank.isBlank(orMissing: localData)
         let localHash = localData.map(SaveContentHash.of)
 
         let qualifying = candidates.filter { op in
