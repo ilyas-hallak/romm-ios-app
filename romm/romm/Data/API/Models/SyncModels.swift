@@ -109,13 +109,6 @@ struct SyncNegotiateRequest: Codable {
         self.saves = saves
         self.romIds = romIds
     }
-
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(deviceId, forKey: .deviceId)
-        try c.encode(saves, forKey: .saves)
-        try c.encodeIfPresent(romIds, forKey: .romIds)
-    }
 }
 
 /// The action the server wants performed for one save/state.

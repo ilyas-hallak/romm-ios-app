@@ -486,6 +486,46 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.uploadSave.calls.isEmpty)
     }
 
+    /// A negotiate response can name a row without saying when it was last
+    /// written, and a `noOp` verdict usually does; `learnBatteryUpdatedAt`
+    /// fills that gap right after the pull. That baseline must still protect
+    /// the legacy fallback from clobbering a row another device wrote while
+    /// this session was open, even though the timestamp never came from
+    /// negotiate directly.
+    @Test func legacyFallbackGuardsARowNamedWithoutATimestampByNegotiate() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let pulledAt = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt)
+        ]
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
+        ])
+        // The pull's negotiate succeeds with no timestamp on the op; the
+        // push's own negotiate then fails, forcing the legacy fallback to be
+        // the one that has to honor the baseline `learnBatteryUpdatedAt` set.
+        let client = NegotiateStubAPIClient(calls: [
+            { pullResponse },
+            { throw URLError(.badServerResponse) }
+        ])
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        // Another device writes that row while the game is running.
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(
+                id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt.addingTimeInterval(60)
+            )
+        ]
+        await service.pushBatteryAsync(data: Data([0xBB]))
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
     /// The row can also be gone, deleted or pruned by autocleanup. Then there
     /// is nothing to replace and a fresh, guarded upload is the right move.
     @Test func pushUploadsAFreshRowWhenTheKnownOneIsGone() async throws {
