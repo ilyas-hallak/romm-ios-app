@@ -470,6 +470,10 @@ class MockDependencyFactory: PDependencyFactory {
         GetDownloadedROMUseCase(localROMRepository: localROMRepository)
     }
 
+    func makeFindROMsByFileStemUseCase() -> PFindROMsByFileStemUseCase {
+        FindROMsByFileStemUseCase(localROMRepository: localROMRepository)
+    }
+
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase {
         ResolveROMFileUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
@@ -534,6 +538,7 @@ class MockDependencyFactory: PDependencyFactory {
             core: core,
             getDownloadedROM: makeGetDownloadedROMUseCase(),
             resolveROMFile: makeResolveROMFileUseCase(),
+            findROMsByFileStem: makeFindROMsByFileStemUseCase(),
             saveStates: makeEmulatorSaveStatesUseCase(),
             biosSync: makeBIOSSyncUseCase(),
             aspectRatioPreference: libretroAspectRatioPreference,

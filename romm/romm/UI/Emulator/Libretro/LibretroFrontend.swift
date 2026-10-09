@@ -273,6 +273,7 @@ final class LibretroFrontend {
         gamePath: String,
         systemDir: String,
         saveDir: String,
+        sramURL: URL,
         portDevice: UInt32
     ) throws {
         guard FileManager.default.fileExists(atPath: corePath) else {
@@ -343,9 +344,7 @@ final class LibretroFrontend {
         }
         guard loaded else { throw FrontendError.loadGameFailed }
 
-        let romBase = (gamePath as NSString).lastPathComponent
-        let stem = (romBase as NSString).deletingPathExtension
-        self.sramURL = URL(fileURLWithPath: saveDir).appendingPathComponent("\(stem).srm")
+        self.sramURL = sramURL
         loadSRAMFromDisk()
 
         var av = LibretroABI.SystemAVInfo(
