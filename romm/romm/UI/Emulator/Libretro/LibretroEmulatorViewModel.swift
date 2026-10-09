@@ -17,6 +17,7 @@ final class LibretroEmulatorViewModel {
 
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let resolveROMFile: PResolveROMFileUseCase
+    private let findROMsByFileStem: PFindROMsByFileStemUseCase
     private let saveStates: PEmulatorSaveStatesUseCase
     private let biosSync: PBIOSSyncUseCase
     let aspectRatioPreference: PLibretroAspectRatioPreference
@@ -30,6 +31,7 @@ final class LibretroEmulatorViewModel {
         core: LibretroCore,
         getDownloadedROM: PGetDownloadedROMUseCase,
         resolveROMFile: PResolveROMFileUseCase,
+        findROMsByFileStem: PFindROMsByFileStemUseCase,
         saveStates: PEmulatorSaveStatesUseCase,
         biosSync: PBIOSSyncUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
@@ -41,6 +43,7 @@ final class LibretroEmulatorViewModel {
         self.core = core
         self.getDownloadedROM = getDownloadedROM
         self.resolveROMFile = resolveROMFile
+        self.findROMsByFileStem = findROMsByFileStem
         self.saveStates = saveStates
         self.biosSync = biosSync
         self.aspectRatioPreference = aspectRatioPreference
@@ -102,6 +105,7 @@ final class LibretroEmulatorViewModel {
                 core: core,
                 romId: rom.id,
                 saveStates: saveStates,
+                findROMsByFileStem: findROMsByFileStem,
                 aspectRatioPreference: aspectRatioPreference,
                 screenPositionPreference: screenPositionPreference,
                 menuShortcutPreference: menuShortcutPreference,

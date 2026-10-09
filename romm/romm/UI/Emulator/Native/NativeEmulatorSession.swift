@@ -400,6 +400,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     func pause() {
         setFastForwarding(false)
         viewController.pauseEmulation()
+        // A pause is often the last thing that runs: iOS can end a backgrounded
+        // app without `stop()` ever being called.
+        flushBattery(pushesUnchanged: false)
     }
     func resume() {
         guard phase == .running else { return }
@@ -420,7 +423,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         // the emulator to be paused around save(), otherwise the save can race
         // with an in-flight frame and crash.
         viewController.pauseEmulation()
-        flushBattery()
+        flushBattery(pushesUnchanged: true)
         SecondControllerManager.shared.setInput(nil)
         detachExternalControllers()
         // Before `core.stop()`: the core must not be torn down while a view of
@@ -761,11 +764,18 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     // MARK: - Battery
 
+    private var batteryFile: CoreBatteryFile {
+        CoreBatteryFile(
+            url: Game(fileURL: gameURL, type: gameType).gameSaveURL,
+            romId: romId,
+            saveStates: saveStates
+        )
+    }
+
     private func loadBatteryIfAvailable() {
-        guard let raw = try? saveStates.readBattery(romId: romId) else { return }
-        let data = adaptBatteryForCore(raw: raw)
-        let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
-        try? data.write(to: savURL, options: .atomic)
+        guard case .adoptedCoreFile(let data) = batteryFile.stage(adapt: adaptBatteryForCore) else { return }
+        logger.info("Kept the core's newer battery save over the stored one")
+        cloudSync?.pushBattery(data: data)
     }
 
     /// VBA-M (`CPUReadBatteryFile`) routes the .sav purely by file size:
@@ -806,16 +816,15 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         return nil
     }
 
-    private func flushBattery() {
+    /// - Parameter pushesUnchanged: Also push a save the store already had. Done
+    ///   on quit, so a push that failed earlier, offline for example, gets retried.
+    private func flushBattery(pushesUnchanged: Bool) {
         // If the view disappears before startEmulation() runs, the core is still
         // .stopped and save() dereferences NULL (EXC_BAD_ACCESS in N64/GPGX).
         guard let core = emulatorCore, core.state != .stopped else { return }
         core.save()
-        let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
-        if let data = try? Data(contentsOf: savURL) {
-            try? saveStates.writeBattery(romId: romId, data: data)
-            cloudSync?.pushBattery(data: data)
-        }
+        guard let battery = batteryFile.collect(), battery.isNew || pushesUnchanged else { return }
+        cloudSync?.pushBattery(data: battery.data)
     }
 }
 

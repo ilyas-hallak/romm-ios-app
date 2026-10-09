@@ -9,6 +9,7 @@ final class LibretroSession: NSObject {
     private let core: LibretroCore
     private let romId: Int
     private let saveStates: PEmulatorSaveStatesUseCase
+    private let findROMsByFileStem: PFindROMsByFileStemUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
     private let rumblePreference: PRumblePreference?
@@ -54,12 +55,16 @@ final class LibretroSession: NSObject {
     /// Whether a phone on the network is playing as the second player.
     private var hasRemotePad = false
     private var isStopped = false
+    /// Flushing before the stored save reached the core would treat whatever
+    /// file is lying around as this game's progress.
+    private var isBatteryStaged = false
 
     init(
         gameURL: URL,
         core: LibretroCore,
         romId: Int,
         saveStates: PEmulatorSaveStatesUseCase,
+        findROMsByFileStem: PFindROMsByFileStemUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
@@ -72,6 +77,7 @@ final class LibretroSession: NSObject {
         self.core = core
         self.romId = romId
         self.saveStates = saveStates
+        self.findROMsByFileStem = findROMsByFileStem
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
         self.rumblePreference = rumblePreference
@@ -177,20 +183,36 @@ final class LibretroSession: NSObject {
     /// save directory so the core actually loads it on `retro_load_game`.
     /// Without this step, freshly pulled cloud saves are written to
     /// `Saves/<romId>/battery.sav` but the libretro core reads
-    /// `LibretroSaves/<stem>.srm` — two different files, so the save never
-    /// reaches the running game.
+    /// `LibretroSaves/<romId>-<stem>.srm`, two different files, so the save
+    /// never reaches the running game.
     private func stageBatteryForCore() {
-        guard let data = try? saveStates.readBattery(romId: romId) else { return }
-        let dir = libretroSaveDirectory()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        isBatteryStaged = true
+        legacySRAMFile.migrate()
+        guard case .adoptedCoreFile(let data) = batteryFile.stage() else { return }
+        print("[Libretro] kept the newer .srm over the stored battery (\(data.count) bytes)")
+        cloudSync?.pushBattery(data: data)
+    }
+
+    private var batteryFile: CoreBatteryFile {
+        CoreBatteryFile(url: sramURL, romId: romId, saveStates: saveStates)
+    }
+
+    private var legacySRAMFile: LegacySRAMFile {
         let stem = gameURL.deletingPathExtension().lastPathComponent
-        let dst = dir.appendingPathComponent("\(stem).srm")
-        do {
-            try data.write(to: dst, options: .atomic)
-            print("[Libretro] staged battery into saveDir (\(data.count) bytes)")
-        } catch {
-            print("[Libretro] failed to stage battery: \(error.localizedDescription)")
-        }
+        return LegacySRAMFile(
+            legacyURL: libretroSaveDirectory().appendingPathComponent("\(stem).srm"),
+            url: sramURL,
+            romId: romId,
+            saveStates: saveStates,
+            findROMsByFileStem: findROMsByFileStem
+        )
+    }
+
+    /// All cores share one save directory, so the rom id keeps two games with
+    /// the same file name apart.
+    private var sramURL: URL {
+        let stem = gameURL.deletingPathExtension().lastPathComponent
+        return libretroSaveDirectory().appendingPathComponent("\(romId)-\(stem).srm")
     }
 
     // MARK: - HW-Render Meilenstein 1 (TEMPORAER)
@@ -274,6 +296,7 @@ final class LibretroSession: NSObject {
                 gamePath: gameURL.path,
                 systemDir: systemDir,
                 saveDir: saveDir,
+                sramURL: sramURL,
                 portDevice: portDevice
             )
 
@@ -302,7 +325,12 @@ final class LibretroSession: NSObject {
         }
     }
 
-    func pause() { frontend.pause() }
+    func pause() {
+        frontend.pause()
+        // A pause is often the last thing that runs: iOS can end a backgrounded
+        // app without `stop()` ever being called.
+        flushBatteryFromSaveDir(pushesUnchanged: false)
+    }
     func resume() { frontend.resume() }
 
     /// Re-applies the hidden-video state on returning to the foreground.
@@ -401,7 +429,6 @@ final class LibretroSession: NSObject {
         rumbleOutput.scale = preference.intensity.scale
     }
 
-
     func stop() {
         isStopped = true
         // Detach both input sides before tearing down the frontend so their
@@ -417,17 +444,16 @@ final class LibretroSession: NSObject {
         frontend.stop()
         rumbleOutput.stop()
         isRumbleActive = false
-        flushBatteryFromSaveDir()
+        flushBatteryFromSaveDir(pushesUnchanged: true)
     }
 
-    /// Libretro cores persist their battery saves (.srm) into `saveDir` during
-    /// runtime — we read the file once the core has stopped and push it.
-    private func flushBatteryFromSaveDir() {
-        let stem = gameURL.deletingPathExtension().lastPathComponent
-        let candidate = libretroSaveDirectory().appendingPathComponent("\(stem).srm")
-        guard let data = try? Data(contentsOf: candidate) else { return }
-        try? saveStates.writeBattery(romId: romId, data: data)
-        cloudSync?.pushBattery(data: data)
+    /// The frontend writes the core's battery save (.srm) into `saveDir` on
+    /// every pause and on stop, this hands it on to the store and the server.
+    /// - Parameter pushesUnchanged: Also push a save the store already had. Done
+    ///   on quit, so a push that failed earlier, offline for example, gets retried.
+    private func flushBatteryFromSaveDir(pushesUnchanged: Bool) {
+        guard isBatteryStaged, let battery = batteryFile.collect(), battery.isNew || pushesUnchanged else { return }
+        cloudSync?.pushBattery(data: battery.data)
     }
 
     // MARK: - Save state API (mirrors DeltaCoreSession)

@@ -124,6 +124,7 @@ protocol PDependencyFactory {
     func makeGetDownloadedROMUseCase() -> PGetDownloadedROMUseCase
     #if !APP_STORE
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase
+    func makeFindROMsByFileStemUseCase() -> PFindROMsByFileStemUseCase
     #endif
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase
     #if !APP_STORE
@@ -538,6 +539,10 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     #if !APP_STORE
+    func makeFindROMsByFileStemUseCase() -> PFindROMsByFileStemUseCase {
+        FindROMsByFileStemUseCase(localROMRepository: localROMRepository)
+    }
+
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase {
         ResolveROMFileUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
@@ -722,6 +727,7 @@ class DefaultDependencyFactory: PDependencyFactory {
             core: core,
             getDownloadedROM: makeGetDownloadedROMUseCase(),
             resolveROMFile: makeResolveROMFileUseCase(),
+            findROMsByFileStem: makeFindROMsByFileStemUseCase(),
             saveStates: makeEmulatorSaveStatesUseCase(),
             biosSync: makeBIOSSyncUseCase(),
             aspectRatioPreference: libretroAspectRatioPreference,
