@@ -37,6 +37,7 @@ protocol PDependencyFactory {
     func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase
     func makeGetRomsUseCase() -> GetRomsUseCase
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase
     func makeToggleRomFavoriteUseCase() -> ToggleRomFavoriteUseCase
     func makeCheckRomFavoriteStatusUseCase() -> CheckRomFavoriteStatusUseCase
@@ -135,7 +136,7 @@ protocol PDependencyFactory {
     var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
     #if !APP_STORE
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService
     #endif
     @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner
     #if !APP_STORE
@@ -149,6 +150,7 @@ protocol PDependencyFactory {
     var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference { get }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
+    var analogSticksPreference: PAnalogSticksPreference { get }
     var rumblePreference: PRumblePreference { get }
     var emulatorBezelPreference: PEmulatorBezelPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
@@ -245,7 +247,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase {
         GetRomsWithFiltersUseCase(romsRepository: romsRepository)
     }
-    
+
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase {
+        GetRecommendationsUseCase(romsRepository: romsRepository)
+    }
+
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase {
         GetRomDetailsUseCase(romsRepository: romsRepository)
     }
@@ -468,6 +474,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = UserDefaultsEmulatorScreenPositionPreferenceStore()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
+    lazy var analogSticksPreference: PAnalogSticksPreference = UserDefaultsAnalogSticksPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
     lazy var emulatorBezelPreference: PEmulatorBezelPreference = UserDefaultsEmulatorBezelPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
@@ -579,9 +586,9 @@ class DefaultDependencyFactory: PDependencyFactory {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
 
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService {
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService {
         CloudSaveSyncService(
-            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName),
+            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName, platformSlug: platformSlug),
             saveStore: saveStore,
             listSavesUseCase: ListServerSavesUseCase(repository: savesRepository),
             uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
@@ -611,7 +618,20 @@ class DefaultDependencyFactory: PDependencyFactory {
             downloadStateUseCase: makeDownloadStateUseCase(),
             completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
             externalSaveFolderStore: externalSaveFolderStore,
-            recordRunUseCase: makeRecordSaveSyncRunUseCase()
+            recordRunUseCase: makeRecordSaveSyncRunUseCase(),
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
+        )
+    }
+
+    /// Same construction `SaveSyncRunner` builds internally for its own
+    /// acting path, for the read-only status peek `SyncSaveViewModel` needs.
+    private func makeStateSyncCoordinator() -> StateSyncCoordinator {
+        StateSyncCoordinator(
+            saveStore: saveStore,
+            listStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase()
         )
     }
 
@@ -684,15 +704,13 @@ class DefaultDependencyFactory: PDependencyFactory {
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {
         SyncSaveViewModel(
             rom: rom,
+            previewUseCase: makeSyncPreviewUseCase(),
+            syncRunner: makeSaveSyncRunner(),
+            stateSyncCoordinator: makeStateSyncCoordinator(),
             listSavesUseCase: makeListServerSavesUseCase(),
-            listStatesUseCase: makeListServerStatesUseCase(),
             downloadSaveUseCase: makeDownloadSaveUseCase(),
-            downloadStateUseCase: makeDownloadStateUseCase(),
-            uploadSaveUseCase: makeUploadSaveUseCase(),
-            updateSaveUseCase: makeUpdateSaveUseCase(),
-            uploadStateUseCase: makeUploadStateUseCase(),
-            updateStateUseCase: makeUpdateStateUseCase(),
             saveStore: saveStore,
+            syncDevice: syncDeviceRepository,
             recordSyncUseCase: makeRecordSyncUseCase(),
             getLastSyncUseCase: makeGetLastSyncUseCase()
         )

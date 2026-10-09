@@ -56,6 +56,9 @@ protocol PRommAPIClient {
     // ROM Search API Wrapper methods
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema
 
+    // Recommendations API Wrapper methods
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema]
+
     // Collections API Wrapper methods
     func getCollections(limit: Int?, offset: Int?) async throws -> [CollectionSchema]
     func getCollection(id: Int) async throws -> CollectionSchema
@@ -107,7 +110,7 @@ protocol PRommAPIClient {
 
     // Saves sync
     func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
     func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data
     func deleteSaves(ids: [Int]) async throws
     func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema

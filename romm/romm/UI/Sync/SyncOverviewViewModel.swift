@@ -85,34 +85,7 @@ final class SyncOverviewViewModel {
     }
 
     /// One line describing what the last run did, or nil before any run.
-    var lastSyncSummary: String? {
-        guard let report = lastSyncReport else { return nil }
-        if report.uploaded == 0, report.downloaded == 0, report.skippedConflicts == 0,
-           report.skipped == 0, report.failed == 0 {
-            return String(localized: "Nothing to sync, everything is up to date.")
-        }
-        var parts = [
-            String(localized: "\(report.uploaded) uploaded"),
-            String(localized: "\(report.downloaded) downloaded")
-        ]
-        if report.skippedConflicts > 0 {
-            parts.append(conflictsLeft(report.skippedConflicts))
-        }
-        if report.skipped > 0 {
-            parts.append(String(localized: "\(report.skipped) skipped"))
-        }
-        var summary = parts.joined(separator: ", ")
-        if report.failed > 0 {
-            summary += " " + String(localized: "(\(report.failed) failed)")
-        }
-        return summary
-    }
-
-    private func conflictsLeft(_ count: Int) -> String {
-        count == 1
-            ? String(localized: "1 conflict left")
-            : String(localized: "\(count) conflicts left")
-    }
+    var lastSyncSummary: String? { lastSyncReport?.summaryText }
 
     /// What the last run did with one app's saves, for its row. Empty until a
     /// run actually had that app's files in hand: whether a file is newer than
@@ -123,7 +96,7 @@ final class SyncOverviewViewModel {
             return String(localized: "\(outcome.failed) failed")
         }
         if outcome.conflicts > 0 {
-            return conflictsLeft(outcome.conflicts)
+            return SaveSyncReport.conflictsLeft(outcome.conflicts)
         }
         if outcome.uploaded > 0 {
             return String(localized: "\(outcome.uploaded) uploaded")
@@ -140,13 +113,7 @@ final class SyncOverviewViewModel {
 
     /// The last run's failure messages, capped so one bad run cannot flood the
     /// screen. Empty when the last run had no failures, or there was no run yet.
-    var lastSyncErrors: [String] {
-        guard let report = lastSyncReport, !report.errors.isEmpty else { return [] }
-        let shown = Array(report.errors.prefix(3))
-        let remaining = report.errors.count - shown.count
-        guard remaining > 0 else { return shown }
-        return shown + [String(localized: "and \(remaining) more")]
-    }
+    var lastSyncErrors: [String] { lastSyncReport?.cappedErrors ?? [] }
 
     /// Asks for a fresh plan first, then runs that one and reloads, so the
     /// screen reflects the new state rather than the one it was computed
@@ -165,7 +132,7 @@ final class SyncOverviewViewModel {
         // No plan, nothing to act on: the failure is already on screen.
         guard let fresh = await negotiate() else { return }
 
-        lastSyncReport = await syncRunner.run(preview: fresh, externalScans: externalScans)
+        lastSyncReport = await syncRunner.run(preview: fresh, externalScans: externalScans, stateRomIds: nil)
         await load()
     }
 
@@ -181,7 +148,7 @@ final class SyncOverviewViewModel {
     /// Returns nil when that failed, in which case `state` says why.
     private func negotiate() async -> SyncPreview? {
         do {
-            let preview = try await previewUseCase.execute()
+            let preview = try await previewUseCase.execute(romIds: nil)
             romNames = resolveNames(for: preview)
             state = .loaded(preview)
             return preview

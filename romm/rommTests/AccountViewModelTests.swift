@@ -30,7 +30,7 @@ private final class FakeSyncPreviewUseCase: PSyncPreviewUseCase, @unchecked Send
     var gate: Gate?
     private(set) var callCount = 0
     init(result: Result<SyncPreview, Error>) { self.result = result }
-    func execute() async throws -> SyncPreview {
+    func execute(romIds: [Int]?) async throws -> SyncPreview {
         callCount += 1
         await gate?.wait()
         return try result.get()

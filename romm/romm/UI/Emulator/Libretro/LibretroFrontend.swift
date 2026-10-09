@@ -107,14 +107,64 @@ final class LibretroFrontend {
     /// Reads one button for the core, which asks by raw index.
     func isButtonPressed(_ id: Int, player: Int) -> Bool {
         guard player < Self.maxPlayers, id >= 0, id < 16 else { return false }
+        if player == 0, analogSwitch.isPressingCombo {
+            return DualShockAnalogSwitch.combo.contains { Int($0.rawValue) == id }
+        }
         return playerButtons[player][id]
     }
 
-    /// Lifts every button of one player, or of all of them.
+    private var analogSwitch = DualShockAnalogSwitch()
+
+    /// Switches the DualShock in port one to analog or digital mode, see `DualShockAnalogSwitch`.
+    func requestDualShockMode(analog: Bool) {
+        print("[Libretro] dualshock \(analog ? "analog" : "digital") mode requested")
+        analogSwitch.request(analog: analog)
+    }
+
+    func coreDidShowMessage(_ message: String) {
+        guard let analog = DualShockAnalogSwitch.reportedMode(in: message) else { return }
+        print("[Libretro] dualshock analog mode: \(analog ? "on" : "off")")
+        analogSwitch.coreReported(analog: analog)
+    }
+
+    /// Stick positions per player: left x, left y, right x, right y, in the
+    /// range libretro reports, where negative is left and up.
+    private var playerSticks = Array(
+        repeating: Array(repeating: Int16(0), count: 4),
+        count: maxPlayers
+    )
+
+    /// Moves one stick. `x` and `y` run from -1 to 1, negative is left and up.
+    func setStick(_ stick: LibretroABI.AnalogStick, x: Double, y: Double, player: Int = 0) {
+        guard player < Self.maxPlayers else { return }
+        let base = Int(stick.rawValue) * 2
+        playerSticks[player][base] = Self.axisValue(x)
+        playerSticks[player][base + 1] = Self.axisValue(y)
+    }
+
+    /// Reads one stick axis for the core, which asks by raw index and id.
+    func stickAxis(index: UInt32, axis: UInt32, player: Int) -> Int16 {
+        guard player < Self.maxPlayers, index <= 1, axis <= 1 else { return 0 }
+        return playerSticks[player][Int(index * 2 + axis)]
+    }
+
+    nonisolated static func axisValue(_ value: Double) -> Int16 {
+        Int16((min(max(value, -1), 1) * Double(Int16.max)).rounded())
+    }
+
+    /// Lets go of every button and centres the sticks, for one player or all.
     func clearAllButtons(player: Int? = nil) {
         for index in 0..<Self.maxPlayers where player == nil || player == index {
             for button in 0..<playerButtons[index].count { playerButtons[index][button] = false }
+            for axis in 0..<playerSticks[index].count { playerSticks[index][axis] = 0 }
         }
+    }
+
+    /// Swaps the pad in port one while the game runs. The PlayStation core
+    /// picks the new device up on its next poll.
+    func setPlayerOneDevice(_ device: UInt32) {
+        guard handle != nil else { return }
+        retro_set_controller_port_device?(0, device)
     }
 
     /// Tells the core whether a second pad is plugged into port two.
@@ -412,6 +462,7 @@ final class LibretroFrontend {
             // call and would run at double speed.
             guard !coreIsAheadOfAudio() else { throttled += 1; break }
             retro_run?()
+            analogSwitch.frameDidRun()
             runs += 1
         }
 
@@ -507,6 +558,7 @@ final class LibretroFrontend {
         // into freed text segments. The rumble hook goes with them: the session
         // that owns its haptics is on its way out too.
         onRumbleChanged = nil
+        analogSwitch = DualShockAnalogSwitch()
         retro_init = nil; retro_deinit = nil
         retro_get_system_info = nil; retro_get_system_av_info = nil
         retro_set_environment = nil; retro_set_video_refresh = nil

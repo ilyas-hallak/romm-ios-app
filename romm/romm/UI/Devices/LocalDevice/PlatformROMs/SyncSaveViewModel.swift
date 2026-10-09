@@ -1,205 +1,150 @@
 import Foundation
 import Observation
 
+/// Status over one ROM's sync, backed by the same negotiate-and-run logic the
+/// sync overview uses: `syncThisGame()` re-negotiates and runs exactly the
+/// way `SyncOverviewViewModel.syncNow()` does, just scoped to this ROM.
 @Observable
 @MainActor
 final class SyncSaveViewModel {
+
+    enum State {
+        case idle
+        case loading
+        case loaded(SyncPreview)
+        case failed(SyncPreviewError)
+    }
+
+    /// The battery save's status row, derived from the negotiated plan for
+    /// this ROM. The plan can hold more than one battery operation (see
+    /// `batteryStatus` below), so this is a verdict over all of them, not a
+    /// single operation's direction.
+    enum BatteryStatus: Equatable {
+        case inSync
+        case willUpload
+        case willDownload
+        case conflict
+        case noSaveYet
+    }
+
     let rom: DownloadedROM
 
-    var serverStates: [StateSchema] = []
-    var serverSaves: [SaveSchema] = []
-    var localStates: [SaveStateEntry] = []
-    var hasLocalBattery = false
-    var localBatteryDate: Date?
-    var isLoadingServer = false
-    var downloadingStateIds: Set<Int> = []
-    var downloadingSaveIds: Set<Int> = []
-    var uploadingStateSlots: Set<Int> = []
-    var isUploadingBattery = false
+    private(set) var state: State = .idle
+    private(set) var statesStatus: StateSyncCoordinator.StateSyncStatus = .inSync
+    private(set) var isSyncing = false
+    private(set) var lastSyncReport: SaveSyncReport?
+    private(set) var lastSyncMeta: SyncMetadata?
     var errorMessage: String?
-    var pendingUpload: PendingUpload?
-    var lastSyncMeta: SyncMetadata?
-
-    private let recordSyncUseCase: PRecordSyncUseCase
-    private let getLastSyncUseCase: PGetLastSyncUseCase
 
     // Export
     var exportItem: ExportSaveItem?
-    var exportingServerSaveIds: Set<Int> = []
+    var isExportingServerSave = false
     private var exportTempURL: URL?
 
+    private let previewUseCase: PSyncPreviewUseCase
+    private let syncRunner: PSaveSyncRunner
+    private let stateSyncCoordinator: StateSyncCoordinator
     private let listSavesUseCase: PListServerSavesUseCase
-    private let listStatesUseCase: PListServerStatesUseCase
     private let downloadSaveUseCase: PDownloadSaveUseCase
-    private let downloadStateUseCase: PDownloadStateUseCase
-    private let uploadSaveUseCase: PUploadSaveUseCase
-    private let updateSaveUseCase: PUpdateSaveUseCase
-    private let uploadStateUseCase: PUploadStateUseCase
-    private let updateStateUseCase: PUpdateStateUseCase
     private let saveStore: PSaveStore
+    private let syncDevice: PSyncDeviceRepository
+    private let recordSyncUseCase: PRecordSyncUseCase
+    private let getLastSyncUseCase: PGetLastSyncUseCase
 
     init(
         rom: DownloadedROM,
+        previewUseCase: PSyncPreviewUseCase,
+        syncRunner: PSaveSyncRunner,
+        stateSyncCoordinator: StateSyncCoordinator,
         listSavesUseCase: PListServerSavesUseCase,
-        listStatesUseCase: PListServerStatesUseCase,
         downloadSaveUseCase: PDownloadSaveUseCase,
-        downloadStateUseCase: PDownloadStateUseCase,
-        uploadSaveUseCase: PUploadSaveUseCase,
-        updateSaveUseCase: PUpdateSaveUseCase,
-        uploadStateUseCase: PUploadStateUseCase,
-        updateStateUseCase: PUpdateStateUseCase,
         saveStore: PSaveStore,
+        syncDevice: PSyncDeviceRepository,
         recordSyncUseCase: PRecordSyncUseCase,
         getLastSyncUseCase: PGetLastSyncUseCase
     ) {
         self.rom = rom
+        self.previewUseCase = previewUseCase
+        self.syncRunner = syncRunner
+        self.stateSyncCoordinator = stateSyncCoordinator
         self.listSavesUseCase = listSavesUseCase
-        self.listStatesUseCase = listStatesUseCase
         self.downloadSaveUseCase = downloadSaveUseCase
-        self.downloadStateUseCase = downloadStateUseCase
-        self.uploadSaveUseCase = uploadSaveUseCase
-        self.updateSaveUseCase = updateSaveUseCase
-        self.uploadStateUseCase = uploadStateUseCase
-        self.updateStateUseCase = updateStateUseCase
         self.saveStore = saveStore
+        self.syncDevice = syncDevice
         self.recordSyncUseCase = recordSyncUseCase
         self.getLastSyncUseCase = getLastSyncUseCase
     }
 
+    var preview: SyncPreview? {
+        if case .loaded(let preview) = state { return preview }
+        return nil
+    }
+
+    /// Whether "Sync This Game" has anything to try: a loaded plan with
+    /// battery work, or states this ROM holds something out of sync for.
+    var canSync: Bool {
+        guard !isSyncing, let preview else { return false }
+        if !preview.isUpToDate { return true }
+        switch statesStatus {
+        case .inSync, .unavailable: return false
+        case .pending: return true
+        }
+    }
+
+    var lastSyncSummary: String? { lastSyncReport?.summaryText }
+    var lastSyncErrors: [String] { lastSyncReport?.cappedErrors ?? [] }
+
+    /// Conflicts outrank downloads, which outrank uploads, the same precedence
+    /// `SaveSyncStatus.init(preview:)` uses: a ROM can have more than one
+    /// battery operation (rows with `slot == nil` ride alongside `battery`,
+    /// and the server has no unique constraint on (rom_id, slot)), so picking
+    /// just the first operation could hide a conflict behind an earlier upload.
+    var batteryStatus: BatteryStatus? {
+        guard let preview else { return nil }
+        guard !preview.operations.isEmpty else { return .noSaveYet }
+        if !preview.conflicts.isEmpty { return .conflict }
+        if !preview.downloads.isEmpty { return .willDownload }
+        if !preview.uploads.isEmpty { return .willUpload }
+        return .inSync
+    }
+
     // MARK: - Load
 
-    func loadAll() async {
-        isLoadingServer = true
-        do {
-            async let statesTask = listStatesUseCase.execute(romId: rom.id)
-            async let savesTask = listSavesUseCase.execute(romId: rom.id)
-            let (states, saves) = try await (statesTask, savesTask)
-            serverStates = states
-            serverSaves = saves
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoadingServer = false
-        localStates = (try? saveStore.listStates(romId: rom.id)) ?? []
-        localBatteryDate = saveStore.batteryModifiedAt(romId: rom.id)
-        hasLocalBattery = localBatteryDate != nil
+    func load() async {
+        state = .loading
+        errorMessage = nil
+        _ = await negotiate()
+        statesStatus = await stateSyncCoordinator.statusSummary(romId: rom.id)
         lastSyncMeta = getLastSyncUseCase.execute(romId: rom.id)
     }
 
-    private func recordManualSync() {
+    /// Mirrors `SyncOverviewViewModel.syncNow()`: negotiates a fresh plan
+    /// right before running it, so acting never uses a plan that went stale
+    /// while this screen sat open, then reloads to reflect the new state.
+    func syncThisGame() async {
+        guard canSync else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+
+        guard let fresh = await negotiate() else { return }
+
+        lastSyncReport = await syncRunner.run(preview: fresh, externalScans: [:], stateRomIds: [rom.id])
         recordSyncUseCase.execute(romId: rom.id, trigger: .manual)
         lastSyncMeta = SyncMetadata(date: Date(), trigger: .manual)
+        await load()
     }
 
-    // MARK: - Download
-
-    func downloadServerState(_ state: StateSchema) {
-        guard !downloadingStateIds.contains(state.id) else { return }
-        if state.missingFromFs {
-            errorMessage = "File missing on server — upload it again."
-            return
+    private func negotiate() async -> SyncPreview? {
+        do {
+            let fresh = try await previewUseCase.execute(romIds: [rom.id])
+            state = .loaded(fresh)
+            return fresh
+        } catch let error as SyncPreviewError {
+            state = .failed(error)
+        } catch {
+            state = .failed(.negotiationFailed(error.localizedDescription))
         }
-        downloadingStateIds.insert(state.id)
-        Task {
-            defer { downloadingStateIds.remove(state.id) }
-            do {
-                let data = try await downloadStateUseCase.execute(id: state.id)
-                guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
-                let slot = StateSlots.slot(fromFileName: state.fileName) ?? 0
-                try saveStore.writeState(romId: rom.id, slot: slot, data: data)
-                localStates = (try? saveStore.listStates(romId: rom.id)) ?? []
-                recordManualSync()
-            } catch {
-                errorMessage = "Download failed: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    func downloadServerSave(_ save: SaveSchema) {
-        guard !downloadingSaveIds.contains(save.id) else { return }
-        if save.missingFromFs {
-            errorMessage = "File missing on server — upload it again."
-            return
-        }
-        downloadingSaveIds.insert(save.id)
-        Task {
-            defer { downloadingSaveIds.remove(save.id) }
-            do {
-                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: nil, sessionId: nil)
-                guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
-                try saveStore.writeBattery(romId: rom.id, data: data)
-                hasLocalBattery = true
-                recordManualSync()
-            } catch {
-                errorMessage = "Download failed: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    // MARK: - Upload
-
-    func uploadLocalState(entry: SaveStateEntry) {
-        let existingId = serverStates.first { StateSlots.slot(fromFileName: $0.fileName) == entry.slot }?.id
-        let pending = PendingUpload.state(slot: entry.slot, existingId: existingId)
-        existingId != nil ? (pendingUpload = pending) : executeUpload(pending, update: false)
-    }
-
-    func uploadLocalBattery() {
-        let existingId = serverSaves.first?.id
-        let pending = PendingUpload.battery(existingId: existingId)
-        existingId != nil ? (pendingUpload = pending) : executeUpload(pending, update: false)
-    }
-
-    func confirmUpload(update: Bool) {
-        guard let pending = pendingUpload else { return }
-        pendingUpload = nil
-        executeUpload(pending, update: update)
-    }
-
-    func cancelPendingUpload() { pendingUpload = nil }
-
-    private func executeUpload(_ pending: PendingUpload, update: Bool) {
-        switch pending {
-        case .state(let slot, let existingId):
-            uploadingStateSlots.insert(slot)
-            Task {
-                defer { uploadingStateSlots.remove(slot) }
-                do {
-                    guard let data = try saveStore.readState(romId: rom.id, slot: slot) else { return }
-                    let thumbnail = try? saveStore.readThumbnail(romId: rom.id, slot: slot)
-                    let fileName = "slot\(slot).state"
-                    if update, let existingId {
-                        let updated = try await updateStateUseCase.execute(id: existingId, emulator: nil, fileName: fileName, fileData: data, screenshotData: thumbnail)
-                        if let idx = serverStates.firstIndex(where: { $0.id == updated.id }) { serverStates[idx] = updated }
-                    } else {
-                        let uploaded = try await uploadStateUseCase.execute(romId: rom.id, emulator: nil, fileName: fileName, fileData: data, screenshotData: thumbnail)
-                        serverStates.append(uploaded)
-                    }
-                    recordManualSync()
-                } catch {
-                    errorMessage = "Upload failed: \(error.localizedDescription)"
-                }
-            }
-        case .battery(let existingId):
-            isUploadingBattery = true
-            Task {
-                defer { isUploadingBattery = false }
-                do {
-                    guard let data = try saveStore.readBattery(romId: rom.id) else { return }
-                    let fileName = "\(rom.id).sav"
-                    if update, let existingId {
-                        let updated = try await updateSaveUseCase.execute(id: existingId, emulator: nil, fileName: fileName, fileData: data, screenshotData: nil)
-                        if let idx = serverSaves.firstIndex(where: { $0.id == updated.id }) { serverSaves[idx] = updated }
-                    } else {
-                        let uploaded = try await uploadSaveUseCase.execute(romId: rom.id, emulator: nil, slot: nil, deviceId: nil, sessionId: nil, autocleanup: nil, overwrite: nil, fileName: fileName, fileData: data, screenshotData: nil)
-                        serverSaves.append(uploaded)
-                    }
-                    recordManualSync()
-                } catch {
-                    errorMessage = "Upload failed: \(error.localizedDescription)"
-                }
-            }
-        }
+        return nil
     }
 
     // MARK: - Export
@@ -214,23 +159,27 @@ final class SyncSaveViewModel {
         presentExport(data: data, baseName: rom.name)
     }
 
-    /// Download a server battery save and export it via share sheet as .srm.
-    func exportServerSave(_ save: SaveSchema) {
-        guard !exportingServerSaveIds.contains(save.id) else { return }
-        if save.missingFromFs {
-            errorMessage = "File missing on server — upload it again."
-            return
-        }
-        exportingServerSaveIds.insert(save.id)
-        Task {
-            defer { exportingServerSaveIds.remove(save.id) }
-            do {
-                let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: nil, sessionId: nil)
-                guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
-                presentExport(data: data, baseName: save.fileNameNoExt)
-            } catch {
-                errorMessage = "Export failed: \(error.localizedDescription)"
+    /// Downloads the server's battery save for this ROM and exports it via
+    /// share sheet as .srm.
+    func exportServerBattery() async {
+        guard !isExportingServerSave else { return }
+        isExportingServerSave = true
+        defer { isExportingServerSave = false }
+        do {
+            guard let save = try await listSavesUseCase.execute(romId: rom.id).first else {
+                errorMessage = "No server save found."
+                return
             }
+            if save.missingFromFs {
+                errorMessage = "File missing on server — upload it again."
+                return
+            }
+            let deviceId = await syncDevice.deviceId()
+            let data = try await downloadSaveUseCase.execute(id: save.id, deviceId: deviceId, sessionId: nil)
+            guard !data.isEmpty else { errorMessage = "Server returned empty file."; return }
+            presentExport(data: data, baseName: save.fileNameNoExt)
+        } catch {
+            errorMessage = "Export failed: \(error.localizedDescription)"
         }
     }
 
@@ -259,7 +208,6 @@ final class SyncSaveViewModel {
             errorMessage = "Could not prepare export: \(error.localizedDescription)"
         }
     }
-
 }
 
 // MARK: - Export model

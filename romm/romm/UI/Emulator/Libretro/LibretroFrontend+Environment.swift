@@ -61,10 +61,18 @@ extension LibretroFrontend {
 
     static let inputPollCallback: LibretroABI.InputPollFn = { }
 
-    static let inputStateCallback: LibretroABI.InputStateFn = { port, device, _, id in
-        guard device == LibretroABI.DEVICE_JOYPAD else { return 0 }
-        return MainActor.assumeIsolated {
-            LibretroFrontend.shared.isButtonPressed(Int(id), player: Int(port)) ? 1 : 0
+    static let inputStateCallback: LibretroABI.InputStateFn = { port, device, index, id in
+        switch device {
+        case LibretroABI.DEVICE_JOYPAD:
+            return MainActor.assumeIsolated {
+                LibretroFrontend.shared.isButtonPressed(Int(id), player: Int(port)) ? 1 : 0
+            }
+        case LibretroABI.DEVICE_ANALOG:
+            return MainActor.assumeIsolated {
+                LibretroFrontend.shared.stickAxis(index: index, axis: id, player: Int(port))
+            }
+        default:
+            return 0
         }
     }
 
@@ -138,10 +146,10 @@ extension LibretroFrontend {
             let answer: String?
             switch key {
             case "pcsx_rearmed_memcard1", "pcsx_rearmed_memcard2": answer = "libretro"
-            // The core would otherwise swallow L1+R1+Select as its analog toggle,
-            // which collides with our own L1+R1 menu shortcut. We do not support
-            // analog sticks anyway, so a manual toggle buys nothing.
-            case "pcsx_rearmed_analog_combo": answer = "disabled"
+            // The default L1+R1+Select collides with our L1+R1 menu shortcut.
+            // The combo itself is needed, it is the only way to put the
+            // DualShock into analog mode (see DualShockAnalogSwitch).
+            case "pcsx_rearmed_analog_combo": answer = DualShockAnalogSwitch.coreOptionValue
             // Flycast would otherwise render on its own thread, which has no
             // current EAGL context -- our context lives on the main thread that
             // drives retro_run. Threaded rendering there means no output at all.
@@ -202,10 +210,15 @@ extension LibretroFrontend {
             applyGeometry(data.assumingMemoryBound(to: LibretroABI.GameGeometry.self).pointee)
             return true
 
+        case LibretroABI.ENVIRONMENT_SET_MESSAGE:
+            if let text = data?.assumingMemoryBound(to: LibretroABI.Message.self).pointee.msg {
+                coreDidShowMessage(String(cString: text))
+            }
+            return true
+
         case LibretroABI.ENVIRONMENT_SET_PERFORMANCE_LEVEL,
              LibretroABI.ENVIRONMENT_SET_VARIABLES,
-             LibretroABI.ENVIRONMENT_SET_INPUT_DESCRIPTORS,
-             LibretroABI.ENVIRONMENT_SET_MESSAGE:
+             LibretroABI.ENVIRONMENT_SET_INPUT_DESCRIPTORS:
             return true
 
         default:

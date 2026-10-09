@@ -33,14 +33,27 @@ private final class NegotiateFailingAPIClient: StubRommAPIClient, @unchecked Sen
     }
 }
 
-/// Succeeds negotiate with a canned response, so `pullBeforeLaunch` takes the
-/// negotiated path instead of falling back to the legacy pull.
+/// Succeeds negotiate with one canned response (or a closure) per call, so
+/// `pullBeforeLaunch` and a following `pushBatteryAsync` each get their own
+/// answer. The last entry repeats once the queue is exhausted, so a test that
+/// only cares about the first call doesn't have to stub the second too.
 private final class NegotiateStubAPIClient: StubRommAPIClient, @unchecked Sendable {
-    let response: SyncNegotiateResponse
-    init(response: SyncNegotiateResponse) { self.response = response }
-    override func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse {
-        response
+    private let calls: [() throws -> SyncNegotiateResponse]
+    private(set) var requests: [SyncNegotiateRequest] = []
+
+    init(calls: [() throws -> SyncNegotiateResponse]) { self.calls = calls }
+    convenience init(response: SyncNegotiateResponse) { self.init(calls: [{ response }]) }
+    convenience init(responses: [SyncNegotiateResponse]) {
+        self.init(calls: responses.map { response in { response } })
     }
+
+    override func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse {
+        requests.append(body)
+        let index = min(requests.count - 1, calls.count - 1)
+        return try calls[index]()
+    }
+
+    var requestedRomIds: [[Int]?] { requests.map { $0.romIds } }
 }
 
 /// `SyncNegotiateResponse`/`SyncOperationSchema` only expose a decoding
@@ -106,11 +119,11 @@ private final class FakeUploadSaveUseCase: PUploadSaveUseCase, @unchecked Sendab
 
 private final class FakeUpdateSaveUseCase: PUpdateSaveUseCase, @unchecked Sendable {
     var error: Error?
-    private(set) var calls: [(id: Int, emulator: String?, fileName: String, fileData: Data)] = []
+    private(set) var calls: [(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data)] = []
 
-    func execute(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+    func execute(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
         if let error { throw error }
-        calls.append((id, emulator, fileName, fileData))
+        calls.append((id, emulator, deviceId, fileName, fileData))
         return FakeListServerSavesUseCase.makeSchema(id: id, romId: 0, fileName: fileName)
     }
 }
@@ -192,8 +205,11 @@ struct CloudSaveSyncServiceTests {
         return LocalSaveStoreRepository(rootDirectory: tmp)
     }
 
-    private func makeConfig(romId: Int = 1, emulator: String = "delta-ios", batteryFileName: String = "battery.sav") -> CloudSaveSyncService.Config {
-        .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName)
+    private func makeConfig(
+        romId: Int = 1, emulator: String = "delta-ios", batteryFileName: String = "battery.sav",
+        platformSlug: String? = nil
+    ) -> CloudSaveSyncService.Config {
+        .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName, platformSlug: platformSlug)
     }
 
     private struct Fakes {
@@ -256,6 +272,29 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.confirmDownload.calls.count == 1)
         #expect(fakes.confirmDownload.calls.first?.id == 42)
         #expect(fakes.confirmDownload.calls.first?.deviceId == "device-1")
+    }
+
+    /// Same guard as the negotiated path, for the legacy list-based pull: a
+    /// blank server save must never overwrite a real local battery, but the
+    /// download is still confirmed so the server stops replanning it.
+    @Test func pullBatteryDoesNotOverwriteANonBlankLocalWithABlankServerSave() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0x01, 0x02, 0x03]))
+        try store.setBatteryModifiedAt(romId: 1, date: Date(timeIntervalSince1970: 1_000))
+
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 42, romId: 1, fileName: "battery.sav", updatedAt: serverTime)
+        ]
+        fakes.downloadSave.dataForId[42] = Data(repeating: 0x00, count: 0x2000)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig())
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readBattery(romId: 1) == Data([0x01, 0x02, 0x03]))
+        #expect(fakes.confirmDownload.calls.map(\.id) == [42])
     }
 
     /// The confirmation is best effort: a failure there must not undo the
@@ -473,6 +512,46 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.uploadSave.calls.isEmpty)
     }
 
+    /// A negotiate response can name a row without saying when it was last
+    /// written, and a `noOp` verdict usually does; `learnBatteryUpdatedAt`
+    /// fills that gap right after the pull. That baseline must still protect
+    /// the legacy fallback from clobbering a row another device wrote while
+    /// this session was open, even though the timestamp never came from
+    /// negotiate directly.
+    @Test func legacyFallbackGuardsARowNamedWithoutATimestampByNegotiate() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let pulledAt = Date(timeIntervalSince1970: 1_700_000_000)
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt)
+        ]
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
+        ])
+        // The pull's negotiate succeeds with no timestamp on the op; the
+        // push's own negotiate then fails, forcing the legacy fallback to be
+        // the one that has to honor the baseline `learnBatteryUpdatedAt` set.
+        let client = NegotiateStubAPIClient(calls: [
+            { pullResponse },
+            { throw URLError(.badServerResponse) }
+        ])
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        // Another device writes that row while the game is running.
+        fakes.listSaves.savesByRomId[1] = [
+            FakeListServerSavesUseCase.makeSchema(
+                id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt.addingTimeInterval(60)
+            )
+        ]
+        await service.pushBatteryAsync(data: Data([0xBB]))
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
     /// The row can also be gone, deleted or pruned by autocleanup. Then there
     /// is nothing to replace and a fresh, guarded upload is the right move.
     @Test func pushUploadsAFreshRowWhenTheKnownOneIsGone() async throws {
@@ -537,19 +616,25 @@ struct CloudSaveSyncServiceTests {
 
     /// `serverBatteryId` must be learned from every negotiate operation that
     /// names this ROM's battery file, not only from a `download` action: a
-    /// `noOp` verdict still names the row the server already holds, and the
-    /// next push has to update it in place instead of creating a duplicate.
-    @Test func serverBatteryIdAdoptedFromANoOpNegotiateOperation() async throws {
+    /// `noOp` verdict still names the row the server already holds. That id
+    /// only matters for the legacy fallback now (the negotiated push gets its
+    /// own verdict straight from its own negotiate call), so this proves the
+    /// fallback updates the row in place instead of creating a duplicate when
+    /// the push's own negotiate call fails.
+    @Test func serverBatteryIdAdoptedFromANoOpNegotiateOperationFeedsTheLegacyFallback() async throws {
         let store = makeStore()
         let fakes = Fakes()
         fakes.syncDevice.deviceIdToReturn = "device-1"
         fakes.listSaves.savesByRomId[1] = [
             FakeListServerSavesUseCase.makeSchema(id: 77, romId: 1, fileName: "battery.sav")
         ]
-        let response = makeNegotiateResponse(operations: [
+        let pullResponse = makeNegotiateResponse(operations: [
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
         ])
-        let client = NegotiateStubAPIClient(response: response)
+        let client = NegotiateStubAPIClient(calls: [
+            { pullResponse },
+            { throw URLError(.badServerResponse) }
+        ])
 
         let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
         await service.pullBeforeLaunch()
@@ -557,44 +642,29 @@ struct CloudSaveSyncServiceTests {
         // A no_op plans nothing to fetch.
         #expect(fakes.downloadSave.calls.isEmpty)
 
-        // But the id must still have been adopted, so the next push updates
-        // the existing row instead of uploading a brand-new one.
+        // The push's own negotiate fails, so it falls back to batteryTarget(),
+        // which only updates row 77 in place because the pull adopted that id.
         await service.pushBatteryAsync(data: Data([0xBB]))
         #expect(fakes.updateSave.calls.count == 1)
         #expect(fakes.updateSave.calls.first?.id == 77)
+        #expect(fakes.updateSave.calls.first?.deviceId == "device-1")
         #expect(fakes.uploadSave.calls.isEmpty)
     }
 
-    /// A negotiate response names the row but is allowed to leave out when it
-    /// was last written, and a `noOp` verdict usually does. That must not cost
-    /// the push its baseline, or the guard above would be skipped for the most
-    /// ordinary session there is: launch, nothing changed, play, push.
-    @Test func aRowNamedWithoutATimestampIsStillGuarded() async throws {
+    /// Negotiate is scoped to this ROM: without `rom_ids` the server would plan
+    /// the whole library on every launch, so the request must name the ROM
+    /// being synced.
+    @Test func negotiateRequestIsScopedToTheCurrentRom() async throws {
         let store = makeStore()
         let fakes = Fakes()
         fakes.syncDevice.deviceIdToReturn = "device-1"
-        let pulledAt = Date(timeIntervalSince1970: 1_700_000_000)
-        fakes.listSaves.savesByRomId[1] = [
-            FakeListServerSavesUseCase.makeSchema(id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt)
-        ]
-        let response = makeNegotiateResponse(operations: [
-            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
-        ])
+        let response = makeNegotiateResponse(operations: [])
         let client = NegotiateStubAPIClient(response: response)
 
-        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(romId: 7), apiClient: client)
         await service.pullBeforeLaunch()
 
-        // Another device writes that row while the game is running.
-        fakes.listSaves.savesByRomId[1] = [
-            FakeListServerSavesUseCase.makeSchema(
-                id: 77, romId: 1, fileName: "battery.sav", updatedAt: pulledAt.addingTimeInterval(60)
-            )
-        ]
-        await service.pushBatteryAsync(data: Data([0xBB]))
-
-        #expect(fakes.updateSave.calls.isEmpty)
-        #expect(fakes.uploadSave.calls.isEmpty)
+        #expect(client.requestedRomIds == [[7]])
     }
 
     // MARK: - serverBatteryId learned deterministically among several rows
@@ -616,11 +686,18 @@ struct CloudSaveSyncServiceTests {
             FakeListServerSavesUseCase.makeSchema(id: 100, romId: 1, fileName: "battery.sav"),
             FakeListServerSavesUseCase.makeSchema(id: 200, romId: 1, fileName: "other.sav")
         ]
-        let response = makeNegotiateResponse(operations: [
+        let pullResponse = makeNegotiateResponse(operations: [
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 100),
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "other.sav", saveId: 200)
         ])
-        let client = NegotiateStubAPIClient(response: response)
+        // The push negotiates again with its own current bytes; the same two
+        // candidates come back, now as upload verdicts, so the pick must
+        // still land on the row matching this device's own file name.
+        let pushResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "battery.sav", saveId: 100),
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "other.sav", saveId: 200)
+        ])
+        let client = NegotiateStubAPIClient(calls: [{ pullResponse }, { pushResponse }])
 
         let service = makeService(store: store, fakes: fakes, config: makeConfig(batteryFileName: "battery.sav"), apiClient: client)
         await service.pullBeforeLaunch()
@@ -641,11 +718,15 @@ struct CloudSaveSyncServiceTests {
             FakeListServerSavesUseCase.makeSchema(id: 100, romId: 1, fileName: "a.sav"),
             FakeListServerSavesUseCase.makeSchema(id: 200, romId: 1, fileName: "b.sav")
         ]
-        let response = makeNegotiateResponse(operations: [
+        let pullResponse = makeNegotiateResponse(operations: [
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "a.sav", saveId: 100),
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "b.sav", saveId: 200)
         ])
-        let client = NegotiateStubAPIClient(response: response)
+        let pushResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "a.sav", saveId: 100),
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "b.sav", saveId: 200)
+        ])
+        let client = NegotiateStubAPIClient(calls: [{ pullResponse }, { pushResponse }])
 
         let service = makeService(store: store, fakes: fakes, config: makeConfig(batteryFileName: "battery.sav"), apiClient: client)
         await service.pullBeforeLaunch()
@@ -664,10 +745,15 @@ struct CloudSaveSyncServiceTests {
         let store = makeStore()
         let fakes = Fakes()
         fakes.syncDevice.deviceIdToReturn = "device-1"
-        let response = makeNegotiateResponse(operations: [
+        let pullResponse = makeNegotiateResponse(operations: [
             negotiateOperationJSON(action: .noOp, romId: 1, fileName: "slotted.sav", saveId: 999, slot: "3")
         ])
-        let client = NegotiateStubAPIClient(response: response)
+        // Push negotiates its own battery entry, which has no counterpart on
+        // the server yet, so it comes back as a fresh upload.
+        let pushResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "battery.sav")
+        ])
+        let client = NegotiateStubAPIClient(calls: [{ pullResponse }, { pushResponse }])
 
         let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
         await service.pullBeforeLaunch()
@@ -677,14 +763,130 @@ struct CloudSaveSyncServiceTests {
         #expect(fakes.updateSave.calls.isEmpty)
     }
 
-    // MARK: - applyDownload only ever touches this device's own battery slot
+    // MARK: - Push via negotiate
 
-    /// A `download` operation for a row parked under a different slot (e.g.
-    /// another client's save under `slot=1`) is not this device's battery at
-    /// all. It must not be written into the local battery file, and its id
-    /// must not be adopted as `serverBatteryId` either, or every later push
-    /// would overwrite that foreign row instead of this device's own.
-    @Test func applyDownloadIgnoresARowWithADifferentSlot() async throws {
+    /// A `no_op` verdict means the server already has this exact content, so
+    /// the push must not upload or update anything.
+    @Test func pushSkipsWhenNegotiateReportsNoOp() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 1, fileName: "battery.sav", saveId: 77)
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.uploadSave.calls.isEmpty)
+        #expect(fakes.updateSave.calls.isEmpty)
+    }
+
+    /// An `upload` verdict that names an existing row must update it in
+    /// place (PUT), not create a second row for the same slot.
+    @Test func pushUpdatesInPlaceWhenNegotiateReportsUploadWithASaveId() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "battery.sav", saveId: 77)
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.updateSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.first?.id == 77)
+        #expect(fakes.updateSave.calls.first?.deviceId == "device-1")
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// An `upload` verdict without a save id means the server has no row for
+    /// this slot yet, so the push must create one (POST) instead of updating.
+    @Test func pushCreatesAFreshRowWhenNegotiateReportsUploadWithoutASaveId() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "battery.sav")
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.uploadSave.calls.count == 1)
+        #expect(fakes.uploadSave.calls.first?.slot == SaveSlot.battery)
+        #expect(fakes.uploadSave.calls.first?.deviceId == "device-1")
+        #expect(fakes.updateSave.calls.isEmpty)
+    }
+
+    /// A `conflict` verdict means both sides changed since they last agreed,
+    /// so the push must leave the row alone rather than guess a winner.
+    @Test func pushLeavesTheRowAloneWhenNegotiateReportsAConflict() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .conflict, romId: 1, fileName: "battery.sav", saveId: 77)
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(fakes.updateSave.calls.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
+    }
+
+    /// When the push's own negotiate call fails (old server, network hiccup),
+    /// it must still push through the legacy `batteryTarget()` path rather
+    /// than silently dropping the save.
+    @Test func pushFallsBackToTheLegacyTargetWhenNegotiateFailsAtPush() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-9"
+        let client = NegotiateFailingAPIClient()
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        // No server row known yet, so the legacy fallback creates a fresh one.
+        #expect(fakes.uploadSave.calls.count == 1)
+        #expect(fakes.uploadSave.calls.first?.deviceId == "device-9")
+    }
+
+    /// The push's negotiate request must stay scoped to this ROM and must
+    /// not drag in any other save/state, or a single battery write at exit
+    /// would get planned against the whole library.
+    @Test func pushNegotiateRequestNamesOnlyTheRomAndTheBatteryFile() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let response = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .noOp, romId: 7, fileName: "battery.sav", saveId: 77)
+        ])
+        let client = NegotiateStubAPIClient(response: response)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(romId: 7), apiClient: client)
+        await service.pushBatteryAsync(data: Data([0xAA]))
+
+        #expect(client.requestedRomIds == [[7]])
+        #expect(client.requests.first?.saves.count == 1)
+        #expect(client.requests.first?.saves.first?.slot == SaveSlot.battery)
+    }
+
+    // MARK: - applyDownload widens to any slot, but learns serverBatteryId only from battery
+
+    /// A `download` operation for a row parked under a different slot (e.g. a
+    /// web upload landing under `slot=autosave`) is still a valid download
+    /// candidate for this ROM's battery (issue #208): when it is genuinely
+    /// newer than the non-blank local battery, it is applied. Its id must
+    /// still not be adopted as `serverBatteryId`, or a later push would
+    /// overwrite that foreign row instead of creating this device's own.
+    @Test func applyDownloadAppliesAGenuinelyNewerRowFromAForeignSlotButDoesNotLearnItsId() async throws {
         let store = makeStore()
         try store.writeBattery(romId: 1, data: Data([0xAA]))
         let oldLocalTime = Date(timeIntervalSince1970: 1_600_000_000)
@@ -692,26 +894,177 @@ struct CloudSaveSyncServiceTests {
         let fakes = Fakes()
         fakes.syncDevice.deviceIdToReturn = "device-1"
         let newerServerTime = oldLocalTime.addingTimeInterval(3600)
-        let response = makeNegotiateResponse(operations: [
+        let pullResponse = makeNegotiateResponse(operations: [
             negotiateOperationJSON(
-                action: .download, romId: 1, fileName: "other-device.sav", saveId: 999, slot: "1",
+                action: .download, romId: 1, fileName: "other-device.sav", saveId: 999, slot: "autosave",
                 serverUpdatedAt: newerServerTime
             )
         ])
-        let client = NegotiateStubAPIClient(response: response)
-        fakes.downloadSave.dataForId[999] = Data([0xFF])
+        // Push negotiates its own battery entry separately; it has no
+        // counterpart on the server yet (the foreign-slot row is a different
+        // save), so it comes back as a fresh upload.
+        let pushResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(action: .upload, romId: 1, fileName: "battery.sav")
+        ])
+        let client = NegotiateStubAPIClient(calls: [{ pullResponse }, { pushResponse }])
+        // Not all-0xFF/all-0x00, so this counts as a real save, not a blank
+        // candidate that Fix 1's blank-guard would have to reject.
+        fakes.downloadSave.dataForId[999] = Data([0x12, 0x34])
 
         let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
         await service.pullBeforeLaunch()
 
-        #expect(fakes.downloadSave.calls.isEmpty)
-        #expect(try store.readBattery(romId: 1) == Data([0xAA]))
+        #expect(fakes.downloadSave.calls.map(\.id) == [999])
+        #expect(try store.readBattery(romId: 1) == Data([0x12, 0x34]))
+        #expect(fakes.confirmDownload.calls.map(\.id) == [999])
 
         // serverBatteryId must not have been adopted from the foreign-slot
         // row either, so the next push creates its own row rather than
         // updating the other device's.
         await service.pushBatteryAsync(data: Data([0xBB]))
         #expect(fakes.uploadSave.calls.count == 1)
+        #expect(fakes.updateSave.calls.isEmpty)
+    }
+
+    /// A download candidate under a foreign slot that is newer than local
+    /// still must not apply when the local battery is not blank and is itself
+    /// newer, since nothing says this device's own save lost.
+    @Test func applyDownloadSkipsAForeignSlotRowOlderThanANonBlankLocalBattery() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0xAA]))
+        let localTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.setBatteryModifiedAt(romId: 1, date: localTime)
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let olderServerTime = localTime.addingTimeInterval(-3600)
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "autosave.sav", saveId: 999, slot: "autosave",
+                serverUpdatedAt: olderServerTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: pullResponse)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(fakes.downloadSave.calls.isEmpty)
+        #expect(try store.readBattery(romId: 1) == Data([0xAA]))
+    }
+
+    /// A missing/blank local battery never blocks a download from any
+    /// non-null slot, which is exactly the web-upload scenario in issue #208:
+    /// the save lands under `slot=autosave` and must still be pulled down
+    /// even though this device never had a real battery of its own yet.
+    @Test func applyDownloadAppliesAnAutosaveRowWhenNoLocalBatteryExists() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "autosave.sav", saveId: 999, slot: "autosave",
+                serverUpdatedAt: serverTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: pullResponse)
+        fakes.downloadSave.dataForId[999] = Data([0xFF])
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(fakes.downloadSave.calls.map(\.id) == [999])
+        #expect(try store.readBattery(romId: 1) == Data([0xFF]))
+    }
+
+    /// A GBA battery downloaded with mGBA's 16-byte RTC footer must have it
+    /// trimmed before being written, or the core silently treats it as empty
+    /// (the core only accepts an exact size; see `GBABatteryFooter`).
+    @Test func applyDownloadTrimsTheRTCFooterOffTheWrittenBattery() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "autosave.sav", saveId: 999, slot: "autosave",
+                serverUpdatedAt: serverTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: pullResponse)
+        fakes.downloadSave.dataForId[999] = Data(repeating: 0x5A, count: 0x20000 + 16)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(platformSlug: "gba"), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readBattery(romId: 1)?.count == 0x20000)
+    }
+
+    /// Only applies for the GBA platform: an untagged (or non-GBA) config
+    /// must never trim, since another platform's own save can collide with a
+    /// GBA size plus the footer (see `GBABatteryFooter`).
+    @Test func applyDownloadDoesNotTrimWhenThePlatformIsNotGBA() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "autosave.sav", saveId: 999, slot: "autosave",
+                serverUpdatedAt: serverTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: pullResponse)
+        fakes.downloadSave.dataForId[999] = Data(repeating: 0x5A, count: 0x2000 + 16)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(platformSlug: "snes"), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readBattery(romId: 1)?.count == 0x2000 + 16)
+    }
+
+    /// A blank candidate from a foreign slot must never overwrite a real
+    /// local save, but the download still has to be confirmed or the server
+    /// keeps replanning it (issue #209 follow-up).
+    @Test func applyDownloadDoesNotOverwriteANonBlankLocalBatteryWithABlankCandidate() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0x01, 0x02, 0x03]))
+        try store.setBatteryModifiedAt(romId: 1, date: Date(timeIntervalSince1970: 1_000))
+
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let serverTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let pullResponse = makeNegotiateResponse(operations: [
+            negotiateOperationJSON(
+                action: .download, romId: 1, fileName: "autosave.sav", saveId: 999, slot: "autosave",
+                serverUpdatedAt: serverTime
+            )
+        ])
+        let client = NegotiateStubAPIClient(response: pullResponse)
+        fakes.downloadSave.dataForId[999] = Data(repeating: 0xFF, count: 0x2000)
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pullBeforeLaunch()
+
+        #expect(try store.readBattery(romId: 1) == Data([0x01, 0x02, 0x03]))
+        #expect(fakes.confirmDownload.calls.map(\.id) == [999])
+    }
+
+    // MARK: - pushBatteryAsync never uploads a blank battery
+
+    /// A never-written battery (all 0xFF) must never go up, or it would
+    /// overwrite a real server save with nothing (issue #208).
+    @Test func pushSkipsABlankBattery() async throws {
+        let store = makeStore()
+        let fakes = Fakes()
+        fakes.syncDevice.deviceIdToReturn = "device-1"
+        let client = NegotiateStubAPIClient(response: makeNegotiateResponse(operations: []))
+
+        let service = makeService(store: store, fakes: fakes, config: makeConfig(), apiClient: client)
+        await service.pushBatteryAsync(data: Data(repeating: 0xFF, count: 0x8000))
+
+        #expect(client.requests.isEmpty)
+        #expect(fakes.uploadSave.calls.isEmpty)
         #expect(fakes.updateSave.calls.isEmpty)
     }
 }

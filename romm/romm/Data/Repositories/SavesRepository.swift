@@ -28,11 +28,12 @@ final class SavesRepository: PSavesRepository {
         )
     }
 
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
-        logger.info("☁️ Updating save id=\(id) size=\(fileData.count)")
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema {
+        logger.info("☁️ Updating save id=\(id) device=\(deviceId ?? "-") size=\(fileData.count)")
         return try await apiClient.updateSave(
             id: id,
             emulator: emulator,
+            deviceId: deviceId,
             fileName: fileName,
             fileData: fileData,
             screenshotData: screenshotData

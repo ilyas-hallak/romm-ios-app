@@ -301,6 +301,7 @@
 				UI/Emulator/ExternalDisplay/PhoneScreenBlanker.swift,
 				UI/Emulator/ExternalDisplay/PlayOnTVModifier.swift,
 				UI/Emulator/Libretro/DisplayLinkDriver.swift,
+				UI/Emulator/Libretro/DualShockAnalogSwitch.swift,
 				UI/Emulator/Libretro/LegacySRAMFile.swift,
 				UI/Emulator/Libretro/LibretroABI.swift,
 				"UI/Emulator/Libretro/LibretroAspectRatio+UI.swift",

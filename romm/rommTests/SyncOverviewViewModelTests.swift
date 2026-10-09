@@ -31,7 +31,7 @@ private final class FakeSyncPreviewUseCase: PSyncPreviewUseCase, @unchecked Send
     var result: Result<SyncPreview, Error>
     private(set) var callCount = 0
     init(result: Result<SyncPreview, Error>) { self.result = result }
-    func execute() async throws -> SyncPreview {
+    func execute(romIds: [Int]?) async throws -> SyncPreview {
         callCount += 1
         return try result.get()
     }
@@ -66,10 +66,12 @@ private final class FakeSaveSyncRunner: PSaveSyncRunner {
     var gate: Gate?
     private(set) var callCount = 0
     private(set) var lastPreview: SyncPreview?
+    private(set) var lastStateRomIds: [Int]?
 
-    func run(preview: SyncPreview, externalScans: [ExternalEmulatorID: ExternalSaveScan]) async -> SaveSyncReport {
+    func run(preview: SyncPreview, externalScans: [ExternalEmulatorID: ExternalSaveScan], stateRomIds: [Int]?) async -> SaveSyncReport {
         callCount += 1
         lastPreview = preview
+        lastStateRomIds = stateRomIds
         await gate?.wait()
         return reportToReturn
     }

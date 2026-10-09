@@ -72,11 +72,12 @@ extension RommAPIClient {
     func updateSave(
         id: Int,
         emulator: String?,
+        deviceId: String?,
         fileName: String,
         fileData: Data,
         screenshotData: Data?
     ) async throws -> SaveSchema {
-        let path = withQuery("api/saves/\(id)", [("emulator", emulator)])
+        let path = withQuery("api/saves/\(id)", [("emulator", emulator), ("device_id", deviceId)])
         let boundary = "RommSavesBoundary\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         var formData = Data()
         formData.appendFileField(

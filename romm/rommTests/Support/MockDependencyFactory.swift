@@ -97,6 +97,7 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = InMemoryEmulatorScreenPositionPreference()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
+    lazy var analogSticksPreference: PAnalogSticksPreference = UserDefaultsAnalogSticksPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
     lazy var emulatorBezelPreference: PEmulatorBezelPreference = UserDefaultsEmulatorBezelPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = InMemoryExternalDisplayPreference()
@@ -105,8 +106,8 @@ class MockDependencyFactory: PDependencyFactory {
 
     // External emulator apps
     lazy var playTargetPreference: PPlayTargetPreference = UserDefaultsPlayTargetPreferenceStore()
-    lazy var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore = UserDefaultsExternalEmulatorHandoffStore()
-    lazy var externalAppLauncher: PExternalAppLauncher = UIExternalAppLauncher()
+    var externalEmulatorHandoffStore: PExternalEmulatorHandoffStore
+    var externalAppLauncher: PExternalAppLauncher
 
     // MARK: - Changelog / Update Check
 
@@ -152,12 +153,16 @@ class MockDependencyFactory: PDependencyFactory {
         fileValidationService: PFileValidationService? = nil,
         transferHistoryRepository: PTransferHistoryRepository? = nil,
         localROMRepository: PLocalROMRepository? = nil,
-        saveSyncRunner: PSaveSyncRunner? = nil
+        saveSyncRunner: PSaveSyncRunner? = nil,
+        externalEmulatorHandoffStore: PExternalEmulatorHandoffStore? = nil,
+        externalAppLauncher: PExternalAppLauncher? = nil
     ) {
         // Resolve the API client first so every server-only repository shares it.
         // Defaults to a harmless fake, never the production client.
         let resolvedAPIClient = apiClient ?? FakeAPIClient()
         self.apiClient = resolvedAPIClient
+        self.externalEmulatorHandoffStore = externalEmulatorHandoffStore ?? UserDefaultsExternalEmulatorHandoffStore()
+        self.externalAppLauncher = externalAppLauncher ?? UIExternalAppLauncher()
 
         // Server-only repositories: real implementations are safe because they
         // can only reach the (fake) client, so use the injected double or build
@@ -206,6 +211,10 @@ class MockDependencyFactory: PDependencyFactory {
     
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase {
         GetRomsWithFiltersUseCase(romsRepository: romsRepository)
+    }
+
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase {
+        GetRecommendationsUseCase(romsRepository: romsRepository)
     }
     
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase {
@@ -505,9 +514,9 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var savesRepository: PSavesRepository = SavesRepository(apiClient: apiClient)
     lazy var statesRepository: PStatesRepository = StatesRepository(apiClient: apiClient)
 
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService {
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService {
         CloudSaveSyncService(
-            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName),
+            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName, platformSlug: platformSlug),
             saveStore: saveStore,
             listSavesUseCase: ListServerSavesUseCase(repository: savesRepository),
             uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
@@ -567,17 +576,25 @@ class MockDependencyFactory: PDependencyFactory {
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {
         SyncSaveViewModel(
             rom: rom,
+            previewUseCase: makeSyncPreviewUseCase(),
+            syncRunner: makeSaveSyncRunner(),
+            stateSyncCoordinator: makeStateSyncCoordinator(),
             listSavesUseCase: makeListServerSavesUseCase(),
-            listStatesUseCase: makeListServerStatesUseCase(),
             downloadSaveUseCase: makeDownloadSaveUseCase(),
-            downloadStateUseCase: makeDownloadStateUseCase(),
-            uploadSaveUseCase: makeUploadSaveUseCase(),
-            updateSaveUseCase: makeUpdateSaveUseCase(),
-            uploadStateUseCase: makeUploadStateUseCase(),
-            updateStateUseCase: makeUpdateStateUseCase(),
             saveStore: saveStore,
+            syncDevice: syncDeviceRepository,
             recordSyncUseCase: makeRecordSyncUseCase(),
             getLastSyncUseCase: makeGetLastSyncUseCase()
+        )
+    }
+
+    private func makeStateSyncCoordinator() -> StateSyncCoordinator {
+        StateSyncCoordinator(
+            saveStore: saveStore,
+            listStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase()
         )
     }
 
@@ -598,7 +615,8 @@ class MockDependencyFactory: PDependencyFactory {
             downloadStateUseCase: makeDownloadStateUseCase(),
             completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
             externalSaveFolderStore: externalSaveFolderStore,
-            recordRunUseCase: makeRecordSaveSyncRunUseCase()
+            recordRunUseCase: makeRecordSaveSyncRunUseCase(),
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
         )
     }
 }
