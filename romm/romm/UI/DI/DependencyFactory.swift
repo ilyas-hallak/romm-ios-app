@@ -31,7 +31,6 @@ protocol PDependencyFactory {
     var saveStore: PSaveStore { get }
     
     // Use Cases
-    func makeLogoutUseCase() -> LogoutUseCase
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase
     func makeRefreshRetroAchievementsUseCase() -> RefreshRetroAchievementsUseCase
     func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase
@@ -105,6 +104,8 @@ protocol PDependencyFactory {
     func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase
     func makeRecordSyncUseCase() -> PRecordSyncUseCase
     func makeGetLastSyncUseCase() -> PGetLastSyncUseCase
+    func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase
+    func makeDeleteAllDownloadedROMsUseCase() -> PDeleteAllDownloadedROMsUseCase
     func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase
     func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase
 
@@ -225,10 +226,6 @@ class DefaultDependencyFactory: PDependencyFactory {
     private init() {}
     
     // MARK: - Auth Use Cases
-    
-    func makeLogoutUseCase() -> LogoutUseCase {
-        LogoutUseCase(authRepository: authRepository)
-    }
     
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase {
         GetCurrentUserUseCase(authRepository: authRepository)
@@ -698,6 +695,18 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     // MARK: - Local ROM Use Cases
+
+    func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase {
+        GetLocalDataSummaryUseCase(
+            localROMRepository: localROMRepository,
+            saveStore: saveStore,
+            syncStore: cloudSaveSyncStore
+        )
+    }
+
+    func makeDeleteAllDownloadedROMsUseCase() -> PDeleteAllDownloadedROMsUseCase {
+        DeleteAllDownloadedROMsUseCase(localROMRepository: localROMRepository)
+    }
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
         GetROMShareFilesUseCase(localROMRepository: localROMRepository)

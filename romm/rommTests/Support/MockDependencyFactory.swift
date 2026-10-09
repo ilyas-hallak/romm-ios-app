@@ -189,10 +189,6 @@ class MockDependencyFactory: PDependencyFactory {
         _injectedSaveSyncRunner = saveSyncRunner
     }
     
-    func makeLogoutUseCase() -> LogoutUseCase {
-        LogoutUseCase(authRepository: authRepository)
-    }
-    
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase {
         GetCurrentUserUseCase(authRepository: authRepository)
     }
@@ -567,6 +563,13 @@ class MockDependencyFactory: PDependencyFactory {
     }
     func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase {
         GetLastSaveSyncRunUseCase(store: saveSyncOutcomeStore)
+    }
+
+    func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase {
+        GetLocalDataSummaryUseCase(localROMRepository: localROMRepository, saveStore: saveStore, syncStore: cloudSaveSyncStore)
+    }
+    func makeDeleteAllDownloadedROMsUseCase() -> PDeleteAllDownloadedROMsUseCase {
+        DeleteAllDownloadedROMsUseCase(localROMRepository: localROMRepository)
     }
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {

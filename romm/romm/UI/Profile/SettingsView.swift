@@ -15,7 +15,6 @@ struct SettingsView: View {
     @State private var profileViewModel = ProfileViewModel()
     @StateObject private var experimentalSettings = ExperimentalFeatureSettings.shared
     @StateObject private var cloudSyncSettings = CloudSaveSyncSettings.shared
-    @State private var showingLogoutAlert = false
     @State private var showingResetAlert = false
     private let enginePreference: PEmulatorEnginePreference = DefaultDependencyFactory.shared.enginePreference
     private let playTargetPreference: PPlayTargetPreference = DefaultDependencyFactory.shared.playTargetPreference
@@ -231,13 +230,10 @@ struct SettingsView: View {
             refreshPlayDestination()
             profileViewModel.refreshServerConnection()
         }
-        .alert("Logout", isPresented: $showingLogoutAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Logout", role: .destructive) {
-                profileViewModel.logout()
-            }
+        .alert("Logout", isPresented: $profileViewModel.isLogoutConfirmationPresented) {
+            logoutButtons
         } message: {
-            Text("Are you sure you want to logout?")
+            Text(profileViewModel.logoutMessage)
         }
         .alert("Reset Configuration", isPresented: $showingResetAlert) {
             Button("Cancel", role: .cancel) { }
@@ -251,6 +247,23 @@ struct SettingsView: View {
 }
 
 extension SettingsView {
+    @ViewBuilder
+    private var logoutButtons: some View {
+        if profileViewModel.logoutSummary?.hasDownloads == true {
+            Button("Log out and keep downloads") {
+                Task { await profileViewModel.logout(deletingDownloads: false) }
+            }
+            Button("Log out and delete downloads", role: .destructive) {
+                Task { await profileViewModel.logout(deletingDownloads: true) }
+            }
+        } else {
+            Button("Logout", role: .destructive) {
+                Task { await profileViewModel.logout(deletingDownloads: false) }
+            }
+        }
+        Button("Cancel", role: .cancel) { }
+    }
+
     /// The server addresses, signing out and starting over. Kept at the end,
     /// out of the way of the settings one changes more often.
     private var accountSection: some View {
@@ -274,7 +287,7 @@ extension SettingsView {
             }
 
             Button(role: .destructive) {
-                showingLogoutAlert = true
+                Task { await profileViewModel.prepareLogout() }
             } label: {
                 HStack {
                     rowIcon("rectangle.portrait.and.arrow.right")
