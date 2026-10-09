@@ -98,4 +98,35 @@ extension View {
             }
         }
     }
+
+    /// The quit alert of the in-game menu. While the controller focus is in use
+    /// the message names the buttons that answer it, see
+    /// `EmulatorMenuCommand.answerQuitConfirmation(quit:cancel:)`.
+    func emulatorMenuQuitConfirmation(
+        isPresented: Binding<Bool>,
+        showsControllerHint: Bool,
+        onQuit: @escaping () -> Void
+    ) -> some View {
+        alert("Quit Game?", isPresented: isPresented) {
+            Button("Cancel", role: .cancel) {}
+            Button("Quit", role: .destructive, action: onQuit)
+        } message: {
+            Text(showsControllerHint
+                 ? "Unsaved progress will be lost.\nPress A to quit or B to cancel."
+                 : "Unsaved progress will be lost.")
+        }
+    }
+}
+
+/// A toolbar button title with room for the focus ring around it.
+struct EmulatorMenuToolbarLabel: View {
+    let title: String
+    let isFocused: Bool
+
+    var body: some View {
+        Text(title)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .emulatorMenuFocusRing(isFocused, cornerRadius: 8)
+    }
 }

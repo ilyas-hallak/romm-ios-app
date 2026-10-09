@@ -204,27 +204,21 @@ private struct LibretroMenuSheet: View {
                     Button(role: .destructive) {
                         showQuitConfirmation = true
                     } label: {
-                        toolbarLabel("Quit", item: .quit)
+                        EmulatorMenuToolbarLabel(title: "Quit", isFocused: focus.isFocused(.quit))
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onResume) {
-                        toolbarLabel("Done", item: .done)
+                        EmulatorMenuToolbarLabel(title: "Done", isFocused: focus.isFocused(.done))
                     }
                     .bold()
                 }
             }
-            .alert(
-                "Quit Game?",
-                isPresented: $showQuitConfirmation
-            ) {
-                Button("Cancel", role: .cancel) {}
-                Button("Quit", role: .destructive, action: onQuit)
-            } message: {
-                Text(focus.isVisible
-                     ? "Unsaved progress will be lost.\nPress A to quit or B to cancel."
-                     : "Unsaved progress will be lost.")
-            }
+            .emulatorMenuQuitConfirmation(
+                isPresented: $showQuitConfirmation,
+                showsControllerHint: focus.isVisible,
+                onQuit: onQuit
+            )
         }
         .onAppear {
             session?.onMenuCommand = { handle($0) }
@@ -238,7 +232,7 @@ private struct LibretroMenuSheet: View {
 
     private func handle(_ command: EmulatorMenuCommand) {
         if showQuitConfirmation {
-            handleQuitConfirmation(command)
+            command.answerQuitConfirmation(quit: onQuit, cancel: { showQuitConfirmation = false })
             return
         }
         switch focus.handle(command) {
@@ -246,16 +240,6 @@ private struct LibretroMenuSheet: View {
         case .adjust(_, let step): selectedSlot = min(max(selectedSlot + step, slots.first!), slots.last!)
         case .dismiss: onResume()
         case .none: break
-        }
-    }
-
-    /// The system alert cannot be steered with a pad, so its two choices are
-    /// answered here instead.
-    private func handleQuitConfirmation(_ command: EmulatorMenuCommand) {
-        switch command {
-        case .confirm: onQuit()
-        case .back: showQuitConfirmation = false
-        default: break
         }
     }
 
@@ -269,13 +253,6 @@ private struct LibretroMenuSheet: View {
         case .undoLoad where canUndoLoad: undoLoad()
         default: break
         }
-    }
-
-    private func toolbarLabel(_ title: String, item: MenuItem) -> some View {
-        Text(title)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .emulatorMenuFocusRing(focus.isFocused(item), cornerRadius: 8)
     }
 
     private var detailHeader: some View {

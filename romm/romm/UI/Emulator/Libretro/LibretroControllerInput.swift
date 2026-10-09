@@ -226,9 +226,9 @@ final class LibretroControllerInput {
         updateMenuCombo()
     }
 
-    /// Fires `onMenuRequested` once when every button of the configured combo is
-    /// held. The buttons keep going to the core as normal, the combo is purely
-    /// additive.
+    /// Fires once when every button of the configured combo is held. Outside the
+    /// menu it opens it and the buttons keep going to the core as normal. Inside
+    /// the menu it closes it, so the same shortcut works both ways.
     private func updateMenuCombo() {
         let combo = comboButtons
         guard !combo.isEmpty else {

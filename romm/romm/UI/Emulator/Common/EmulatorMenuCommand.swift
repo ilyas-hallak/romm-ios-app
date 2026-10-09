@@ -8,6 +8,19 @@ enum EmulatorMenuCommand: Equatable {
     case back
 }
 
+extension EmulatorMenuCommand {
+
+    /// The quit confirmation is a system alert, which a pad cannot steer, so the
+    /// menu answers it: confirm quits, back cancels, anything else waits.
+    func answerQuitConfirmation(quit: () -> Void, cancel: () -> Void) {
+        switch self {
+        case .confirm: quit()
+        case .back: cancel()
+        default: break
+        }
+    }
+}
+
 /// Turns one analog stick axis into discrete menu steps.
 ///
 /// A step fires once the stick is pushed past `pressThreshold` and the axis has

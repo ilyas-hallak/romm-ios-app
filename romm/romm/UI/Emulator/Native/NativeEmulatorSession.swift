@@ -558,7 +558,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         // Registers itself with the controller's default mapping, on purpose:
         // the menu is about physical buttons, not about what the running
         // system calls them. See NativeMenuInput.
-        menuInput.attach(to: controller)
+        if drivesMenu(controller) {
+            menuInput.attach(to: controller)
+        }
         guard !isMenuNavigating else { return }
         let mapping = (faceButtonPreference?.isSwapped ?? false)
             ? FaceButtonInputMapping.swappingFaceButtons(of: controller.defaultInputMapping)
@@ -618,6 +620,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         for controller in ExternalGameControllerManager.shared.connectedControllers {
             attach(controller, to: core)
         }
+    }
+
+    /// Only player one opens and steers the menu, like on the libretro engine.
+    private func drivesMenu(_ controller: GameController) -> Bool {
+        controller.playerIndex == 0
     }
 
     /// A press routed to one receiver set must not have its release go to
@@ -690,7 +697,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
               let core = emulatorCore else { return }
         controller.removeReceiver(core)
         controller.removeReceiver(viewController)
-        menuInput.detach(from: controller)
+        if drivesMenu(controller) {
+            menuInput.detach(from: controller)
+        }
         updateOnScreenControlsVisibility()
     }
 
