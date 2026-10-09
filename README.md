@@ -170,3 +170,6 @@ This app would not exist without the open-source emulation work of:
 
 MIT, see [LICENSE](LICENSE).
 This is an independent client and part of the RomM ecosystem.
+
+Made by [Ilyas Hallak](https://ilyashallak.de).
+More about the app and ways to get in touch on [ilyashallak.de/romm](https://ilyashallak.de/romm/).
