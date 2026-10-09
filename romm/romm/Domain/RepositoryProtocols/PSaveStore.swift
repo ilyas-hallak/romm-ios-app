@@ -8,6 +8,9 @@ protocol PSaveStore {
     /// read here needs a ROM id it does not yet know.
     func listRomIds() throws -> [Int]
 
+    /// Removes everything held for this ROM: battery, states, backups.
+    func deleteSaves(romId: Int) throws
+
     func readBattery(romId: Int) throws -> Data?
     func writeBattery(romId: Int, data: Data) throws
     func batteryModifiedAt(romId: Int) -> Date?

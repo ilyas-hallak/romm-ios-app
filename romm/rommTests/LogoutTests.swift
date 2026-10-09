@@ -89,32 +89,52 @@ struct GetLocalDataSummaryUseCaseTests {
     }
 }
 
-struct DeleteAllDownloadedROMsUseCaseTests {
+struct DeleteLocalGameDataUseCaseTests {
+    private let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("LogoutTests-\(UUID().uuidString)", isDirectory: true)
+
     @Test func deletesEveryDownloadedROM() throws {
         let repository = RecordingLocalROMs(roms: [rom(1), rom(2), rom(3)])
+        let store = LocalSaveStoreRepository(rootDirectory: root)
 
-        try DeleteAllDownloadedROMsUseCase(localROMRepository: repository).execute()
+        try DeleteLocalGameDataUseCase(localROMRepository: repository, saveStore: store).execute()
 
         #expect(repository.deletedIds == [1, 2, 3])
     }
 
-    @Test func keepsGoingPastAFailureAndReportsIt() {
+    @Test func deletesSavesAndStatesIncludingUnsyncedOnes() throws {
+        let store = LocalSaveStoreRepository(rootDirectory: root)
+        try store.writeBattery(romId: 1, data: Data([1]))
+        try store.writeState(romId: 2, slot: 1, data: Data([2]))
+
+        try DeleteLocalGameDataUseCase(localROMRepository: RecordingLocalROMs(roms: []), saveStore: store).execute()
+
+        #expect(try store.listRomIds().isEmpty)
+        #expect(try store.readBattery(romId: 1) == nil)
+        #expect(try store.listStates(romId: 2).isEmpty)
+    }
+
+    @Test func keepsGoingPastAFailureAndReportsIt() throws {
         let repository = RecordingLocalROMs(roms: [rom(1), rom(2), rom(3)], failingIds: [2])
+        let store = LocalSaveStoreRepository(rootDirectory: root)
+        try store.writeBattery(romId: 1, data: Data([1]))
 
         #expect(throws: (any Error).self) {
-            try DeleteAllDownloadedROMsUseCase(localROMRepository: repository).execute()
+            try DeleteLocalGameDataUseCase(localROMRepository: repository, saveStore: store).execute()
         }
         #expect(repository.deletedIds == [1, 3])
+        #expect(try store.listRomIds().isEmpty)
     }
 }
 
 @MainActor
 struct LogoutMessageTests {
-    @Test func namesCountAndSizeOfTheDownloads() {
+    @Test func namesCountAndSizeOfTheDownloadsAndThatSavesGoToo() {
         let summary = LocalDataSummary(downloadedROMCount: 30, downloadedBytes: 12_000_000_000, gamesWithUnsyncedSaves: 0)
         let size = ByteCountFormatter.string(fromByteCount: 12_000_000_000, countStyle: .file)
 
-        #expect(ProfileViewModel.logoutMessage(for: summary) == "You have 30 ROMs (\(size)) downloaded on this device.")
+        #expect(ProfileViewModel.logoutMessage(for: summary) == "You have 30 ROMs (\(size)) downloaded on this device. "
+            + "Deleting downloads also removes all saves and save states on this device.")
     }
 
     @Test func usesTheSingularForOneROM() {
@@ -123,11 +143,18 @@ struct LogoutMessageTests {
         #expect(ProfileViewModel.logoutMessage(for: summary).hasPrefix("You have 1 ROM ("))
     }
 
-    @Test func mentionsUnsyncedSaves() {
-        let summary = LocalDataSummary(downloadedROMCount: 0, downloadedBytes: 0, gamesWithUnsyncedSaves: 3)
+    @Test func warnsThatDeletingLosesUnsyncedSaves() {
+        let summary = LocalDataSummary(downloadedROMCount: 2, downloadedBytes: 1_000, gamesWithUnsyncedSaves: 3)
+
+        #expect(ProfileViewModel.logoutMessage(for: summary).hasSuffix("\n\nWarning: 3 games have saves that are not synced "
+            + "to the server yet. Deleting downloads deletes them for good."))
+    }
+
+    @Test func saysUnsyncedSavesStayWhenNothingCanBeDeleted() {
+        let summary = LocalDataSummary(downloadedROMCount: 0, downloadedBytes: 0, gamesWithUnsyncedSaves: 1)
 
         #expect(ProfileViewModel.logoutMessage(for: summary) == "No ROMs are downloaded on this device.\n\n"
-            + "3 games have saves that are not synced to the server yet. They stay on this device.")
+            + "1 game has saves that are not synced to the server yet. They stay on this device.")
     }
 }
 

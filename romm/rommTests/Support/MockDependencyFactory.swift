@@ -568,8 +568,8 @@ class MockDependencyFactory: PDependencyFactory {
     func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase {
         GetLocalDataSummaryUseCase(localROMRepository: localROMRepository, saveStore: saveStore, syncStore: cloudSaveSyncStore)
     }
-    func makeDeleteAllDownloadedROMsUseCase() -> PDeleteAllDownloadedROMsUseCase {
-        DeleteAllDownloadedROMsUseCase(localROMRepository: localROMRepository)
+    func makeDeleteLocalGameDataUseCase() -> PDeleteLocalGameDataUseCase {
+        DeleteLocalGameDataUseCase(localROMRepository: localROMRepository, saveStore: saveStore)
     }
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {

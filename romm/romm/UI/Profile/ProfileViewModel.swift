@@ -14,7 +14,7 @@ import Observation
 class ProfileViewModel {
     private let logger = Logger.viewModel
     private let getLocalDataSummaryUseCase: PGetLocalDataSummaryUseCase
-    private let deleteAllDownloadedROMsUseCase: PDeleteAllDownloadedROMsUseCase
+    private let deleteLocalGameDataUseCase: PDeleteLocalGameDataUseCase
     private let clearSetupConfigurationUseCase: PClearSetupConfigurationUseCase
     private let getGroupRomsUseCase: PGetGroupRomsUseCase
     private let saveGroupRomsUseCase: PSaveGroupRomsUseCase
@@ -35,7 +35,7 @@ class ProfileViewModel {
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.getLocalDataSummaryUseCase = factory.makeGetLocalDataSummaryUseCase()
-        self.deleteAllDownloadedROMsUseCase = factory.makeDeleteAllDownloadedROMsUseCase()
+        self.deleteLocalGameDataUseCase = factory.makeDeleteLocalGameDataUseCase()
         self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
         self.getGroupRomsUseCase = factory.makeGetGroupRomsUseCase()
         self.saveGroupRomsUseCase = factory.makeSaveGroupRomsUseCase()
@@ -64,7 +64,7 @@ class ProfileViewModel {
     func logout(deletingDownloads: Bool) async {
         logger.info("Logging out (deleting downloads: \(deletingDownloads))...")
         if deletingDownloads {
-            let useCase = deleteAllDownloadedROMsUseCase
+            let useCase = deleteLocalGameDataUseCase
             do {
                 try await Task.detached(priority: .userInitiated) { try useCase.execute() }.value
             } catch {
@@ -80,23 +80,23 @@ class ProfileViewModel {
         guard let summary else {
             return "You will be signed out and returned to the setup screen."
         }
-        var message: String
-        if summary.hasDownloads {
-            let size = ByteCountFormatter.string(fromByteCount: summary.downloadedBytes, countStyle: .file)
-            let roms = summary.downloadedROMCount == 1 ? "1 ROM" : "\(summary.downloadedROMCount) ROMs"
-            message = "You have \(roms) (\(size)) downloaded on this device."
-        } else {
-            message = "No ROMs are downloaded on this device."
+        guard summary.hasDownloads else {
+            return "No ROMs are downloaded on this device." + unsyncedNote(summary.gamesWithUnsyncedSaves, deletable: false)
         }
-        switch summary.gamesWithUnsyncedSaves {
-        case 0:
-            break
-        case 1:
-            message += "\n\n1 game has saves that are not synced to the server yet. They stay on this device."
-        case let count:
-            message += "\n\n\(count) games have saves that are not synced to the server yet. They stay on this device."
-        }
-        return message
+        let size = ByteCountFormatter.string(fromByteCount: summary.downloadedBytes, countStyle: .file)
+        let roms = summary.downloadedROMCount == 1 ? "1 ROM" : "\(summary.downloadedROMCount) ROMs"
+        return "You have \(roms) (\(size)) downloaded on this device. "
+            + "Deleting downloads also removes all saves and save states on this device."
+            + unsyncedNote(summary.gamesWithUnsyncedSaves, deletable: true)
+    }
+
+    private static func unsyncedNote(_ games: Int, deletable: Bool) -> String {
+        guard games > 0 else { return "" }
+        let subject = games == 1 ? "1 game has" : "\(games) games have"
+        let notSynced = "\(subject) saves that are not synced to the server yet."
+        return deletable
+            ? "\n\nWarning: \(notSynced) Deleting downloads deletes them for good."
+            : "\n\n\(notSynced) They stay on this device."
     }
 
     func restartSetup() {

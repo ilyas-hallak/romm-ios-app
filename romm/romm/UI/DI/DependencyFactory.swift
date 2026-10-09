@@ -105,7 +105,7 @@ protocol PDependencyFactory {
     func makeRecordSyncUseCase() -> PRecordSyncUseCase
     func makeGetLastSyncUseCase() -> PGetLastSyncUseCase
     func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase
-    func makeDeleteAllDownloadedROMsUseCase() -> PDeleteAllDownloadedROMsUseCase
+    func makeDeleteLocalGameDataUseCase() -> PDeleteLocalGameDataUseCase
     func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase
     func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase
 
@@ -704,8 +704,8 @@ class DefaultDependencyFactory: PDependencyFactory {
         )
     }
 
-    func makeDeleteAllDownloadedROMsUseCase() -> PDeleteAllDownloadedROMsUseCase {
-        DeleteAllDownloadedROMsUseCase(localROMRepository: localROMRepository)
+    func makeDeleteLocalGameDataUseCase() -> PDeleteLocalGameDataUseCase {
+        DeleteLocalGameDataUseCase(localROMRepository: localROMRepository, saveStore: saveStore)
     }
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
