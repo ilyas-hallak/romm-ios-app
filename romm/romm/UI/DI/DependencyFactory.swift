@@ -694,7 +694,9 @@ class DefaultDependencyFactory: PDependencyFactory {
             updateSaveUseCase: makeUpdateSaveUseCase(),
             uploadStateUseCase: makeUploadStateUseCase(),
             updateStateUseCase: makeUpdateStateUseCase(),
+            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
             saveStore: saveStore,
+            syncDevice: syncDeviceRepository,
             recordSyncUseCase: makeRecordSyncUseCase(),
             getLastSyncUseCase: makeGetLastSyncUseCase()
         )
