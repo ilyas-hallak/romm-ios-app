@@ -85,7 +85,7 @@ final class AccountViewModel {
         guard reportsSyncStatus, !isChecking else { return }
         syncStatus = .checking
         do {
-            syncStatus = SaveSyncStatus(preview: try await previewUseCase.execute())
+            syncStatus = SaveSyncStatus(preview: try await previewUseCase.execute(romIds: nil))
         } catch let error as SyncPreviewError {
             syncStatus = SaveSyncStatus(error: error)
         } catch {

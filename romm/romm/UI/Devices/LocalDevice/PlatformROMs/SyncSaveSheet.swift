@@ -1,23 +1,8 @@
 import SwiftUI
 
-enum PendingUpload: Equatable {
-    case state(slot: Int, existingId: Int?)
-    case battery(existingId: Int?)
-
-    var title: String {
-        switch self {
-        case .state(let slot, _): return "Slot \(slot)"
-        case .battery: return "Battery save"
-        }
-    }
-    var hasExisting: Bool {
-        switch self {
-        case .state(_, let id): return id != nil
-        case .battery(let id): return id != nil
-        }
-    }
-}
-
+/// Status over one ROM's sync, scoped down from the sync overview rather than
+/// its own manual file manager: the same negotiate-and-run logic, the same
+/// plan, just for this one game.
 struct SyncSaveSheet: View {
     @State var viewModel: SyncSaveViewModel
     let onDismiss: () -> Void
@@ -26,22 +11,19 @@ struct SyncSaveSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if viewModel.isLoadingServer {
-                    ProgressView("Loading cloud data…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        if let meta = viewModel.lastSyncMeta {
-                            syncStatusHeader(meta)
-                        }
-                        serverSection
-                        localSection
-                    }
-                    .listStyle(.insetGrouped)
+            Form {
+                switch viewModel.state {
+                case .idle, .loading:
+                    loadingSection
+                case .failed(let error):
+                    failureSection(error)
+                case .loaded:
+                    statusSection
+                    syncSection
                 }
+                advancedSection
             }
-            .navigationTitle("Sync Save Data")
+            .navigationTitle(viewModel.rom.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -59,176 +41,174 @@ struct SyncSaveSheet: View {
             .sheet(item: $viewModel.exportItem, onDismiss: { viewModel.cleanupExportTemp() }) { item in
                 ShareSheet(activityItems: [item.url])
             }
-            .confirmationDialog(
-                "Already on Server",
-                isPresented: Binding(
-                    get: { viewModel.pendingUpload?.hasExisting == true },
-                    set: { if !$0 { viewModel.cancelPendingUpload() } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Update existing") { viewModel.confirmUpload(update: true) }
-                Button("Add as new") { viewModel.confirmUpload(update: false) }
-                Button("Cancel", role: .cancel) { viewModel.cancelPendingUpload() }
-            } message: {
-                Text("\"\(viewModel.pendingUpload?.title ?? "")\" already exists on the server. Update it or add as a new entry?")
-            }
         }
-        .task { await viewModel.loadAll() }
-    }
-
-    // MARK: - Sections
-
-    @ViewBuilder
-    private func syncStatusHeader(_ meta: SyncMetadata) -> some View {
-        Section {
-            HStack(spacing: 12) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.title3)
-                    .foregroundStyle(meta.trigger == .automatic ? .green : .orange)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Last synced \(meta.date.relativeAbbreviated())")
-                        .font(.subheadline.weight(.semibold))
-                    Text(meta.trigger == .automatic ? "Automatic, on launch or save" : "Manual sync")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        .task {
+            if case .idle = viewModel.state {
+                await viewModel.load()
             }
-            .padding(.vertical, 2)
         }
     }
 
-    @ViewBuilder
-    private var serverSection: some View {
+    // MARK: - Status
+
+    private var statusSection: some View {
         Section {
-            if viewModel.serverStates.isEmpty && viewModel.serverSaves.isEmpty {
-                Text("No data on server")
-                    .foregroundStyle(.secondary)
-                    .font(.subheadline)
-                    .listRowSeparator(.hidden)
-            } else {
-                ForEach(viewModel.serverStates) { state in
-                    syncRow(
-                        icon: "bookmark.fill", tint: .purple,
-                        label: state.fileNameNoExt,
-                        date: state.updatedAt,
-                        sizeBytes: state.fileSizeBytes,
-                        isBusy: viewModel.downloadingStateIds.contains(state.id),
-                        actionIcon: "arrow.down.circle.fill",
-                        action: { viewModel.downloadServerState(state) }
-                    )
-                }
-                ForEach(viewModel.serverSaves) { save in
-                    syncRow(
-                        icon: "memorychip", tint: .blue,
-                        label: save.fileNameNoExt,
-                        date: save.updatedAt,
-                        sizeBytes: save.fileSizeBytes,
-                        isBusy: viewModel.downloadingSaveIds.contains(save.id),
-                        actionIcon: "arrow.down.circle.fill",
-                        action: { viewModel.downloadServerSave(save) },
-                        exportBusy: viewModel.exportingServerSaveIds.contains(save.id),
-                        onExport: { viewModel.exportServerSave(save) }
-                    )
-                }
-            }
+            batteryRow
+            statesRow
         } header: {
-            Label("On Server", systemImage: "icloud.fill")
+            Text("Status")
+        } footer: {
+            if let meta = viewModel.lastSyncMeta {
+                Text("Last synced \(meta.date.relativeAbbreviated()), "
+                    + (meta.trigger == .automatic ? "automatic" : "manual"))
+            }
         }
     }
 
     @ViewBuilder
-    private var localSection: some View {
-        Section {
-            if viewModel.localStates.isEmpty && !viewModel.hasLocalBattery {
-                Text("No local saves or states")
-                    .foregroundStyle(.secondary)
-                    .font(.subheadline)
-                    .listRowSeparator(.hidden)
-            } else {
-                ForEach(viewModel.localStates) { entry in
-                    syncRow(
-                        icon: "bookmark.fill", tint: .purple,
-                        label: "Slot \(entry.slot)",
-                        date: entry.modifiedAt,
-                        sizeBytes: nil,
-                        isBusy: viewModel.uploadingStateSlots.contains(entry.slot),
-                        actionIcon: "icloud.and.arrow.up",
-                        action: { viewModel.uploadLocalState(entry: entry) }
-                    )
-                }
-                if viewModel.hasLocalBattery {
-                    syncRow(
-                        icon: "memorychip", tint: .blue,
-                        label: "Battery save",
-                        date: viewModel.localBatteryDate,
-                        sizeBytes: nil,
-                        isBusy: viewModel.isUploadingBattery,
-                        actionIcon: "icloud.and.arrow.up",
-                        action: { viewModel.uploadLocalBattery() },
-                        exportBusy: false,
-                        onExport: { viewModel.exportLocalBattery() }
-                    )
-                }
-            }
-        } header: {
-            Label("On Device", systemImage: "iphone")
+    private var batteryRow: some View {
+        switch viewModel.batteryStatus {
+        case .inSync:
+            statusRow(icon: "equal.circle.fill", tint: .secondary, title: "Battery Save", detail: Text("In sync"))
+        case .willUpload:
+            statusRow(icon: "arrow.up.circle.fill", tint: .blue, title: "Battery Save", detail: Text("Will upload"))
+        case .willDownload:
+            statusRow(icon: "arrow.down.circle.fill", tint: .green, title: "Battery Save", detail: Text("Will download"))
+        case .conflict:
+            statusRow(
+                icon: "exclamationmark.triangle.fill", tint: .orange, title: "Battery Save", detail: Text("Conflict"),
+                explanation: "Changed on this device and on the server since the last sync. Not synced for now."
+            )
+        case .noSaveYet:
+            statusRow(icon: "icloud.slash", tint: .secondary, title: "Battery Save", detail: Text("No save yet"))
+        case nil:
+            EmptyView()
         }
     }
 
-    // MARK: - Row helper
+    @ViewBuilder
+    private var statesRow: some View {
+        switch viewModel.statesStatus {
+        case .inSync:
+            statusRow(icon: "equal.circle.fill", tint: .secondary, title: "Save States", detail: Text("In sync"))
+        case .pending(let count):
+            statusRow(
+                icon: "arrow.up.arrow.down.circle.fill", tint: .blue, title: "Save States",
+                detail: Text(statesPendingDetail(count: count))
+            )
+        case .unavailable:
+            statusRow(icon: "exclamationmark.triangle.fill", tint: .orange, title: "Save States", detail: Text("Could not check"))
+        }
+    }
 
-    private func syncRow(
-        icon: String, tint: Color, label: String, date: Date?, sizeBytes: Int?,
-        isBusy: Bool, actionIcon: String, action: @escaping () -> Void,
-        exportBusy: Bool = false, onExport: (() -> Void)? = nil
+    private func statesPendingDetail(count: Int) -> String {
+        count == 1 ? String(localized: "1 state will sync") : String(localized: "\(count) states will sync")
+    }
+
+    private func statusRow(
+        icon: String, tint: Color, title: LocalizedStringKey, detail: Text, explanation: LocalizedStringKey? = nil
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
-                .frame(width: 20)
+                .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                if let date {
-                    Text(date.formatted(date: .abbreviated, time: .shortened))
+                Text(title)
+                if let explanation {
+                    Text(explanation)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-                if let sizeBytes {
-                    Text(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
             Spacer()
-            if isBusy {
-                ProgressView().scaleEffect(0.8)
-            } else {
-                HStack(spacing: 4) {
-                    if let onExport {
-                        if exportBusy {
-                            ProgressView().scaleEffect(0.8)
-                        } else {
-                            Button(action: onExport) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
+            detail
+                .font(.callout)
+                .foregroundStyle(tint == .secondary ? .secondary : tint)
+        }
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - Sync
+
+    private var syncSection: some View {
+        Section {
+            Button {
+                Task { await viewModel.syncThisGame() }
+            } label: {
+                HStack {
+                    Spacer()
+                    if viewModel.isSyncing {
+                        ProgressView().padding(.trailing, 8)
                     }
-                    Button(action: action) {
-                        Image(systemName: actionIcon)
-                            .font(.title3)
-                            .foregroundStyle(.tint)
+                    Text("Sync This Game")
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+            }
+            .disabled(!viewModel.canSync)
+        } footer: {
+            if let summary = viewModel.lastSyncSummary {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(summary)
+                    ForEach(viewModel.lastSyncErrors, id: \.self) { error in
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
-        .padding(.vertical, 2)
+    }
+
+    // MARK: - Advanced
+
+    private var advancedSection: some View {
+        Section {
+            Button {
+                viewModel.exportLocalBattery()
+            } label: {
+                Label("Export Local Battery Save", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                Task { await viewModel.exportServerBattery() }
+            } label: {
+                HStack {
+                    Label("Export Server Battery Save", systemImage: "square.and.arrow.up")
+                    if viewModel.isExportingServerSave {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(viewModel.isExportingServerSave)
+        } header: {
+            Text("Advanced")
+        } footer: {
+            Text("Saves a copy of the battery save as a .srm file you can share or move elsewhere.")
+        }
+    }
+
+    // MARK: - Loading / failure
+
+    private var loadingSection: some View {
+        Section {
+            HStack(spacing: 12) {
+                ProgressView()
+                Text("Asking the server what would change…")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func failureSection(_ error: SyncPreviewError) -> some View {
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(error.localizedDescription)
+            }
+        } header: {
+            Text("Not Available")
+        }
     }
 }

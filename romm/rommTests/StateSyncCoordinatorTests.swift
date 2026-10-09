@@ -32,8 +32,10 @@ private final class UpdateStateSpy: PUpdateStateUseCase, @unchecked Sendable {
 
 private final class DownloadStateStub: PDownloadStateUseCase, @unchecked Sendable {
     var data: Data?
+    private(set) var callCount = 0
 
     func execute(id: Int) async throws -> Data {
+        callCount += 1
         guard let data else { throw URLError(.fileDoesNotExist) }
         return data
     }
@@ -145,5 +147,82 @@ struct StateSyncCoordinatorTests {
         guard case .failed = outcome else { Issue.record("expected failure, got \(outcome)"); return }
         #expect(uploadState.emulators.isEmpty)
         #expect(updateState.emulators.isEmpty)
+    }
+
+    // MARK: - statusSummary
+
+    @Test func statusSummaryReportsInSyncWhenNothingHasChanged() async throws {
+        let now = Date()
+        let content = Data([0x01])
+        try store.writeState(romId: 1, slot: 0, data: content)
+        try store.setStateModifiedAt(romId: 1, slot: 0, date: now)
+        try store.writeStateBaseline(romId: 1, slot: 0, baseline: StateSyncBaseline(
+            serverId: 30, serverUpdatedAt: now, contentHash: SaveContentHash.of(content)
+        ))
+        listStates.states = [makeState(id: 30, fileName: "slot0.state", updatedAt: now)]
+
+        let status = await makeCoordinator().statusSummary(romId: 1)
+
+        #expect(status == .inSync)
+        #expect(uploadState.emulators.isEmpty)
+        #expect(updateState.emulators.isEmpty)
+    }
+
+    @Test func statusSummaryReportsAPendingUploadForALocalOnlyState() async throws {
+        try store.writeState(romId: 1, slot: 0, data: Data([0x01]))
+
+        let status = await makeCoordinator().statusSummary(romId: 1)
+
+        #expect(status == .pending(count: 1))
+        #expect(uploadState.emulators.isEmpty)
+    }
+
+    @Test func statusSummaryReportsAPendingDownloadForAServerOnlyState() async throws {
+        listStates.states = [makeState(id: 30, fileName: "slot0.state", updatedAt: Date())]
+
+        let status = await makeCoordinator().statusSummary(romId: 1)
+
+        #expect(status == .pending(count: 1))
+        #expect(try store.readState(romId: 1, slot: 0) == nil)
+        // A server-only slot is decided by first step alone: no content fetch needed.
+        #expect(downloadState.callCount == 0)
+    }
+
+    /// A slot both sides touched since the last baseline cannot be told apart
+    /// from "upload" or "download" without the server's content, which the
+    /// peek never fetches: it counts as pending, same as any other change,
+    /// and `syncSlot` (not this peek) is what actually resolves it.
+    @Test func statusSummaryCountsANeedsServerContentSlotAsPendingWithoutFetchingIt() async throws {
+        let baselineTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.writeStateBaseline(romId: 1, slot: 0, baseline: StateSyncBaseline(
+            serverId: 30, serverUpdatedAt: baselineTime, contentHash: SaveContentHash.of(Data([0x00]))
+        ))
+        try store.writeState(romId: 1, slot: 0, data: Data([0x01]))
+        try store.setStateModifiedAt(romId: 1, slot: 0, date: baselineTime.addingTimeInterval(3_600))
+        listStates.states = [makeState(id: 30, fileName: "slot0.state", updatedAt: baselineTime.addingTimeInterval(7_200))]
+
+        let status = await makeCoordinator().statusSummary(romId: 1)
+
+        #expect(status == .pending(count: 1))
+        #expect(downloadState.callCount == 0)
+        #expect(try store.readState(romId: 1, slot: 0) == Data([0x01]))
+        #expect(try store.readStateBaseline(romId: 1, slot: 0)?.serverId == 30)
+    }
+
+    @Test func statusSummaryReportsUnavailableWhenListingFailsAndALocalStateExists() async throws {
+        try store.writeState(romId: 1, slot: 0, data: Data([0x01]))
+        listStates.error = URLError(.timedOut)
+
+        let status = await makeCoordinator().statusSummary(romId: 1)
+
+        #expect(status == .unavailable)
+    }
+
+    @Test func statusSummaryReportsUnavailableWhenListingFailsWithNoLocalStateEither() async throws {
+        listStates.error = URLError(.timedOut)
+
+        let status = await makeCoordinator().statusSummary(romId: 1)
+
+        #expect(status == .unavailable)
     }
 }

@@ -2,7 +2,9 @@ import Foundation
 
 protocol PSyncPreviewUseCase {
     /// Asks the server what a sync would do, without changing anything.
-    func execute() async throws -> SyncPreview
+    /// `romIds` scopes both the reported battery saves and the plan to those
+    /// ROMs; `nil` reports every battery save this device holds.
+    func execute(romIds: [Int]?) async throws -> SyncPreview
 }
 
 /// Reports this device's battery saves to the server and returns the plan it
@@ -34,7 +36,7 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
         self.tokenProvider = tokenProvider
     }
 
-    func execute() async throws -> SyncPreview {
+    func execute(romIds: [Int]?) async throws -> SyncPreview {
         guard tokenProvider.getServerURL() != nil else { throw SyncPreviewError.notConnected }
         switch await syncDevice.syncAPIAvailability() {
         case .available: break
@@ -45,12 +47,12 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
             throw SyncPreviewError.deviceRegistrationFailed
         }
 
-        let localSaves = collectBatterySaves()
+        let localSaves = collectBatterySaves(romIds: romIds)
         logger.info("Sync preview: reporting \(localSaves.count) battery saves as device \(deviceId)")
 
         let negotiated: (response: SyncNegotiateResponse, deviceId: String)
         do {
-            negotiated = try await negotiate(deviceId: deviceId, saves: localSaves)
+            negotiated = try await negotiate(deviceId: deviceId, saves: localSaves, romIds: romIds)
         } catch let error as SyncPreviewError {
             throw error
         } catch {
@@ -82,11 +84,12 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
     /// request and is the only way back.
     private func negotiate(
         deviceId: String,
-        saves: [ClientSaveState]
+        saves: [ClientSaveState],
+        romIds: [Int]?
     ) async throws -> (response: SyncNegotiateResponse, deviceId: String) {
         do {
             let response = try await apiClient.negotiateSync(
-                SyncNegotiateRequest(deviceId: deviceId, saves: saves)
+                SyncNegotiateRequest(deviceId: deviceId, saves: saves, romIds: romIds)
             )
             return (response, deviceId)
         } catch APIClientError.invalidResponse(404, let message) {
@@ -96,17 +99,18 @@ final class SyncPreviewUseCase: PSyncPreviewUseCase {
                 throw SyncPreviewError.deviceRegistrationFailed
             }
             let response = try await apiClient.negotiateSync(
-                SyncNegotiateRequest(deviceId: freshId, saves: saves)
+                SyncNegotiateRequest(deviceId: freshId, saves: saves, romIds: romIds)
             )
             return (response, freshId)
         }
     }
 
     /// Every battery save on this device, reported under the battery slot,
-    /// without which the server pairs nothing.
-    private func collectBatterySaves() -> [ClientSaveState] {
-        let romIds = (try? saveStore.listRomIds()) ?? []
-        return romIds.compactMap { romId in
+    /// without which the server pairs nothing. Scoped to `romIds` when given.
+    private func collectBatterySaves(romIds: [Int]?) -> [ClientSaveState] {
+        let allRomIds = (try? saveStore.listRomIds()) ?? []
+        let scopedRomIds = romIds.map { allRomIds.filter($0.contains) } ?? allRomIds
+        return scopedRomIds.compactMap { romId in
             guard let data = try? saveStore.readBattery(romId: romId), !data.isEmpty else { return nil }
             return ClientSaveState(
                 romId: romId,

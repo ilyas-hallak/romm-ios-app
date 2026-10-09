@@ -28,6 +28,19 @@ final class StateSyncCoordinator {
         case failed(String)
     }
 
+    /// Read-only summary of where a ROM's states stand, for a status row.
+    /// Never uploads, downloads, or writes a baseline.
+    ///
+    /// `pending` carries one combined count rather than an upload/download
+    /// split: a slot that needs its server content compared to resolve is
+    /// counted here without fetching it (see `peekSlot`), so its direction
+    /// is genuinely not known yet.
+    enum StateSyncStatus: Equatable {
+        case inSync
+        case pending(count: Int)
+        case unavailable
+    }
+
     private let logger = Logger.sync
     private let saveStore: PSaveStore
     private let listStatesUseCase: PListServerStatesUseCase
@@ -103,7 +116,16 @@ final class StateSyncCoordinator {
         return bySlot
     }
 
-    private func syncSlot(romId: Int, slot: Int, server: StateSchema?, mode: Mode, emulator: String?) async -> SlotOutcome {
+    /// What a slot's decision needs: built once and shared by the acting path
+    /// (`syncSlot`) and the read-only peek (`peekSlot`), so the two can never
+    /// read local/baseline/server state differently.
+    private struct SlotInputs {
+        let local: StateSyncDecision.LocalInfo?
+        let baseline: StateSyncBaseline?
+        let serverInfo: StateSyncDecision.ServerInfo?
+    }
+
+    private func slotInputs(romId: Int, slot: Int, server: StateSchema?) -> SlotInputs {
         let localData = try? saveStore.readState(romId: romId, slot: slot)
         let local: StateSyncDecision.LocalInfo? = localData.flatMap { data in
             saveStore.stateModifiedAt(romId: romId, slot: slot).map {
@@ -114,8 +136,13 @@ final class StateSyncCoordinator {
         let serverInfo = server.map {
             StateSyncDecision.ServerInfo(id: $0.id, updatedAt: $0.updatedAt, fileName: $0.fileName)
         }
+        return SlotInputs(local: local, baseline: baseline ?? nil, serverInfo: serverInfo)
+    }
 
-        switch StateSyncDecision.decideFirstStep(local: local, server: serverInfo, baseline: baseline ?? nil) {
+    private func syncSlot(romId: Int, slot: Int, server: StateSchema?, mode: Mode, emulator: String?) async -> SlotOutcome {
+        let inputs = slotInputs(romId: romId, slot: slot, server: server)
+
+        switch StateSyncDecision.decideFirstStep(local: inputs.local, server: inputs.serverInfo, baseline: inputs.baseline) {
         case .nothing:
             return .skipped
         case .upload:
@@ -125,11 +152,59 @@ final class StateSyncCoordinator {
             guard mode != .pushOnly, let server else { return .skipped }
             return await download(romId: romId, slot: slot, server: server)
         case .needsServerContent:
-            guard let server, let local else { return .skipped }
+            guard let server, let local = inputs.local else { return .skipped }
             return await resolveWithServerContent(
                 romId: romId, slot: slot, local: local, server: server,
-                baseline: baseline ?? nil, mode: mode, emulator: emulator
+                baseline: inputs.baseline, mode: mode, emulator: emulator
             )
+        }
+    }
+
+    /// Read-only summary of where this ROM's states stand against the server:
+    /// same first-step decision logic as `syncSlot`, but never uploads,
+    /// downloads, writes a baseline, or fetches a state's content to compare
+    /// it (states can run several MB each, and a sheet opening is not worth
+    /// that cost for up to 20 slots). A listing failure always reads as
+    /// unavailable, even with no local state, since "in sync" would be a
+    /// guess this device cannot back up while offline.
+    func statusSummary(romId: Int) async -> StateSyncStatus {
+        let localEntries = (try? saveStore.listStates(romId: romId)) ?? []
+        let localSlots = Set(localEntries.map(\.slot))
+
+        let serverStates: [StateSchema]
+        do {
+            serverStates = try await listStatesUseCase.execute(romId: romId)
+        } catch {
+            return .unavailable
+        }
+
+        let serverBySlot = Self.assignSlots(serverStates, warnOnOverflow: logger)
+        let slots = localSlots.union(serverBySlot.keys)
+
+        var pending = 0
+        for slot in slots {
+            if peekSlot(romId: romId, slot: slot, server: serverBySlot[slot]) != .nothing {
+                pending += 1
+            }
+        }
+
+        return pending == 0 ? .inSync : .pending(count: pending)
+    }
+
+    private enum SlotPeek: Equatable {
+        case nothing, upload, download
+        /// First step alone cannot tell upload from download here: resolving
+        /// that needs the server's content, which a peek never fetches.
+        case needsComparison
+    }
+
+    private func peekSlot(romId: Int, slot: Int, server: StateSchema?) -> SlotPeek {
+        let inputs = slotInputs(romId: romId, slot: slot, server: server)
+        switch StateSyncDecision.decideFirstStep(local: inputs.local, server: inputs.serverInfo, baseline: inputs.baseline) {
+        case .nothing: return .nothing
+        case .upload: return .upload
+        case .download: return .download
+        case .needsServerContent: return .needsComparison
         }
     }
 

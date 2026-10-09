@@ -617,6 +617,18 @@ class DefaultDependencyFactory: PDependencyFactory {
         )
     }
 
+    /// Same construction `SaveSyncRunner` builds internally for its own
+    /// acting path, for the read-only status peek `SyncSaveViewModel` needs.
+    private func makeStateSyncCoordinator() -> StateSyncCoordinator {
+        StateSyncCoordinator(
+            saveStore: saveStore,
+            listStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase()
+        )
+    }
+
     func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase {
         RecordSaveSyncRunUseCase(store: saveSyncOutcomeStore)
     }
@@ -686,15 +698,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {
         SyncSaveViewModel(
             rom: rom,
+            previewUseCase: makeSyncPreviewUseCase(),
+            syncRunner: makeSaveSyncRunner(),
+            stateSyncCoordinator: makeStateSyncCoordinator(),
             listSavesUseCase: makeListServerSavesUseCase(),
-            listStatesUseCase: makeListServerStatesUseCase(),
             downloadSaveUseCase: makeDownloadSaveUseCase(),
-            downloadStateUseCase: makeDownloadStateUseCase(),
-            uploadSaveUseCase: makeUploadSaveUseCase(),
-            updateSaveUseCase: makeUpdateSaveUseCase(),
-            uploadStateUseCase: makeUploadStateUseCase(),
-            updateStateUseCase: makeUpdateStateUseCase(),
-            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
             saveStore: saveStore,
             syncDevice: syncDeviceRepository,
             recordSyncUseCase: makeRecordSyncUseCase(),
