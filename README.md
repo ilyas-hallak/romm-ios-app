@@ -18,7 +18,7 @@ Browse your [RomM](https://github.com/rommapp/romm) collection, play it on iPhon
 [![RetroAchievements](https://img.shields.io/badge/RetroAchievements-supported-F4A100)](https://retroachievements.org)
 [![MIT License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Discord](https://img.shields.io/discord/1138838206532554853?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/wCNJVP86VX)
-[![GitHub stars](https://img.shields.io/github/stars/ilyas-hallak/romm-ios-app?logo=github&color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/ilyas-hallak/romm-ios-app?style=flat&logo=github&color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/ilyas-hallak/romm-ios-app?color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/commits/main)
 
 <br />
