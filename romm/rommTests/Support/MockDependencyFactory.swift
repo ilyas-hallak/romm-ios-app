@@ -510,9 +510,9 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var savesRepository: PSavesRepository = SavesRepository(apiClient: apiClient)
     lazy var statesRepository: PStatesRepository = StatesRepository(apiClient: apiClient)
 
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService {
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService {
         CloudSaveSyncService(
-            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName),
+            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName, platformSlug: platformSlug),
             saveStore: saveStore,
             listSavesUseCase: ListServerSavesUseCase(repository: savesRepository),
             uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
@@ -610,7 +610,8 @@ class MockDependencyFactory: PDependencyFactory {
             downloadStateUseCase: makeDownloadStateUseCase(),
             completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
             externalSaveFolderStore: externalSaveFolderStore,
-            recordRunUseCase: makeRecordSaveSyncRunUseCase()
+            recordRunUseCase: makeRecordSaveSyncRunUseCase(),
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
         )
     }
 }

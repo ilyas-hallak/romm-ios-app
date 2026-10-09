@@ -52,6 +52,9 @@ private final class FakeNegotiateClient: StubRommAPIClient, @unchecked Sendable 
         if let slot = op.slot { json["slot"] = slot }
         if let reason = op.reason { json["reason"] = reason }
         if let serverContentHash = op.serverContentHash { json["server_content_hash"] = serverContentHash }
+        if let serverUpdatedAt = op.serverUpdatedAt {
+            json["server_updated_at"] = ISO8601DateFormatter().string(from: serverUpdatedAt)
+        }
         return json
     }
 }
@@ -151,7 +154,8 @@ struct SyncPreviewUseCaseTests {
         slot: String? = SaveSlot.battery,
         reason: String? = nil,
         saveId: Int? = nil,
-        serverContentHash: String? = nil
+        serverContentHash: String? = nil,
+        serverUpdatedAt: Date? = nil
     ) -> SyncOperationSchema {
         var json: [String: Any] = ["action": action.rawValue]
         if let romId { json["rom_id"] = romId }
@@ -160,6 +164,7 @@ struct SyncPreviewUseCaseTests {
         if let reason { json["reason"] = reason }
         if let saveId { json["save_id"] = saveId }
         if let serverContentHash { json["server_content_hash"] = serverContentHash }
+        if let serverUpdatedAt { json["server_updated_at"] = ISO8601DateFormatter().string(from: serverUpdatedAt) }
         let data = try! JSONSerialization.data(withJSONObject: json)
         return try! JSONDecoder().decode(SyncOperationSchema.self, from: data)
     }
@@ -248,10 +253,13 @@ struct SyncPreviewUseCaseTests {
     }
 
     /// The server plans per (rom_id, slot), so a ROM with rows under other
-    /// slots (another client's autosave or default save) still comes back
-    /// with an operation for each of them, even though this device only ever
-    /// reports its battery slot. Those are not battery saves.
-    @Test func dropsOperationsForAForeignSlot() async throws {
+    /// slots (another client's autosave save, or one a web upload landed
+    /// under) still comes back with an operation for each of them. A
+    /// download is accepted from any such slot (issue #208): the one row a
+    /// web-uploaded save shows up under is exactly how it ever gets synced.
+    /// Only a null slot is dropped, since that is archival (pre-slot rows, or
+    /// rows negotiate already excludes from pairing).
+    @Test func acceptsDownloadsFromAnyNonNullSlotButDropsTheNullSlot() async throws {
         let client = FakeNegotiateClient()
         client.operations = [
             operation(.download, romId: 1, slot: "autosave"),
@@ -262,7 +270,92 @@ struct SyncPreviewUseCaseTests {
 
         let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
 
-        #expect(preview.downloads.map(\.romId).sorted() == [3, 4])
+        #expect(preview.downloads.map(\.romId).sorted() == [1, 2, 3])
+    }
+
+    /// When a ROM has more than one download candidate across slots (e.g. a
+    /// web-uploaded autosave and this device's own battery row both planned),
+    /// only the newest is ever shown, never both.
+    @Test func picksOnlyTheNewestDownloadCandidateWhenARomHasSeveral() async throws {
+        let client = FakeNegotiateClient()
+        client.operations = [
+            operation(.download, romId: 1, fileName: "autosave.sav", slot: "autosave", saveId: 50),
+            operation(.download, romId: 1, fileName: "battery.sav", slot: SaveSlot.battery, saveId: 60)
+        ]
+
+        let preview = try await makeUseCase(store: makeStore(), client: client).execute(romIds: nil)
+
+        #expect(preview.downloads.count == 1)
+    }
+
+    /// Negotiate keeps reporting a foreign-slot row as a download until that
+    /// exact row is confirmed, including one older than the local battery that
+    /// nothing would ever apply. Showing it anyway made such a game look
+    /// permanently "pending download" (issue #208 follow-up).
+    @Test func dropsAnOlderForeignSlotDownloadNextToANewerLocalBattery() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data([0xAA, 0xBB]))
+        try store.setBatteryModifiedAt(romId: 1, date: Date())
+        let client = FakeNegotiateClient()
+        client.operations = [
+            operation(.download, romId: 1, slot: "autosave", serverUpdatedAt: Date().addingTimeInterval(-3_600))
+        ]
+
+        let preview = try await makeUseCase(store: store, client: client).execute(romIds: nil)
+
+        #expect(preview.downloads.isEmpty)
+    }
+
+    /// A foreign-slot row byte-identical to the local battery is never worth
+    /// downloading, whatever its timestamp says.
+    @Test func dropsAForeignSlotDownloadWithTheSameContentAsTheLocalBattery() async throws {
+        let store = makeStore()
+        let data = Data([0x11, 0x22, 0x33])
+        try store.writeBattery(romId: 1, data: data)
+        try store.setBatteryModifiedAt(romId: 1, date: Date().addingTimeInterval(-3_600))
+        let client = FakeNegotiateClient()
+        client.operations = [
+            operation(
+                .download, romId: 1, slot: "autosave",
+                serverContentHash: SaveContentHash.of(data), serverUpdatedAt: Date()
+            )
+        ]
+
+        let preview = try await makeUseCase(store: store, client: client).execute(romIds: nil)
+
+        #expect(preview.downloads.isEmpty)
+    }
+
+    /// A blank local battery (or none at all) never blocks a download,
+    /// regardless of how the timestamps compare.
+    @Test func keepsTheDownloadWhenTheLocalBatteryIsBlank() async throws {
+        let store = makeStore()
+        try store.writeBattery(romId: 1, data: Data(repeating: 0xFF, count: 8))
+        try store.setBatteryModifiedAt(romId: 1, date: Date())
+        let client = FakeNegotiateClient()
+        client.operations = [
+            operation(.download, romId: 1, slot: "autosave", serverUpdatedAt: Date().addingTimeInterval(-3_600))
+        ]
+
+        let preview = try await makeUseCase(store: store, client: client).execute(romIds: nil)
+
+        #expect(preview.downloads.map(\.romId) == [1])
+    }
+
+    /// A qualifying download makes a same-ROM upload moot: the pre-launch pull
+    /// would apply the download next, undoing any push done in the meantime.
+    @Test func keepsOnlyTheDownloadWhenARomHasBothAQualifyingDownloadAndAnUpload() async throws {
+        let store = makeStore()
+        let client = FakeNegotiateClient()
+        client.operations = [
+            operation(.download, romId: 1, slot: "autosave", saveId: 50),
+            operation(.upload, romId: 1, slot: SaveSlot.battery)
+        ]
+
+        let preview = try await makeUseCase(store: store, client: client).execute(romIds: nil)
+
+        #expect(preview.downloads.map(\.romId) == [1])
+        #expect(preview.uploads.isEmpty)
     }
 
     /// A newer server can plan something this build has no name for. Showing it

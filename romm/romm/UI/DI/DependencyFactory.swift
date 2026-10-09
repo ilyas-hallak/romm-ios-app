@@ -135,7 +135,7 @@ protocol PDependencyFactory {
     var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
     #if !APP_STORE
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService
     #endif
     @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner
     #if !APP_STORE
@@ -581,9 +581,9 @@ class DefaultDependencyFactory: PDependencyFactory {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
 
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService {
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService {
         CloudSaveSyncService(
-            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName),
+            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName, platformSlug: platformSlug),
             saveStore: saveStore,
             listSavesUseCase: ListServerSavesUseCase(repository: savesRepository),
             uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
@@ -613,7 +613,8 @@ class DefaultDependencyFactory: PDependencyFactory {
             downloadStateUseCase: makeDownloadStateUseCase(),
             completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
             externalSaveFolderStore: externalSaveFolderStore,
-            recordRunUseCase: makeRecordSaveSyncRunUseCase()
+            recordRunUseCase: makeRecordSaveSyncRunUseCase(),
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
         )
     }
 
