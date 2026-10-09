@@ -10,7 +10,11 @@ final class FakeSaveStore: PSaveStore, @unchecked Sendable {
     var batteryModifiedAtByRomId: [Int: Date] = [:]
 
     func listRomIds() throws -> [Int] { romIds }
-    func deleteSaves(romId: Int) throws { romIds.removeAll { $0 == romId } }
+    func deleteSaves(romId: Int) throws {
+        romIds.removeAll { $0 == romId }
+        batteryData[romId] = nil
+        batteryModifiedAtByRomId[romId] = nil
+    }
     func readBattery(romId: Int) throws -> Data? { batteryData[romId] }
     func writeBattery(romId: Int, data: Data) throws { batteryData[romId] = data }
     func batteryModifiedAt(romId: Int) -> Date? { batteryModifiedAtByRomId[romId] }

@@ -188,6 +188,12 @@ final class DownloadQueueManager {
         reconcile()
     }
 
+    /// Stops every download that has not settled yet, each as its Cancel button would.
+    func cancelAll() {
+        let ids = Set(pendingTasks.map(\.id) + coordinator.jobs.map(\.romId) + startTasks.keys)
+        ids.forEach(cancel(id:))
+    }
+
     /// Removes a queued, finished, failed or cancelled row. A queued one is
     /// stopped on the way out, to the same end as its Cancel button. A download
     /// that is transferring or filing its files away is left alone and goes

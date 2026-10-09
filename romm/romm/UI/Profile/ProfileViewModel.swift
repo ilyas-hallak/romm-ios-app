@@ -19,6 +19,7 @@ class ProfileViewModel {
     private let getGroupRomsUseCase: PGetGroupRomsUseCase
     private let saveGroupRomsUseCase: PSaveGroupRomsUseCase
     private let getServerConnectionUseCase: PGetServerConnectionUseCase
+    private let downloadQueue: DownloadQueueManager
 
     private(set) var serverConnection: ServerConnection?
 
@@ -33,7 +34,11 @@ class ProfileViewModel {
         }
     }
 
-    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+    init(
+        factory: PDependencyFactory = DefaultDependencyFactory.shared,
+        downloadQueue: DownloadQueueManager = .shared
+    ) {
+        self.downloadQueue = downloadQueue
         self.getLocalDataSummaryUseCase = factory.makeGetLocalDataSummaryUseCase()
         self.deleteLocalGameDataUseCase = factory.makeDeleteLocalGameDataUseCase()
         self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
@@ -64,6 +69,8 @@ class ProfileViewModel {
     func logout(deletingDownloads: Bool) async {
         logger.info("Logging out (deleting downloads: \(deletingDownloads))...")
         if deletingDownloads {
+            // A download still running would put its ROM back after the delete.
+            downloadQueue.cancelAll()
             let useCase = deleteLocalGameDataUseCase
             do {
                 try await Task.detached(priority: .userInitiated) { try useCase.execute() }.value
