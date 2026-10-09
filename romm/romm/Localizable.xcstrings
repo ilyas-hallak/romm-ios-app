@@ -73,6 +73,9 @@
     "Local %@" : {
       "extractionState" : "manual"
     },
+    "Logged Out" : {
+      "extractionState" : "manual"
+    },
     "Missing locally · File unavailable on the server." : {
       "extractionState" : "manual"
     },
@@ -119,6 +122,9 @@
       "extractionState" : "manual"
     },
     "Search platforms" : {
+      "extractionState" : "manual"
+    },
+    "Some downloads or saves could not be deleted." : {
       "extractionState" : "manual"
     },
     "Sync game saves and save states with the RomM server" : {

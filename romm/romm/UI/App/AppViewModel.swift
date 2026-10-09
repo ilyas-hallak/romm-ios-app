@@ -36,6 +36,9 @@ class AppViewModel {
     /// Non-nil while a server-version change alert should be shown to the user.
     var serverVersionAlert: ServerVersionAlert?
 
+    /// Shown once on the setup screen after a sign out that left something behind.
+    var setupNotice: String?
+
     /// Single-flight guard: opening a game fires several requests at once, so an
     /// expired/revoked token produces a burst of parallel 401s. Without this,
     /// each one would re-run the logout, causing the reported sign-in loop (#59).
@@ -86,9 +89,10 @@ class AppViewModel {
             forName: .restartSetupRequested,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let notice = notification.userInfo?[RestartSetupNotice.userInfoKey] as? String
             Task { @MainActor in
-                self?.handleRestartSetupRequest()
+                self?.handleRestartSetupRequest(notice: notice)
             }
         }
 
@@ -236,11 +240,12 @@ class AppViewModel {
 
     // MARK: - Private Methods
 
-    private func handleRestartSetupRequest() {
+    private func handleRestartSetupRequest(notice: String?) {
         logger.info("Handling restart setup request from notification")
         resetAuthenticationState()
         clearServerVersionUseCase.execute()
         appData.updateConfiguration(nil)
+        setupNotice = notice
         appState = .setup
     }
 

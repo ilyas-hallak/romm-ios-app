@@ -26,6 +26,17 @@ struct AppView: View {
                 
             case .setup:
                 SetupView(appViewModel: appViewModel)
+                    .alert(
+                        "Logged Out",
+                        isPresented: Binding(
+                            get: { appViewModel.setupNotice != nil },
+                            set: { if !$0 { appViewModel.setupNotice = nil } }
+                        )
+                    ) {
+                        Button("OK", role: .cancel) { }
+                    } message: {
+                        Text(appViewModel.setupNotice ?? "")
+                    }
                 
             case .authenticated:
                 MainTabView()

@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+/// What logging out needs from the download queue.
+protocol PDownloadCancelling {
+    func cancelAll()
+}
+
 /// The app-wide download queue as the screens see it: a flat list of ROMs with
 /// a status each.
 ///
@@ -15,7 +20,7 @@ import Observation
 /// derived from the coordinator.
 @Observable
 @MainActor
-final class DownloadQueueManager {
+final class DownloadQueueManager: PDownloadCancelling {
     static let shared = DownloadQueueManager(apiClient: DefaultDependencyFactory.shared.apiClient)
 
     /// Rows for ROMs whose file list is still being fetched. They have no job

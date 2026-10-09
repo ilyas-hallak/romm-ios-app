@@ -19,7 +19,8 @@ class ProfileViewModel {
     private let getGroupRomsUseCase: PGetGroupRomsUseCase
     private let saveGroupRomsUseCase: PSaveGroupRomsUseCase
     private let getServerConnectionUseCase: PGetServerConnectionUseCase
-    private let downloadQueue: DownloadQueueManager
+    private let downloads: PDownloadCancelling
+    private let notificationCenter: NotificationCenter
 
     private(set) var serverConnection: ServerConnection?
 
@@ -36,9 +37,11 @@ class ProfileViewModel {
 
     init(
         factory: PDependencyFactory = DefaultDependencyFactory.shared,
-        downloadQueue: DownloadQueueManager = .shared
+        downloads: PDownloadCancelling = DownloadQueueManager.shared,
+        notificationCenter: NotificationCenter = .default
     ) {
-        self.downloadQueue = downloadQueue
+        self.downloads = downloads
+        self.notificationCenter = notificationCenter
         self.getLocalDataSummaryUseCase = factory.makeGetLocalDataSummaryUseCase()
         self.deleteLocalGameDataUseCase = factory.makeDeleteLocalGameDataUseCase()
         self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
@@ -66,19 +69,22 @@ class ProfileViewModel {
 
     /// There is no server session to end: every request carries its own
     /// credentials, so logging out means forgetting them on this device.
+    /// Running downloads stop either way, or they would finish after the
+    /// account is gone.
     func logout(deletingDownloads: Bool) async {
         logger.info("Logging out (deleting downloads: \(deletingDownloads))...")
+        downloads.cancelAll()
+        var notice: String?
         if deletingDownloads {
-            // A download still running would put its ROM back after the delete.
-            downloadQueue.cancelAll()
             let useCase = deleteLocalGameDataUseCase
             do {
                 try await Task.detached(priority: .userInitiated) { try useCase.execute() }.value
             } catch {
                 logger.error("Deleting downloads on logout failed: \(error)")
+                notice = String(localized: "Some downloads or saves could not be deleted.")
             }
         }
-        restartSetup()
+        restartSetup(notice: notice)
     }
 
     var logoutMessage: String { Self.logoutMessage(for: logoutSummary) }
@@ -106,7 +112,8 @@ class ProfileViewModel {
             : "\n\n\(notSynced) They stay on this device."
     }
 
-    func restartSetup() {
+    /// `notice` is shown once the setup screen is back.
+    func restartSetup(notice: String? = nil) {
         logger.info("Restarting setup...")
 
         do {
@@ -114,7 +121,11 @@ class ProfileViewModel {
             logger.info("Setup restart complete")
 
             // Notify AppViewModel to transition to setup state
-            NotificationCenter.default.post(name: .restartSetupRequested, object: nil)
+            notificationCenter.post(
+                name: .restartSetupRequested,
+                object: nil,
+                userInfo: notice.map { [RestartSetupNotice.userInfoKey: $0] }
+            )
         } catch {
             logger.error("Failed to restart setup: \(error)")
         }
@@ -125,4 +136,8 @@ class ProfileViewModel {
 extension NSNotification.Name {
     static let restartSetupRequested = NSNotification.Name("RestartSetupRequested")
     static let sessionExpired = NSNotification.Name("SessionExpired")
+}
+
+enum RestartSetupNotice {
+    static let userInfoKey = "notice"
 }

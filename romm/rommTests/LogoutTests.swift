@@ -158,6 +158,120 @@ struct LogoutMessageTests {
     }
 }
 
+@MainActor
+struct ProfileViewModelLogoutTests {
+    private let factory = LogoutFactory()
+    private let downloads = DownloadsSpy()
+    private let center = NotificationCenter()
+
+    private func makeViewModel() -> ProfileViewModel {
+        ProfileViewModel(factory: factory, downloads: downloads, notificationCenter: center)
+    }
+
+    private struct RestartRequest {
+        let notice: String?
+    }
+
+    /// Logs out and returns the restart request it posted, if any.
+    private func logout(deletingDownloads: Bool) async -> RestartRequest? {
+        var request: RestartRequest?
+        let token = center.addObserver(forName: .restartSetupRequested, object: nil, queue: nil) {
+            request = RestartRequest(notice: $0.userInfo?[RestartSetupNotice.userInfoKey] as? String)
+        }
+        defer { center.removeObserver(token) }
+        await makeViewModel().logout(deletingDownloads: deletingDownloads)
+        return request
+    }
+
+    @Test(arguments: [false, true])
+    func stopsRunningDownloadsEitherWay(deletingDownloads: Bool) async {
+        _ = await logout(deletingDownloads: deletingDownloads)
+
+        #expect(downloads.cancelAllCalls == 1)
+    }
+
+    @Test func keepingDownloadsDeletesNothing() async {
+        let request = await logout(deletingDownloads: false)
+
+        #expect(factory.delete.calls == 0)
+        #expect(factory.clearSetup.calls == 1)
+        #expect(request != nil)
+    }
+
+    @Test func aCleanDeleteSignsOutWithoutANotice() async {
+        let request = await logout(deletingDownloads: true)
+
+        #expect(factory.delete.calls == 1)
+        #expect(factory.clearSetup.calls == 1)
+        #expect(request != nil)
+        #expect(request?.notice == nil)
+    }
+
+    @Test func aFailedDeleteStillSignsOutAndLeavesANotice() async {
+        factory.delete.error = DeleteFailed()
+
+        let request = await logout(deletingDownloads: true)
+
+        #expect(factory.clearSetup.calls == 1)
+        #expect(request?.notice == "Some downloads or saves could not be deleted.")
+    }
+
+    @Test func anUnreadableSummaryStillAsksHowToLogOut() async {
+        factory.summary.error = DeleteFailed()
+        let viewModel = makeViewModel()
+
+        await viewModel.prepareLogout()
+
+        #expect(viewModel.logoutSummary == nil)
+        #expect(viewModel.isLogoutConfirmationPresented)
+        #expect(viewModel.logoutMessage == "You will be signed out and returned to the setup screen.")
+    }
+}
+
+/// Swaps out everything logging out touches, so no test reaches the real
+/// setup configuration, save store or download queue.
+private final class LogoutFactory: MockDependencyFactory {
+    let summary = SummaryStub()
+    let delete = DeleteSpy()
+    let clearSetup = ClearSetupSpy()
+
+    override func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase { summary }
+    override func makeDeleteLocalGameDataUseCase() -> PDeleteLocalGameDataUseCase { delete }
+    override func makeClearSetupConfigurationUseCase() -> PClearSetupConfigurationUseCase { clearSetup }
+    override func makeGetServerConnectionUseCase() -> PGetServerConnectionUseCase { NoServerConnection() }
+}
+
+private final class SummaryStub: PGetLocalDataSummaryUseCase, @unchecked Sendable {
+    var error: Error?
+    func execute() throws -> LocalDataSummary {
+        if let error { throw error }
+        return LocalDataSummary(downloadedROMCount: 0, downloadedBytes: 0, gamesWithUnsyncedSaves: 0)
+    }
+}
+
+private final class DeleteSpy: PDeleteLocalGameDataUseCase, @unchecked Sendable {
+    var error: Error?
+    private(set) var calls = 0
+    func execute() throws {
+        calls += 1
+        if let error { throw error }
+    }
+}
+
+private final class ClearSetupSpy: PClearSetupConfigurationUseCase {
+    private(set) var calls = 0
+    func execute() throws { calls += 1 }
+}
+
+private struct NoServerConnection: PGetServerConnectionUseCase {
+    func execute() -> ServerConnection? { nil }
+}
+
+private final class DownloadsSpy: PDownloadCancelling {
+    private(set) var cancelAllCalls = 0
+    func cancelAll() { cancelAllCalls += 1 }
+}
+
 private func rom(_ id: Int, bytes: Int64 = 0) -> DownloadedROM {
     DownloadedROM(
         id: id,
