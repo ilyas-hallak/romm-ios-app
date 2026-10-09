@@ -13,18 +13,13 @@ Browse your [RomM](https://github.com/rommapp/romm) collection, play it on iPhon
 
 [![Platform](https://img.shields.io/badge/iPhone%20%7C%20iPad-iOS%2018.6%2B-000000?logo=apple&logoColor=white)](#getting-started)
 [![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](#getting-started)
-[![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white)](#getting-started)
 [![RomM 5.x](https://img.shields.io/badge/RomM-5.x-5A3E99)](https://github.com/rommapp/romm)
 [![16 systems](https://img.shields.io/badge/Systems-16-E5A88F)](#supported-systems)
 [![RetroAchievements](https://img.shields.io/badge/RetroAchievements-supported-F4A100)](https://retroachievements.org)
 [![MIT License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Discord](https://img.shields.io/discord/1138838206532554853?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/wCNJVP86VX)
-
 [![GitHub stars](https://img.shields.io/github/stars/ilyas-hallak/romm-ios-app?logo=github&color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/ilyas-hallak/romm-ios-app?color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/commits/main)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/ilyas-hallak/romm-ios-app?color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/pulse)
-[![Open issues](https://img.shields.io/github/issues/ilyas-hallak/romm-ios-app?color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/issues)
-[![Contributors](https://img.shields.io/github/contributors/ilyas-hallak/romm-ios-app?color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/graphs/contributors)
 
 <br />
 
