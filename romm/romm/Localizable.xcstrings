@@ -4,6 +4,9 @@
     "© Riley Testut. Licensed under the AGPL-3.0 license." : {
       "extractionState" : "manual"
     },
+    "Add ROM" : {
+      "extractionState" : "manual"
+    },
     "Authentication and login" : {
       "extractionState" : "manual"
     },
@@ -128,6 +131,12 @@
       "extractionState" : "manual"
     },
     "The server does not have %@." : {
+      "extractionState" : "manual"
+    },
+    "No Uploads" : {
+      "extractionState" : "manual"
+    },
+    "Uploads" : {
       "extractionState" : "manual"
     },
     "User interface and view updates" : {
