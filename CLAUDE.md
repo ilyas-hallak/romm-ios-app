@@ -29,7 +29,7 @@ Rules for the text:
 ### Status gates
 
 - **Code complete** is checked by whoever opens the PR, once the code builds and the tests pass.
-- **Manually tested** is checked by Ilyas only, after he tested on a real device. Never check this box for him.
+- **Manually tested** is checked by Ilyas, or by the PO after Ilyas explicitly confirms it, either after testing or by saying it needs no test. Never check it on your own judgement.
 - **Reviewed** is checked by the review run, once its findings are resolved.
 
 When all three are checked, take the PR out of draft with `gh pr ready <number>`.
