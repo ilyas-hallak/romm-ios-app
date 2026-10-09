@@ -6,7 +6,9 @@ import SwiftUI
 struct SyncSaveSheet: View {
     @State var viewModel: SyncSaveViewModel
     let onDismiss: () -> Void
+    var factory: PDependencyFactory = DefaultDependencyFactory.shared
 
+    @State private var conflictViewModel: BatteryConflictViewModel?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -40,6 +42,9 @@ struct SyncSaveSheet: View {
             }
             .sheet(item: $viewModel.exportItem, onDismiss: { viewModel.cleanupExportTemp() }) { item in
                 ShareSheet(activityItems: [item.url])
+            }
+            .sheet(item: $conflictViewModel) { conflictViewModel in
+                BatteryConflictResolutionSheet(viewModel: conflictViewModel, romName: viewModel.rom.name)
             }
         }
         .task {
@@ -75,10 +80,20 @@ struct SyncSaveSheet: View {
         case .willDownload:
             statusRow(icon: "arrow.down.circle.fill", tint: .green, title: "Battery Save", detail: Text("Will download"))
         case .conflict:
-            statusRow(
-                icon: "exclamationmark.triangle.fill", tint: .orange, title: "Battery Save", detail: Text("Conflict"),
-                explanation: "Changed on this device and on the server since the last sync. Not synced for now."
-            )
+            VStack(alignment: .leading, spacing: 8) {
+                statusRow(
+                    icon: "exclamationmark.triangle.fill", tint: .orange, title: "Battery Save", detail: Text("Conflict"),
+                    explanation: "Changed on this device and on the server since the last sync. Not synced for now."
+                )
+                if let saveId = viewModel.conflictSaveId {
+                    Button("Resolve…") {
+                        conflictViewModel = factory.makeBatteryConflictViewModel(
+                            romId: viewModel.rom.id, saveId: saveId
+                        ) { await viewModel.load() }
+                    }
+                    .font(.callout)
+                }
+            }
         case .noSaveYet:
             statusRow(icon: "icloud.slash", tint: .secondary, title: "Battery Save", detail: Text("No save yet"))
         case nil:

@@ -62,7 +62,11 @@ struct SyncOverviewView: View {
     private func thisDeviceSection(_ preview: SyncPreview) -> some View {
         Section {
             NavigationLink {
-                SyncPlanDetailView(preview: preview, romName: viewModel.displayName(forRom:))
+                SyncPlanDetailView(
+                    preview: preview,
+                    romName: viewModel.displayName(forRom:),
+                    onResolved: { await viewModel.load() }
+                )
             } label: {
                 sourceRow(
                     icon: "iphone",

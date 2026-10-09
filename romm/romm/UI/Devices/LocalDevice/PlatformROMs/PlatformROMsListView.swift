@@ -131,7 +131,7 @@ struct PlatformROMsListView: View {
             Text("This will remove all files (\(rom.formattedSize)).")
         }
         .sheet(item: $romPendingSync) { rom in
-            SyncSaveSheet(viewModel: factory.makeSyncSaveViewModel(rom: rom)) { romPendingSync = nil }
+            SyncSaveSheet(viewModel: factory.makeSyncSaveViewModel(rom: rom), onDismiss: { romPendingSync = nil }, factory: factory)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }

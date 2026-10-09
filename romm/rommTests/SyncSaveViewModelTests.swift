@@ -112,11 +112,13 @@ struct SyncSaveViewModelTests {
         SyncPreview(deviceId: "device-1", reportedSaveCount: 1, operations: operations)
     }
 
-    private func makeOperation(romId: Int, direction: SyncPreviewOperation.Direction) -> SyncPreviewOperation {
-        SyncPreviewOperation(
+    private func makeOperation(romId: Int, direction: SyncPreviewOperation.Direction, saveId: Int? = nil) -> SyncPreviewOperation {
+        var operation = SyncPreviewOperation(
             romId: romId, direction: direction, serverFileName: "battery.sav", slot: SaveSlot.battery,
             emulator: nil, reason: nil, serverUpdatedAt: nil
         )
+        operation.saveId = saveId
+        return operation
     }
 
     private func makeCoordinator(store: PSaveStore) -> StateSyncCoordinator {
@@ -209,6 +211,32 @@ struct SyncSaveViewModelTests {
         await viewModel.load()
 
         #expect(viewModel.batteryStatus == .noSaveYet)
+    }
+
+    @Test func conflictSaveIdIsNilWhenThereIsNoConflict() async throws {
+        let rom = makeRom(id: 5)
+        let preview = makePreview(romId: 5, operations: [makeOperation(romId: 5, direction: .upload, saveId: 77)])
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(preview))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.conflictSaveId == nil)
+    }
+
+    @Test func conflictSaveIdReturnsTheConflictingOperationsSaveId() async throws {
+        let rom = makeRom(id: 6)
+        let preview = makePreview(romId: 6, operations: [makeOperation(romId: 6, direction: .conflict, saveId: 88)])
+        let previewUseCase = FakeSyncPreviewUseCase(result: .success(preview))
+        let viewModel = makeViewModel(
+            rom: rom, store: makeStore(), previewUseCase: previewUseCase, syncRunner: FakeSaveSyncRunner()
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.conflictSaveId == 88)
     }
 
     @Test func batteryStatusIsConflictEvenWhenItIsNotTheFirstOperation() async throws {

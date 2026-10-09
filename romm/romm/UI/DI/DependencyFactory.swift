@@ -177,6 +177,10 @@ protocol PDependencyFactory {
     // Local ROM ViewModels
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel
     @MainActor func makeShareROMViewModel() -> ShareROMViewModel
+
+    // Battery conflict resolution
+    @MainActor func makeBatteryConflictResolver() -> PBatteryConflictResolver
+    @MainActor func makeBatteryConflictViewModel(romId: Int, saveId: Int, onResolved: @escaping () async -> Void) -> BatteryConflictViewModel
 }
 
 class DefaultDependencyFactory: PDependencyFactory {
@@ -718,6 +722,28 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     @MainActor func makeShareROMViewModel() -> ShareROMViewModel {
         ShareROMViewModel(getShareFilesUseCase: makeGetROMShareFilesUseCase())
+    }
+
+    @MainActor func makeBatteryConflictResolver() -> PBatteryConflictResolver {
+        BatteryConflictResolver(
+            saveStore: saveStore,
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
+            syncDevice: syncDeviceRepository,
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
+        )
+    }
+
+    @MainActor func makeBatteryConflictViewModel(romId: Int, saveId: Int, onResolved: @escaping () async -> Void) -> BatteryConflictViewModel {
+        BatteryConflictViewModel(
+            romId: romId,
+            saveId: saveId,
+            saveStore: saveStore,
+            listSavesUseCase: makeListServerSavesUseCase(),
+            resolver: makeBatteryConflictResolver(),
+            onResolved: onResolved
+        )
     }
 
     #if !APP_STORE
