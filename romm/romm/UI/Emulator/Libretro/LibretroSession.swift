@@ -9,6 +9,7 @@ final class LibretroSession: NSObject {
     private let core: LibretroCore
     private let romId: Int
     private let saveStates: PEmulatorSaveStatesUseCase
+    private let findROMsByFileStem: PFindROMsByFileStemUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
     private let rumblePreference: PRumblePreference?
@@ -42,12 +43,16 @@ final class LibretroSession: NSObject {
     /// Whether a phone on the network is playing as the second player.
     private var hasRemotePad = false
     private var isStopped = false
+    /// Flushing before the stored save reached the core would treat whatever
+    /// file is lying around as this game's progress.
+    private var isBatteryStaged = false
 
     init(
         gameURL: URL,
         core: LibretroCore,
         romId: Int,
         saveStates: PEmulatorSaveStatesUseCase,
+        findROMsByFileStem: PFindROMsByFileStemUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
@@ -59,6 +64,7 @@ final class LibretroSession: NSObject {
         self.core = core
         self.romId = romId
         self.saveStates = saveStates
+        self.findROMsByFileStem = findROMsByFileStem
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
         self.rumblePreference = rumblePreference
@@ -160,21 +166,36 @@ final class LibretroSession: NSObject {
     /// save directory so the core actually loads it on `retro_load_game`.
     /// Without this step, freshly pulled cloud saves are written to
     /// `Saves/<romId>/battery.sav` but the libretro core reads
-    /// `LibretroSaves/<stem>.srm` — two different files, so the save never
-    /// reaches the running game.
+    /// `LibretroSaves/<romId>-<stem>.srm`, two different files, so the save
+    /// never reaches the running game.
     private func stageBatteryForCore() {
+        isBatteryStaged = true
+        legacySRAMFile.migrate()
         guard case .adoptedCoreFile(let data) = batteryFile.stage() else { return }
         print("[Libretro] kept the newer .srm over the stored battery (\(data.count) bytes)")
         cloudSync?.pushBattery(data: data)
     }
 
     private var batteryFile: CoreBatteryFile {
+        CoreBatteryFile(url: sramURL, romId: romId, saveStates: saveStates)
+    }
+
+    private var legacySRAMFile: LegacySRAMFile {
         let stem = gameURL.deletingPathExtension().lastPathComponent
-        return CoreBatteryFile(
-            url: libretroSaveDirectory().appendingPathComponent("\(stem).srm"),
+        return LegacySRAMFile(
+            legacyURL: libretroSaveDirectory().appendingPathComponent("\(stem).srm"),
+            url: sramURL,
             romId: romId,
-            saveStates: saveStates
+            saveStates: saveStates,
+            findROMsByFileStem: findROMsByFileStem
         )
+    }
+
+    /// All cores share one save directory, so the rom id keeps two games with
+    /// the same file name apart.
+    private var sramURL: URL {
+        let stem = gameURL.deletingPathExtension().lastPathComponent
+        return libretroSaveDirectory().appendingPathComponent("\(romId)-\(stem).srm")
     }
 
     // MARK: - HW-Render Meilenstein 1 (TEMPORAER)
@@ -261,6 +282,7 @@ final class LibretroSession: NSObject {
                 gamePath: gameURL.path,
                 systemDir: systemDir,
                 saveDir: saveDir,
+                sramURL: sramURL,
                 portDevice: portDevice
             )
 
@@ -363,7 +385,6 @@ final class LibretroSession: NSObject {
         rumbleOutput.scale = preference.intensity.scale
     }
 
-
     func stop() {
         isStopped = true
         // Detach both input sides before tearing down the frontend so their
@@ -387,7 +408,7 @@ final class LibretroSession: NSObject {
     /// - Parameter pushesUnchanged: Also push a save the store already had. Done
     ///   on quit, so a push that failed earlier, offline for example, gets retried.
     private func flushBatteryFromSaveDir(pushesUnchanged: Bool) {
-        guard let battery = batteryFile.collect(), battery.isNew || pushesUnchanged else { return }
+        guard isBatteryStaged, let battery = batteryFile.collect(), battery.isNew || pushesUnchanged else { return }
         cloudSync?.pushBattery(data: battery.data)
     }
 

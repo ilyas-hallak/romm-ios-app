@@ -22,7 +22,8 @@ struct CoreBatteryFileTests {
     }
 
     private func writeCoreFile(_ data: Data, modifiedAt date: Date) throws {
-        try FileManager.default.createDirectory(at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let directory = file.url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try data.write(to: file.url)
         try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: file.url.path)
     }
@@ -89,6 +90,31 @@ struct CoreBatteryFileTests {
 
         #expect(file.stage(adapt: { $0.prefix(1) }) == .staged)
         #expect(try store.readBattery(romId: romId) == Data([0x0A, 0x0A]))
+    }
+
+    /// An adopted save is what the core wrote, not the adapted store bytes.
+    @Test func stageAdoptsTheCoreBytesUnadapted() throws {
+        let now = Date()
+        try writeStore(Data([0x0A, 0x0A]), modifiedAt: now.addingTimeInterval(-600))
+        try writeCoreFile(Data([0x0B, 0x0B, 0x0B]), modifiedAt: now)
+
+        #expect(file.stage(adapt: { $0.prefix(1) }) == .adoptedCoreFile(Data([0x0B, 0x0B, 0x0B])))
+        #expect(try store.readBattery(romId: romId) == Data([0x0B, 0x0B, 0x0B]))
+    }
+
+    @Test func stageKeepsTheStoreInChargeWhenItHasNoTimestamp() throws {
+        let fakeStore = FakeSaveStore()
+        fakeStore.batteryData[romId] = Data([0x0A])
+        let undated = CoreBatteryFile(
+            url: file.url,
+            romId: romId,
+            saveStates: EmulatorSaveStatesUseCase(saveStore: fakeStore)
+        )
+        try writeCoreFile(Data([0x0B]), modifiedAt: Date())
+
+        #expect(undated.stage() == .staged)
+        #expect(coreFileData == Data([0x0A]))
+        #expect(fakeStore.batteryData[romId] == Data([0x0A]))
     }
 
     // MARK: - Collect
