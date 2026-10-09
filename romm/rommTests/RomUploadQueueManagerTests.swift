@@ -11,101 +11,6 @@ import Foundation
 import Testing
 @testable import romm
 
-/// Records every call it is asked to make and answers however the test wants.
-private final class FakeRomUploadRepository: PRomUploadRepository, @unchecked Sendable {
-    var availabilityResult: RomUploadAvailability = .available
-    var startError: Error?
-    var uploadChunkError: Error?
-    /// Thrown exactly once, then cleared, so a test can exercise a one-shot
-    /// failure (e.g. session expiry) without the retry it provokes failing too.
-    var uploadChunkErrorOnce: Error?
-    var completeError: Error?
-    /// Awaited before every chunk upload "succeeds", so a test can hold a
-    /// chunk open (e.g. with `Task.sleep`) to simulate an active upload and
-    /// then cancel it mid-flight.
-    var chunkGate: (@Sendable () async throws -> Void)?
-
-    private(set) var startedUploads: [(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int)] = []
-    private(set) var uploadedChunkIndexes: [Int] = []
-    private(set) var completedUploadIds: [String] = []
-    private(set) var cancelledUploadIds: [String] = []
-    /// Every progress closure handed to `uploadChunk`, so a test can invoke
-    /// one "late" after the job has already moved on.
-    private(set) var capturedProgressHandlers: [(Double) -> Void] = []
-
-    func availability() async -> RomUploadAvailability { availabilityResult }
-
-    func start(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String {
-        if let startError { throw startError }
-        startedUploads.append((platformId, fileName, fileSize, totalChunks))
-        return "upload-\(startedUploads.count)"
-    }
-
-    func uploadChunk(uploadId: String, index: Int, fileURL: URL, progress: @escaping (Double) -> Void) async throws {
-        capturedProgressHandlers.append(progress)
-        if let chunkGate {
-            try await chunkGate()
-        }
-        if let uploadChunkErrorOnce {
-            self.uploadChunkErrorOnce = nil
-            throw uploadChunkErrorOnce
-        }
-        if let uploadChunkError { throw uploadChunkError }
-        uploadedChunkIndexes.append(index)
-        progress(1)
-    }
-
-    func complete(uploadId: String) async throws {
-        if let completeError { throw completeError }
-        completedUploadIds.append(uploadId)
-    }
-
-    func cancel(uploadId: String) async throws {
-        cancelledUploadIds.append(uploadId)
-    }
-}
-
-/// Stages files to a throwaway directory on disk, since the queue manager
-/// reads the staged file's real bytes while chunking.
-private final class FakeIncomingRomFileRepository: PIncomingRomFileRepository, @unchecked Sendable {
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("rom-upload-queue-tests-\(UUID().uuidString)")
-    private(set) var removedFiles: [StagedRomFile] = []
-
-    init() {
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    }
-
-    /// Writes `contents` under a fresh job id and returns the staged file,
-    /// mirroring what `stage(url:)` would have produced.
-    func seed(fileName: String, contents: Data) -> StagedRomFile {
-        let jobId = UUID()
-        let jobDirectory = root.appendingPathComponent(jobId.uuidString)
-        try? FileManager.default.createDirectory(at: jobDirectory, withIntermediateDirectories: true)
-        let fileURL = jobDirectory.appendingPathComponent(fileName)
-        try? contents.write(to: fileURL)
-        return StagedRomFile(
-            id: jobId,
-            fileName: fileName,
-            fileSize: Int64(contents.count),
-            fileURL: fileURL,
-            relativePath: "\(jobId.uuidString)/\(fileName)"
-        )
-    }
-
-    func stage(url: URL) throws -> StagedRomFile {
-        seed(fileName: url.lastPathComponent, contents: try Data(contentsOf: url))
-    }
-
-    func removeStagedFile(_ file: StagedRomFile) {
-        removedFiles.append(file)
-        try? FileManager.default.removeItem(at: resolve(relativePath: file.relativePath).deletingLastPathComponent())
-    }
-
-    func resolve(relativePath: String) -> URL {
-        root.appendingPathComponent(relativePath)
-    }
-}
-
 /// Plain in-memory stand-in for the persisted queue file.
 private final class InMemoryRomUploadJobStore: PRomUploadJobStore, @unchecked Sendable {
     private let lock = NSLock()
@@ -145,6 +50,25 @@ private final class InMemoryRomUploadJobStore: PRomUploadJobStore, @unchecked Se
 
 private struct UploadTestError: LocalizedError {
     var errorDescription: String? { "Upload failed" }
+}
+
+/// Lets a test hold `start(...)` open until it explicitly lets it through, so
+/// `cancel(id:)` can run while the call is still in flight.
+private final class StartGate: @unchecked Sendable {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var isWaiting = false
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            isWaiting = true
+            self.continuation = continuation
+        }
+    }
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
+    }
 }
 
 @MainActor
@@ -202,7 +126,7 @@ struct RomUploadQueueManagerTests {
         #expect(fixture.repository.startedUploads.map(\.fileName) == ["Pokemon.gba"])
         #expect(fixture.repository.uploadedChunkIndexes == [0])
         #expect(fixture.repository.completedUploadIds == ["upload-1"])
-        #expect(fixture.staging.removedFiles.map(\.id) == [staged.id])
+        #expect(fixture.staging.removedRelativePaths == [staged.relativePath])
         #expect(fixture.manager.activeCount == 0)
     }
 
@@ -218,7 +142,7 @@ struct RomUploadQueueManagerTests {
         await settle { if case .failed = fixture.manager.jobs.first?.state { return true } else { return false } }
 
         #expect(fixture.manager.jobs.first?.state == .failed("Upload failed"))
-        #expect(fixture.staging.removedFiles.isEmpty)
+        #expect(fixture.staging.removedRelativePaths.isEmpty)
     }
 
     @Test func retryingAFailedJobStartsItOverAndSucceeds() async throws {
@@ -264,7 +188,7 @@ struct RomUploadQueueManagerTests {
         fixture.manager.cancel(id: staged.id)
 
         #expect(fixture.manager.jobs.first?.state == .cancelled)
-        #expect(fixture.staging.removedFiles.map(\.id) == [staged.id])
+        #expect(fixture.staging.removedRelativePaths == [staged.relativePath])
     }
 
     @Test func cancellingDuringAnActiveUploadStopsItWithoutResurrectingTheJob() async throws {
@@ -288,7 +212,27 @@ struct RomUploadQueueManagerTests {
         #expect(fixture.manager.jobs.first?.state == .cancelled)
         #expect(fixture.repository.uploadedChunkIndexes.isEmpty)
         #expect(fixture.repository.completedUploadIds.isEmpty)
-        #expect(fixture.staging.removedFiles.map(\.id) == [staged.id])
+        #expect(fixture.staging.removedRelativePaths == [staged.relativePath])
+    }
+
+    @Test func cancellingWhileStartIsInFlightCancelsTheNewUploadSession() async throws {
+        let fixture = makeFixture()
+        let gate = StartGate()
+        fixture.repository.startGate = { await gate.wait() }
+        let staged = fixture.staging.seed(fileName: "Pokemon.gba", contents: Data(repeating: 0xAB, count: 10))
+
+        fixture.manager.enqueue(file: staged, platformId: 3, platformName: "Game Boy Advance")
+
+        await settle { gate.isWaiting }
+        fixture.manager.cancel(id: staged.id)
+        // cancel(id:) marks the job cancelled synchronously, before start()
+        // has even returned, so settle on the session actually being
+        // cancelled server side rather than on job state.
+        gate.open()
+        await settle { !fixture.repository.cancelledUploadIds.isEmpty }
+
+        #expect(fixture.repository.startedUploads.count == 1)
+        #expect(fixture.repository.cancelledUploadIds == ["upload-1"])
     }
 
     @Test func aLateProgressCallbackAfterCompletionDoesNotResurrectTheJob() async throws {

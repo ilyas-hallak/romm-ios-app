@@ -166,7 +166,14 @@ final class RomUploadQueueManager {
                     fileSize: job.fileSize,
                     totalChunks: job.totalChunks
                 )
-                if isCancelled(job.id) { return markCancelledIfNeeded(job.id) }
+                if isCancelled(job.id) {
+                    // The session was created after cancel(id:) already ran,
+                    // so nothing else will ever clean it up server side.
+                    if let newUploadId = uploadId {
+                        try? await repository.cancel(uploadId: newUploadId)
+                    }
+                    return markCancelledIfNeeded(job.id)
+                }
                 update(id: job.id) { $0.uploadId = uploadId }
             }
             guard let uploadId else { throw RomUploadError.other("No upload id") }
@@ -177,7 +184,7 @@ final class RomUploadQueueManager {
             while index < job.totalChunks {
                 if isCancelled(job.id) { return markCancelledIfNeeded(job.id) }
 
-                let chunkURL = try writeChunkFile(fileURL: fileURL, index: index, fileSize: job.fileSize)
+                let chunkURL = try await Self.makeChunkFile(fileURL: fileURL, index: index, fileSize: job.fileSize)
                 defer { try? FileManager.default.removeItem(at: chunkURL) }
 
                 let chunkIndex = index
@@ -251,8 +258,10 @@ final class RomUploadQueueManager {
 
     /// Reads one chunk's byte range into its own small temp file, since
     /// `uploadTask(with:fromFile:)` needs a file URL rather than an in-memory
-    /// body for a transfer this size.
-    private func writeChunkFile(fileURL: URL, index: Int, fileSize: Int64) throws -> URL {
+    /// body for a transfer this size. `nonisolated` and `@concurrent` so this
+    /// disk I/O, run once per chunk, never blocks the main actor.
+    @concurrent
+    nonisolated private static func makeChunkFile(fileURL: URL, index: Int, fileSize: Int64) async throws -> URL {
         let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
 
@@ -268,10 +277,7 @@ final class RomUploadQueueManager {
     }
 
     private func cleanUpStagedFile(for job: RomUploadJob) {
-        let fileURL = stagingRepository.resolve(relativePath: job.stagedFilePath)
-        stagingRepository.removeStagedFile(
-            StagedRomFile(id: job.id, fileName: job.fileName, fileSize: job.fileSize, fileURL: fileURL, relativePath: job.stagedFilePath)
-        )
+        stagingRepository.removeStagedFile(relativePath: job.stagedFilePath)
     }
 
     private func update(id: UUID, _ mutate: (inout RomUploadJob) -> Void) {

@@ -19,13 +19,18 @@ struct StagedRomFile: Identifiable, Equatable {
 }
 
 protocol PIncomingRomFileRepository {
-    /// Copies `url` into `Application Support/PendingUploads/<jobId>/<fileName>`,
-    /// taking security-scoped access first if the URL needs it.
+    /// Moves `url` into `Application Support/PendingUploads/<jobId>/<fileName>`
+    /// when it sits in the app's own Inbox (the copy "Open In" already made
+    /// there), or copies it otherwise (e.g. a security-scoped URL from a file
+    /// picker, where the source is not ours to move). Security-scoped access
+    /// is taken first if the URL needs it. Throws `RomUploadError.emptyFile`
+    /// for a zero-byte file, after removing the job folder it created.
     func stage(url: URL) throws -> StagedRomFile
 
     /// Deletes the staged copy (and its job folder) for a file the user did not
-    /// upload after all.
-    func removeStagedFile(_ file: StagedRomFile)
+    /// upload after all. `relativePath` is `<jobId>/<fileName>`, as produced by
+    /// `stage(url:)`.
+    func removeStagedFile(relativePath: String)
 
     /// Resolves the absolute URL for a job's staged file from the path stored on
     /// a `RomUploadJob`, so a persisted job can be resumed after a relaunch.

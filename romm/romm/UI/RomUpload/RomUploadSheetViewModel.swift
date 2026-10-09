@@ -26,17 +26,14 @@ final class RomUploadSheetViewModel {
 
     init(
         file: StagedRomFile,
-        getPlatformsUseCase: GetPlatformsUseCase,
-        getAvailabilityUseCase: GetRomUploadAvailabilityUseCase,
-        suggestPlatformUseCase: SuggestPlatformForFileUseCase,
-        discardStagedRomUseCase: DiscardStagedRomUseCase,
+        factory: PDependencyFactory = DefaultDependencyFactory.shared,
         queueManager: RomUploadQueueManager = .shared
     ) {
         self.file = file
-        self.getPlatformsUseCase = getPlatformsUseCase
-        self.getAvailabilityUseCase = getAvailabilityUseCase
-        self.suggestPlatformUseCase = suggestPlatformUseCase
-        self.discardStagedRomUseCase = discardStagedRomUseCase
+        self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
+        self.getAvailabilityUseCase = factory.makeGetRomUploadAvailabilityUseCase()
+        self.suggestPlatformUseCase = factory.makeSuggestPlatformForFileUseCase()
+        self.discardStagedRomUseCase = factory.makeDiscardStagedRomUseCase()
         self.queueManager = queueManager
     }
 
@@ -81,19 +78,5 @@ final class RomUploadSheetViewModel {
     func discardIfNotUploaded() {
         guard !didEnqueue else { return }
         discardStagedRomUseCase.execute(file)
-    }
-}
-
-extension RomUploadSheetViewModel {
-    /// Builds a view model wired to the app's real dependencies, so call
-    /// sites (`AppView`) do not have to know what it needs.
-    static func make(file: StagedRomFile) -> RomUploadSheetViewModel {
-        RomUploadSheetViewModel(
-            file: file,
-            getPlatformsUseCase: DefaultDependencyFactory.shared.makeGetPlatformsUseCase(),
-            getAvailabilityUseCase: DefaultDependencyFactory.shared.makeGetRomUploadAvailabilityUseCase(),
-            suggestPlatformUseCase: DefaultDependencyFactory.shared.makeSuggestPlatformForFileUseCase(),
-            discardStagedRomUseCase: DefaultDependencyFactory.shared.makeDiscardStagedRomUseCase()
-        )
     }
 }

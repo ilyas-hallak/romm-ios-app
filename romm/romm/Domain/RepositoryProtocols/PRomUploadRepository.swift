@@ -24,6 +24,9 @@ enum RomUploadError: LocalizedError {
     /// or its cache was flushed. The queue manager restarts the upload once
     /// from scratch rather than surfacing this to the user.
     case sessionExpired
+    /// The file handed to the app has no content, so there is nothing to
+    /// chunk or upload.
+    case emptyFile
     case other(String)
 
     var errorDescription: String? {
@@ -32,6 +35,8 @@ enum RomUploadError: LocalizedError {
             return "A file with this name is already on the server."
         case .sessionExpired:
             return "The upload session expired before the file finished uploading."
+        case .emptyFile:
+            return "This file is empty."
         case .other(let message):
             return message
         }

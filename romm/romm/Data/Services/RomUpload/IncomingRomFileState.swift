@@ -17,5 +17,5 @@ final class IncomingRomFileState {
 
     var pendingFile: StagedRomFile?
 
-    private init() {}
+    init() {}
 }

@@ -15,6 +15,6 @@ class DiscardStagedRomUseCase {
     }
 
     func execute(_ file: StagedRomFile) {
-        repository.removeStagedFile(file)
+        repository.removeStagedFile(relativePath: file.relativePath)
     }
 }

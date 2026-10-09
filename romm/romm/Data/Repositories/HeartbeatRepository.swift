@@ -89,7 +89,7 @@ class HeartbeatRepository: PHeartbeatRepository {
         }
 
         // Check if version is below minimum
-        if compareVersions(serverVersion, minSupportedServerVersion) < 0 {
+        if ServerVersion.compare(serverVersion, minSupportedServerVersion) < 0 {
             logger.warning(
                 "Server version \(serverVersion) is below minimum \(minSupportedServerVersion)")
             throw HeartbeatError.serverVersionTooLow(
@@ -130,7 +130,7 @@ class HeartbeatRepository: PHeartbeatRepository {
             logger.info("Incompatible version login allowed - skipping maximum version check")
 
             // Only check minimum version (critical incompatibility)
-            if compareVersions(serverVersion, minSupportedServerVersion) < 0 {
+            if ServerVersion.compare(serverVersion, minSupportedServerVersion) < 0 {
                 logger.warning(
                     "Server version \(serverVersion) is below minimum \(minSupportedServerVersion)")
                 throw HeartbeatError.serverVersionTooLow(
@@ -140,7 +140,7 @@ class HeartbeatRepository: PHeartbeatRepository {
             }
         } else {
             // Standard checks for both minimum and maximum
-            if compareVersions(serverVersion, minSupportedServerVersion) < 0 {
+            if ServerVersion.compare(serverVersion, minSupportedServerVersion) < 0 {
                 logger.warning(
                     "Server version \(serverVersion) is below minimum \(minSupportedServerVersion)")
                 throw HeartbeatError.serverVersionTooLow(
@@ -201,42 +201,18 @@ class HeartbeatRepository: PHeartbeatRepository {
     // MARK: - Version Comparison
 
     func isVersionCompatible(_ version: String) -> Bool {
-        let aboveMin = compareVersions(version, minSupportedServerVersion) >= 0
+        let aboveMin = ServerVersion.compare(version, minSupportedServerVersion) >= 0
         return aboveMin && !isAboveMaxSupportedVersion(version)
     }
 
     private func isAboveMaxSupportedVersion(_ version: String) -> Bool {
-        compareVersions(majorMinor(version), majorMinor(maxSupportedServerVersion)) > 0
+        ServerVersion.compare(majorMinor(version), majorMinor(maxSupportedServerVersion)) > 0
     }
 
     private func majorMinor(_ version: String) -> String {
         if version == "development" { return version }
         let base = version.split(separator: "-").first.map(String.init) ?? version
         return base.split(separator: ".").prefix(2).joined(separator: ".")
-    }
-
-    private func compareVersions(_ version1: String, _ version2: String) -> Int {
-        // "development" builds are treated as above any release version
-        if version1 == "development" { return 1 }
-        if version2 == "development" { return -1 }
-
-        // Strip pre-release suffixes (e.g. "4.8.0-alpha.1" → "4.8.0")
-        let base1 = version1.split(separator: "-").first.map(String.init) ?? version1
-        let base2 = version2.split(separator: "-").first.map(String.init) ?? version2
-        let v1Parts = base1.split(separator: ".").compactMap { Int($0) }
-        let v2Parts = base2.split(separator: ".").compactMap { Int($0) }
-
-        let maxLength = max(v1Parts.count, v2Parts.count)
-
-        for i in 0..<maxLength {
-            let v1 = i < v1Parts.count ? v1Parts[i] : 0
-            let v2 = i < v2Parts.count ? v2Parts[i] : 0
-
-            if v1 < v2 { return -1 }
-            if v1 > v2 { return 1 }
-        }
-
-        return 0
     }
 
     // MARK: - Auth Capabilities
@@ -299,7 +275,7 @@ class HeartbeatRepository: PHeartbeatRepository {
             // Browser device-authorization flow is available from RomM 5.0.0.
             let systemVersion = response.SYSTEM.VERSION
             let baseSystemVersion = systemVersion.split(separator: "-").first.map(String.init) ?? systemVersion
-            if compareVersions(baseSystemVersion, minDeviceFlowVersion) >= 0 {
+            if ServerVersion.compare(baseSystemVersion, minDeviceFlowVersion) >= 0 {
                 hasDeviceFlow = true
                 logger.info("Device flow available (server \(systemVersion) >= \(minDeviceFlowVersion))")
             }
@@ -318,7 +294,7 @@ class HeartbeatRepository: PHeartbeatRepository {
                 // Fallback: check server version >= 4.8.0
                 let version = response.SYSTEM.VERSION
                 let baseVersion = version.split(separator: "-").first.map(String.init) ?? version
-                if compareVersions(baseVersion, minClientTokenVersion) >= 0 {
+                if ServerVersion.compare(baseVersion, minClientTokenVersion) >= 0 {
                     hasClientTokens = true
                     logger.info("Client tokens assumed available (server \(version) >= \(minClientTokenVersion))")
                 } else {

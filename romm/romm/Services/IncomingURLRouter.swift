@@ -16,17 +16,21 @@ final class IncomingURLRouter {
     static let shared = IncomingURLRouter()
 
     private let logger = Logger.auth
+    private let fileLogger = Logger.data
     private let clientTokenAuthService: ClientTokenAuthService
     private let makeStageIncomingRomUseCase: () -> StageIncomingRomUseCase
+    private let incomingFileState: IncomingRomFileState
 
     init(
         clientTokenAuthService: ClientTokenAuthService = ClientTokenAuthService(),
         makeStageIncomingRomUseCase: @escaping () -> StageIncomingRomUseCase = {
             DefaultDependencyFactory.shared.makeStageIncomingRomUseCase()
-        }
+        },
+        incomingFileState: IncomingRomFileState = .shared
     ) {
         self.clientTokenAuthService = clientTokenAuthService
         self.makeStageIncomingRomUseCase = makeStageIncomingRomUseCase
+        self.incomingFileState = incomingFileState
     }
 
     func handle(_ url: URL) {
@@ -64,16 +68,18 @@ final class IncomingURLRouter {
     /// source URL (often another app's sandbox) is not guaranteed to stay
     /// readable once this call returns.
     private func handleIncomingRomFile(_ url: URL) {
-        Logger.data.info("Received incoming ROM file: \(url.lastPathComponent)")
+        fileLogger.info("Received incoming ROM file: \(url.lastPathComponent)")
         let stage = makeStageIncomingRomUseCase()
+        let state = incomingFileState
+        let fileLogger = self.fileLogger
         Task.detached(priority: .utility) {
             do {
                 let staged = try stage.execute(url: url)
                 await MainActor.run {
-                    IncomingRomFileState.shared.pendingFile = staged
+                    state.pendingFile = staged
                 }
             } catch {
-                Logger.data.error("Could not stage incoming ROM file: \(error.localizedDescription)")
+                fileLogger.error("Could not stage incoming ROM file: \(error.localizedDescription)")
             }
         }
     }

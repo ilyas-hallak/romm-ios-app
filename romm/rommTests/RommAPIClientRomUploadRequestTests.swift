@@ -122,4 +122,73 @@ struct RommAPIClientRomUploadRequestTests {
         #expect(recorded.httpMethod == "POST")
         #expect(recorded.url.path == "/api/roms/upload/abc-123/cancel")
     }
+
+    // MARK: - validateUploadResponse
+
+    @Test func aUnauthorizedResponseThrowsAuthenticationRequired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(StubbedResponse(statusCode: 401), forHost: host)
+
+        do {
+            try await client.completeRomUpload(uploadId: "abc-123")
+            Issue.record("Expected APIClientError.authenticationRequired to be thrown")
+        } catch let error as APIClientError {
+            guard case .authenticationRequired = error else {
+                Issue.record("Expected .authenticationRequired, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test func aNotFoundResponseThrowsSessionExpired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(StubbedResponse(statusCode: 404), forHost: host)
+
+        do {
+            try await client.completeRomUpload(uploadId: "abc-123")
+            Issue.record("Expected RomUploadError.sessionExpired to be thrown")
+        } catch let error as RomUploadError {
+            guard case .sessionExpired = error else {
+                Issue.record("Expected .sessionExpired, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test func aMissingChunksResponseDoesNotMapToSessionExpired() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(
+            StubbedResponse(statusCode: 400, body: Data(#"{"detail":"Missing chunks: [2, 3]"}"#.utf8)),
+            forHost: host
+        )
+
+        do {
+            try await client.completeRomUpload(uploadId: "abc-123")
+            Issue.record("Expected an error to be thrown")
+        } catch let error as RomUploadError {
+            Issue.record("\"Missing chunks\" must not map to a RomUploadError, got \(error)")
+        } catch let error as APIClientError {
+            guard case .invalidResponse(let statusCode, _) = error else {
+                Issue.record("Expected .invalidResponse, got \(error)")
+                return
+            }
+            #expect(statusCode == 400)
+        }
+    }
+
+    @Test func aServerErrorResponseThrowsInvalidResponse() async throws {
+        let (client, host) = makeStubbedClient()
+        URLProtocolStubRegistry.shared.setResponse(StubbedResponse(statusCode: 500), forHost: host)
+
+        do {
+            try await client.completeRomUpload(uploadId: "abc-123")
+            Issue.record("Expected APIClientError.invalidResponse to be thrown")
+        } catch let error as APIClientError {
+            guard case .invalidResponse(let statusCode, _) = error else {
+                Issue.record("Expected .invalidResponse, got \(error)")
+                return
+            }
+            #expect(statusCode == 500)
+        }
+    }
 }

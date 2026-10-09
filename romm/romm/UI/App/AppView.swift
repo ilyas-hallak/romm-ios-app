@@ -89,7 +89,7 @@ struct AppView: View {
             get: { IncomingRomFileState.shared.pendingFile },
             set: { IncomingRomFileState.shared.pendingFile = $0 }
         )) { file in
-            RomUploadSheet(viewModel: .make(file: file))
+            RomUploadSheet(viewModel: RomUploadSheetViewModel(file: file))
         }
     }
 }
