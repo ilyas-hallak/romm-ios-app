@@ -18,7 +18,7 @@ Browse your [RomM](https://github.com/rommapp/romm) collection, play it on iPhon
 [![16 systems](https://img.shields.io/badge/Systems-16-E5A88F)](#supported-systems)
 [![RetroAchievements](https://img.shields.io/badge/RetroAchievements-supported-F4A100)](https://retroachievements.org)
 [![MIT License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Discord](https://img.shields.io/discord/1138838206532554853?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/romm)
+[![Discord](https://img.shields.io/discord/1138838206532554853?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/wCNJVP86VX)
 
 [![GitHub stars](https://img.shields.io/github/stars/ilyas-hallak/romm-ios-app?logo=github&color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/ilyas-hallak/romm-ios-app?color=5A3E99)](https://github.com/ilyas-hallak/romm-ios-app/commits/main)
@@ -100,7 +100,7 @@ Then open `romm/romm.xcodeproj` in Xcode and build.
 The Simulator needs nothing else.
 
 Questions, ideas or bugs?
-Drop by `#ios-app` on the [RomM Discord](https://discord.gg/romm) or open an [issue](https://github.com/ilyas-hallak/romm-ios-app/issues).
+Drop by `#ios-app` on the [RomM Discord](https://discord.gg/wCNJVP86VX) or open an [issue](https://github.com/ilyas-hallak/romm-ios-app/issues).
 
 <details>
 <summary><b>Building on a physical device</b></summary>
