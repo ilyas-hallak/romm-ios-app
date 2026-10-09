@@ -100,7 +100,7 @@ Then open `romm/romm.xcodeproj` in Xcode and build.
 The Simulator needs nothing else.
 
 Questions, ideas or bugs?
-Drop by the iOS channel on the [RomM Discord](https://discord.gg/romm) or open an [issue](https://github.com/ilyas-hallak/romm-ios-app/issues).
+Drop by `#ios-app` on the [RomM Discord](https://discord.gg/romm) or open an [issue](https://github.com/ilyas-hallak/romm-ios-app/issues).
 
 <details>
 <summary><b>Building on a physical device</b></summary>
