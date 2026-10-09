@@ -13,11 +13,21 @@ struct EmulatorMenuSheet: View {
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var isFastForwarding: Bool
     @SwiftUI.State private var showQuitConfirmation = false
+    @SwiftUI.State private var focus: EmulatorMenuFocus<MenuItem>
     @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
 
     // Slots are 0-based to match the save-state storage / cloud-sync layer
     // (files are `slot0.state`…`slot20.state`). Slot 0 is a real, usable slot.
     private let slots = Array(0...20)
+
+    /// What a controller can reach. The settings rows are left out, they are
+    /// not something to change mid-game with a pad.
+    private enum MenuItem: Hashable {
+        case quit, done
+        case slot
+        case fastForward
+        case load, save, undoSave, undoLoad
+    }
 
     init(
         session: NativeEmulatorSession?,
@@ -38,6 +48,12 @@ struct EmulatorMenuSheet: View {
             return (slot, date)
         }.max(by: { $0.date < $1.date })?.slot ?? 0
         self._selectedSlot = SwiftUI.State(initialValue: mostRecent)
+        let initial: MenuItem = session?.hasState(slot: mostRecent) == true ? .load : .save
+        self._focus = SwiftUI.State(initialValue: EmulatorMenuFocus(
+            rows: [[.quit, .done], [.slot], [.fastForward], [.load, .save, .undoSave, .undoLoad]],
+            initial: initial,
+            adjustableItems: [.slot]
+        ))
         self._isFastForwarding = SwiftUI.State(initialValue: session?.isFastForwarding ?? false)
     }
 
@@ -48,50 +64,55 @@ struct EmulatorMenuSheet: View {
                 // One scroll view for everything, like the libretro menu. The
                 // slot list used to scroll on its own inside a fixed stack, which
                 // squeezed it as soon as an optional section above appeared.
-                ScrollView {
-                    VStack(spacing: 0) {
-                        detailHeader
-                        fastForwardButton
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 10)
-                        actionButtons
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
-                        // Still gated on a real display, unlike the libretro menu
-                        // which always shows the section. Settings carries the
-                        // discoverability.
-                        if externalDisplay.isConnected {
-                            Divider().background(Color.white.opacity(0.1))
-                            ExternalDisplayControls(onRequestDismiss: onResume)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            detailHeader
+                            fastForwardButton
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 10)
+                            actionButtons
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                            // Still gated on a real display, unlike the libretro menu
+                            // which always shows the section. Settings carries the
+                            // discoverability.
+                            if externalDisplay.isConnected {
+                                Divider().background(Color.white.opacity(0.1))
+                                ExternalDisplayControls(onRequestDismiss: onResume)
+                                    .padding(16)
+                            }
+                            if EmulatorControllerState.isConnected {
+                                Divider().background(Color.white.opacity(0.1))
+                                EmulatorControllerControls(
+                                    faceButtonPreference: faceButtonPreference,
+                                    menuShortcutPreference: menuShortcutPreference,
+                                    style: .inlineRows
+                                ) {
+                                    session?.reloadFaceButtonMapping()
+                                    session?.reloadMenuShortcut()
+                                }
                                 .padding(16)
-                        }
-                        if EmulatorControllerState.isConnected {
-                            Divider().background(Color.white.opacity(0.1))
-                            EmulatorControllerControls(
-                                faceButtonPreference: faceButtonPreference,
-                                menuShortcutPreference: menuShortcutPreference,
-                                style: .inlineRows
-                            ) {
-                                session?.reloadFaceButtonMapping()
-                                session?.reloadMenuShortcut()
                             }
-                            .padding(16)
-                        }
-                        if let preference = session?.screenPositionPreference,
-                           EmulatorControllerState.isConnected {
-                            Divider().background(Color.white.opacity(0.1))
-                            EmulatorScreenControls(preference: preference) {
-                                session?.refreshScreenPlacement()
+                            if let preference = session?.screenPositionPreference,
+                               EmulatorControllerState.isConnected {
+                                Divider().background(Color.white.opacity(0.1))
+                                EmulatorScreenControls(preference: preference) {
+                                    session?.refreshScreenPlacement()
+                                }
+                                .padding(16)
                             }
-                            .padding(16)
+                            #if DEBUG
+                            Divider().background(Color.white.opacity(0.1))
+                            EmulatorControllerDebugToggle()
+                                .padding(16)
+                            #endif
+                            Divider().background(Color.white.opacity(0.1))
+                            slotList
                         }
-                        #if DEBUG
-                        Divider().background(Color.white.opacity(0.1))
-                        EmulatorControllerDebugToggle()
-                            .padding(16)
-                        #endif
-                        Divider().background(Color.white.opacity(0.1))
-                        slotList
+                    }
+                    .onChange(of: focus.focused) { _, item in
+                        withAnimation { proxy.scrollTo(item) }
                     }
                 }
             }
@@ -101,23 +122,58 @@ struct EmulatorMenuSheet: View {
             .toolbarBackground(Color.black.opacity(0.9), for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Quit", role: .destructive) {
+                    Button(role: .destructive) {
                         showQuitConfirmation = true
+                    } label: {
+                        EmulatorMenuToolbarLabel(title: "Quit", isFocused: focus.isFocused(.quit))
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done", action: onResume).bold()
+                    Button(action: onResume) {
+                        EmulatorMenuToolbarLabel(title: "Done", isFocused: focus.isFocused(.done))
+                    }
+                    .bold()
                 }
             }
-            .alert(
-                "Quit Game?",
-                isPresented: $showQuitConfirmation
-            ) {
-                Button("Cancel", role: .cancel) {}
-                Button("Quit", role: .destructive, action: onQuit)
-            } message: {
-                Text("Unsaved progress will be lost.")
-            }
+            .emulatorMenuQuitConfirmation(
+                isPresented: $showQuitConfirmation,
+                showsControllerHint: focus.isVisible,
+                onQuit: onQuit
+            )
+        }
+        .onAppear {
+            session?.onMenuCommand = { handle($0) }
+        }
+        .onDisappear {
+            session?.onMenuCommand = nil
+        }
+    }
+
+    // MARK: - Controller
+
+    private func handle(_ command: EmulatorMenuCommand) {
+        if showQuitConfirmation {
+            command.answerQuitConfirmation(quit: onQuit, cancel: { showQuitConfirmation = false })
+            return
+        }
+        switch focus.handle(command) {
+        case .activate(let item): activate(item)
+        case .adjust(_, let step): selectedSlot = min(max(selectedSlot + step, slots.first!), slots.last!)
+        case .dismiss: onResume()
+        case .none: break
+        }
+    }
+
+    private func activate(_ item: MenuItem) {
+        switch item {
+        case .quit: showQuitConfirmation = true
+        case .done: onResume()
+        case .fastForward: toggleFastForward()
+        case .load where canLoad: load()
+        case .save: save()
+        case .undoSave where canUndoSave: undoSave()
+        case .undoLoad where canUndoLoad: undoLoad()
+        default: break
         }
     }
 
@@ -128,6 +184,11 @@ struct EmulatorMenuSheet: View {
                 Text("Slot \(selectedSlot)")
                     .font(.headline)
                     .foregroundColor(.white)
+                if focus.isFocused(.slot) {
+                    Image(systemName: "chevron.left.chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                }
                 Spacer()
                 if let date = session?.stateModifiedAt(slot: selectedSlot) {
                     Text(date.formatted(date: .abbreviated, time: .shortened))
@@ -139,6 +200,14 @@ struct EmulatorMenuSheet: View {
                         .foregroundColor(.white.opacity(0.5))
                 }
             }
+            // The ring gets room around the row without moving the text out of
+            // line with the preview above it.
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .emulatorMenuFocusRing(focus.isFocused(.slot), cornerRadius: 8)
+            .padding(.horizontal, -8)
+            .padding(.vertical, -6)
+            .id(MenuItem.slot)
             if let statusMessage {
                 Text(statusMessage)
                     .font(.footnote)
@@ -235,63 +304,86 @@ struct EmulatorMenuSheet: View {
                 icon: "tray.and.arrow.up",
                 tint: .accentColor,
                 filled: true,
-                disabled: session?.hasState(slot: selectedSlot) != true
-            ) {
-                let slot = selectedSlot
-                perform(
-                    success: "Slot \(slot) loaded",
-                    action: { try await session?.loadState(slot: slot) },
-                    onSuccess: { onResume() }
-                )
-            }
+                disabled: !canLoad,
+                item: .load,
+                action: load
+            )
             stackedButton(
                 title: "Save",
                 icon: "tray.and.arrow.down",
                 tint: .accentColor,
                 filled: false,
-                disabled: false
-            ) {
-                let slot = selectedSlot
-                perform(
-                    success: "Slot \(slot) saved",
-                    action: { try await session?.saveState(slot: slot) },
-                    onSuccess: { refreshTick += 1 }
-                )
-            }
+                disabled: false,
+                item: .save,
+                action: save
+            )
             stackedButton(
                 title: "Undo Save",
                 icon: "arrow.uturn.backward",
                 tint: .orange,
                 filled: false,
-                disabled: session?.hasUndoSave(slot: selectedSlot) != true
-            ) {
-                let slot = selectedSlot
-                perform(
-                    success: "Save for slot \(slot) undone",
-                    action: { try session?.undoSave(slot: slot) },
-                    onSuccess: { refreshTick += 1 }
-                )
-            }
+                disabled: !canUndoSave,
+                item: .undoSave,
+                action: undoSave
+            )
             stackedButton(
                 title: "Undo Load",
                 icon: "arrow.uturn.backward.circle",
                 tint: .orange,
                 filled: false,
-                disabled: session?.hasUndoLoad() != true
-            ) {
-                perform(
-                    success: "Load undone",
-                    action: { try session?.undoLoad() },
-                    onSuccess: { onResume() }
-                )
-            }
+                disabled: !canUndoLoad,
+                item: .undoLoad,
+                action: undoLoad
+            )
         }
+        .id(MenuItem.load)
+    }
+
+    private var canLoad: Bool { session?.hasState(slot: selectedSlot) == true }
+    private var canUndoSave: Bool { session?.hasUndoSave(slot: selectedSlot) == true }
+    private var canUndoLoad: Bool { session?.hasUndoLoad() == true }
+
+    private func load() {
+        let slot = selectedSlot
+        perform(
+            success: "Slot \(slot) loaded",
+            action: { try await session?.loadState(slot: slot) },
+            onSuccess: { onResume() }
+        )
+    }
+
+    private func save() {
+        let slot = selectedSlot
+        perform(
+            success: "Slot \(slot) saved",
+            action: { try await session?.saveState(slot: slot) },
+            onSuccess: { refreshTick += 1 }
+        )
+    }
+
+    private func undoSave() {
+        let slot = selectedSlot
+        perform(
+            success: "Save for slot \(slot) undone",
+            action: { try session?.undoSave(slot: slot) },
+            onSuccess: { refreshTick += 1 }
+        )
+    }
+
+    private func undoLoad() {
+        perform(
+            success: "Load undone",
+            action: { try session?.undoLoad() },
+            onSuccess: { onResume() }
+        )
+    }
+
+    private func toggleFastForward() {
+        isFastForwarding = session?.toggleFastForward() ?? false
     }
 
     private var fastForwardButton: some View {
-        Button {
-            isFastForwarding = session?.toggleFastForward() ?? false
-        } label: {
+        Button(action: toggleFastForward) {
             HStack(spacing: 12) {
                 Image(systemName: "forward.fill")
                     .font(.system(size: 18, weight: .semibold))
@@ -317,8 +409,10 @@ struct EmulatorMenuSheet: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(isFastForwarding ? Color.accentColor.opacity(0.7) : Color.white.opacity(0.12), lineWidth: 1)
             )
+            .emulatorMenuFocusRing(focus.isFocused(.fastForward))
         }
         .buttonStyle(.plain)
+        .id(MenuItem.fastForward)
         .disabled(session == nil)
         .opacity(session == nil ? 0.35 : 1)
     }
@@ -330,6 +424,7 @@ struct EmulatorMenuSheet: View {
         tint: Color,
         filled: Bool,
         disabled: Bool,
+        item: MenuItem,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -354,6 +449,7 @@ struct EmulatorMenuSheet: View {
                     .stroke(filled ? Color.clear : tint.opacity(0.4), lineWidth: 1)
             )
             .opacity(disabled ? 0.35 : 1)
+            .emulatorMenuFocusRing(focus.isFocused(item))
         }
         .buttonStyle(.plain)
         .disabled(disabled)

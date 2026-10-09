@@ -3,7 +3,8 @@ import GameController
 /// Bridges one connected GCController to one libretro player.
 ///
 /// Maps buttons, D-Pad and both thumbsticks. A core that never asks for the
-/// sticks simply does not read them.
+/// sticks simply does not read them. While the in-game menu is open nothing
+/// reaches the core, and the left stick steps through the menu instead.
 ///
 /// Layout follows the SNES/libretro convention where the bottom face button
 /// is RETRO_DEVICE_ID_JOYPAD_B (index 0) and the right face button is
@@ -25,6 +26,26 @@ final class LibretroControllerInput {
     private let menuShortcutPreference: PEmulatorMenuShortcutPreference?
     private let faceButtonPreference: PGamepadFaceButtonPreference?
     var onMenuRequested: (() -> Void)?
+
+    /// Fired for every menu step while `isNavigatingMenu` is on.
+    var onMenuCommand: ((EmulatorMenuCommand) -> Void)?
+
+    /// While on, the pad steers the in-game menu and nothing reaches the core,
+    /// which would otherwise still read the buttons while paused. Turning it on
+    /// lifts whatever was held, so no button is left stuck down in the core.
+    var isNavigatingMenu = false {
+        didSet {
+            guard isNavigatingMenu != oldValue else { return }
+            stickX.reset()
+            stickY.reset()
+            if isNavigatingMenu {
+                frontend?.clearAllButtons(player: player)
+            }
+        }
+    }
+
+    private var stickX = EmulatorMenuStickAxis(negative: .left, positive: .right)
+    private var stickY = EmulatorMenuStickAxis(negative: .down, positive: .up)
 
     /// Digital buttons currently held, used to detect the menu shortcut combo.
     private var pressedButtons: Set<LibretroABI.JoypadButton> = []
@@ -115,7 +136,24 @@ final class LibretroControllerInput {
         clearHandlers(on: controller?.extendedGamepad)
         pressedButtons.removeAll()
         comboLatched = false
+        stickX.reset()
+        stickY.reset()
         frontend?.clearAllButtons(player: player)
+    }
+
+    /// The menu step behind a libretro button, or `nil` when it does nothing in
+    /// the menu. Confirm is `.b` whichever way the face buttons are swapped: the
+    /// swap exists so that `.b` always lands on the button labelled A.
+    nonisolated static func menuCommand(for button: LibretroABI.JoypadButton) -> EmulatorMenuCommand? {
+        switch button {
+        case .up: return .up
+        case .down: return .down
+        case .left: return .left
+        case .right: return .right
+        case .b: return .confirm
+        case .a, .start: return .back
+        default: return nil
+        }
     }
 
     // MARK: - Face button layout
@@ -177,15 +215,19 @@ final class LibretroControllerInput {
     private func stickHandler(for stick: LibretroABI.AnalogStick) -> GCControllerDirectionPadValueChangedHandler {
         return { [weak self] _, x, y in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                let mapped = Self.libretroStickValue(x: x, y: y)
-                self.frontend?.setStick(stick, x: mapped.x, y: mapped.y, player: self.player)
+                self?.moveStick(stick, x: x, y: y)
             }
         }
     }
 
     private func send(_ button: LibretroABI.JoypadButton, pressed: Bool) {
-        frontend?.setButton(button, pressed: pressed, player: player)
+        if isNavigatingMenu {
+            if pressed, let command = Self.menuCommand(for: button) {
+                onMenuCommand?(command)
+            }
+        } else {
+            frontend?.setButton(button, pressed: pressed, player: player)
+        }
         if pressed {
             pressedButtons.insert(button)
         } else {
@@ -194,9 +236,9 @@ final class LibretroControllerInput {
         updateMenuCombo()
     }
 
-    /// Fires `onMenuRequested` once when every button of the configured combo is
-    /// held. The buttons keep going to the core as normal, the combo is purely
-    /// additive.
+    /// Fires once when every button of the configured combo is held. Outside the
+    /// menu it opens it and the buttons keep going to the core as normal. Inside
+    /// the menu it closes it, so the same shortcut works both ways.
     private func updateMenuCombo() {
         let combo = comboButtons
         guard !combo.isEmpty else {
@@ -209,7 +251,23 @@ final class LibretroControllerInput {
         }
         guard !comboLatched else { return }
         comboLatched = true
-        onMenuRequested?()
+        if isNavigatingMenu {
+            onMenuCommand?(.back)
+        } else {
+            onMenuRequested?()
+        }
+    }
+
+    private func moveStick(_ stick: LibretroABI.AnalogStick, x: Float, y: Float) {
+        guard isNavigatingMenu else {
+            let mapped = Self.libretroStickValue(x: x, y: y)
+            frontend?.setStick(stick, x: mapped.x, y: mapped.y, player: player)
+            return
+        }
+        guard stick == .left else { return }
+        for command in [stickX.update(x), stickY.update(y)].compactMap({ $0 }) {
+            onMenuCommand?(command)
+        }
     }
 
     private static func comboButtons(for shortcut: EmulatorMenuShortcut) -> Set<LibretroABI.JoypadButton> {
