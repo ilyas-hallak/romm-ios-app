@@ -4,7 +4,6 @@ struct LocalDeviceDetailView: View {
     @State private var viewModel = LocalDeviceDetailViewModel()
     @State private var showingDeviceManagement = false
     @State private var showingDownloadQueue = false
-    @State private var isStorageExpanded = false
 
     private let downloadQueue = DownloadQueueManager.shared
 
@@ -166,78 +165,99 @@ struct LocalDeviceDetailView: View {
     }
 
     private var storageInfoCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isStorageExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Text("Storage")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("\(Int(device.storageUsagePercentage))%")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(device.hasLowStorage ? .orange : .primary)
-                            Spacer()
-                            Text("\(viewModel.totalDownloadedSizeFormatted) of \(device.totalStorageFormatted)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.gray.opacity(0.2))
-                                    .frame(height: 6)
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(device.hasLowStorage ? Color.orange : Color.blue)
-                                    .frame(
-                                        width: max(0, geometry.size.width * CGFloat(device.storageUsagePercentage / 100)),
-                                        height: 6
-                                    )
-                            }
-                        }
-                        .frame(height: 6)
-                    }
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .rotationEffect(.degrees(isStorageExpanded ? 180 : 0))
-                }
-                .contentShape(Rectangle())
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(romSummary)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(device.availableStorageFormatted) free")
+                    .font(.subheadline)
+                    .foregroundColor(device.hasLowStorage ? .orange : .secondary)
             }
-            .buttonStyle(.plain)
 
-            if isStorageExpanded {
-                Divider()
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Available")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(device.availableStorageFormatted)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(device.hasLowStorage ? .orange : .primary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("Downloaded")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("\(viewModel.totalDownloadedSizeFormatted) · \(viewModel.downloadedROMs.count) ROMs")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                }
+            StorageBar(
+                romBytes: viewModel.totalDownloadedSize,
+                availableBytes: device.availableStorageBytes,
+                totalBytes: device.totalStorageBytes
+            )
+
+            HStack(spacing: 10) {
+                legendItem("ROMs", color: SetupTheme.blobPurple)
+                legendItem("Apps & System", color: StorageBar.otherColor)
+                legendItem("Free", color: StorageBar.freeColor)
+                Spacer(minLength: 4)
+                Text("of \(device.totalStorageFormatted)")
             }
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .lineLimit(1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(Color.gray.opacity(0.1))
         .cornerRadius(10)
+    }
+
+    private func legendItem(_ title: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+            Text(title)
+        }
+    }
+
+    private var romSummary: String {
+        let count = viewModel.downloadedROMs.count
+        guard count > 0 else { return "No ROMs yet" }
+        return "\(viewModel.totalDownloadedSizeFormatted) in \(count) ROM\(count == 1 ? "" : "s")"
+    }
+}
+
+/// Device storage split into ROMs, everything else, and free space.
+private struct StorageBar: View {
+    let romBytes: Int64
+    let availableBytes: Int64
+    let totalBytes: Int64
+
+    static let otherColor = Color.gray.opacity(0.5)
+    static let freeColor = Color.gray.opacity(0.2)
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(SetupTheme.blobPurple)
+                    .frame(width: romWidth(in: geometry.size.width))
+                Rectangle()
+                    .fill(Self.otherColor)
+                    .frame(width: geometry.size.width * fraction(of: otherBytes))
+                Spacer(minLength: 0)
+            }
+            .background(Self.freeColor)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+        }
+        .frame(height: 6)
+    }
+
+    private var usedBytes: Int64 {
+        max(0, totalBytes - availableBytes)
+    }
+
+    // ROMs are part of the used space, so they are clamped to it.
+    private var otherBytes: Int64 {
+        usedBytes - min(romBytes, usedBytes)
+    }
+
+    // Keeps a small library visible on a large disk.
+    private func romWidth(in totalWidth: CGFloat) -> CGFloat {
+        guard romBytes > 0 else { return 0 }
+        return max(4, totalWidth * fraction(of: romBytes))
+    }
+
+    private func fraction(of bytes: Int64) -> CGFloat {
+        guard totalBytes > 0 else { return 0 }
+        return CGFloat(min(bytes, usedBytes)) / CGFloat(totalBytes)
     }
 }
 

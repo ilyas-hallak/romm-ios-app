@@ -12,6 +12,7 @@ final class LibretroSession: NSObject {
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
     private let rumblePreference: PRumblePreference?
+    private let analogSticksPreference: PAnalogSticksPreference?
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
 
@@ -21,6 +22,17 @@ final class LibretroSession: NSObject {
     /// core that reports it). The in-game menu only offers the intensity when
     /// this is true, a slider that does nothing would be worse than none.
     private(set) var isRumbleActive = false
+
+    /// Only PlayStation lets the player choose between the plain pad and the
+    /// one with two sticks. PSP always has its stick.
+    var offersAnalogSticks: Bool { core == .pcsxRearmed }
+    private var usesAnalogSticks: Bool {
+        Self.usesAnalogSticks(core: core, analogSticksPreference: analogSticksPreference)
+    }
+
+    private static func usesAnalogSticks(core: LibretroCore, analogSticksPreference: PAnalogSticksPreference?) -> Bool {
+        core == .pcsxRearmed && (analogSticksPreference?.isEnabled ?? false)
+    }
 
     var onMenuRequested: (() -> Void)?
     /// Menu steps from player one's pad while the menu is open. The other
@@ -56,6 +68,7 @@ final class LibretroSession: NSObject {
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         faceButtonPreference: PGamepadFaceButtonPreference? = nil,
         rumblePreference: PRumblePreference? = nil,
+        analogSticksPreference: PAnalogSticksPreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
@@ -65,10 +78,14 @@ final class LibretroSession: NSObject {
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
         self.rumblePreference = rumblePreference
+        self.analogSticksPreference = analogSticksPreference
         self.cloudSync = cloudSync
         self.externalRenderTarget = nil
         self.viewController = LibretroGameViewController(
-            core: core,
+            controllerLayout: .forCore(
+                core,
+                analogSticks: Self.usesAnalogSticks(core: core, analogSticksPreference: analogSticksPreference)
+            ),
             gameURL: gameURL,
             aspectRatioPreference: aspectRatioPreference,
             screenPositionPreference: screenPositionPreference
@@ -252,14 +269,11 @@ final class LibretroSession: NSObject {
             }
 
             // pcsx_rearmed only reports rumble on a DualShock port, and that port
-            // also changes what the core expects from us. With rumble switched
-            // off we stay on the plain pad, which is exactly the old behaviour.
-            // The preference is read once here, never per frame.
+            // also changes what the core expects from us. The preference is read
+            // once here, never per frame.
             let preference = rumblePreference
             let rumbleActive = (preference?.isEnabled ?? false) && core == .pcsxRearmed
-            let portDevice = rumbleActive
-                ? LibretroABI.DEVICE_PSE_DUALSHOCK
-                : LibretroABI.DEVICE_JOYPAD
+            let portDevice = Self.playerOneDevice(rumble: rumbleActive, analogSticks: usesAnalogSticks)
 
             try frontend.load(
                 corePath: corePath,
@@ -283,6 +297,7 @@ final class LibretroSession: NSObject {
                 print("[Libretro] rumble enabled (\(preference.intensity.rawValue))")
             }
 
+            switchPadToAnalogIfNeeded()
             frontend.startRunLoop()
         } catch let error as LibretroFrontend.FrontendError {
             print("[Libretro] start failed: \(error.diagnosticDescription)")
@@ -365,6 +380,35 @@ final class LibretroSession: NSObject {
         }
     }
 
+    /// Picks up the analog stick switch from the in-game menu, live: the touch
+    /// layout changes and the core gets the matching pad in port one.
+    func reloadAnalogSticks() {
+        guard offersAnalogSticks else { return }
+        viewController.controllerView.layout = .forCore(core, analogSticks: usesAnalogSticks)
+        let device = Self.playerOneDevice(rumble: isRumbleActive, analogSticks: usesAnalogSticks)
+        frontend.setPlayerOneDevice(device)
+        if usesAnalogSticks {
+            switchPadToAnalogIfNeeded()
+        } else if device == LibretroABI.DEVICE_PSE_DUALSHOCK {
+            // Rumble keeps the port on the DualShock even with sticks off, so the
+            // pad itself also needs to be switched back to digital.
+            frontend.requestDualShockMode(analog: false)
+        }
+    }
+
+    /// Needed after every load and pad swap: both leave the DualShock in
+    /// whatever mode the core or the save state brings, mostly digital.
+    private func switchPadToAnalogIfNeeded() {
+        guard usesAnalogSticks else { return }
+        frontend.requestDualShockMode(analog: true)
+    }
+
+    /// Sticks and rumble both only exist on the DualShock, without either the
+    /// plain pad keeps the old behaviour for every PlayStation title.
+    static func playerOneDevice(rumble: Bool, analogSticks: Bool) -> UInt32 {
+        rumble || analogSticks ? LibretroABI.DEVICE_PSE_DUALSHOCK : LibretroABI.DEVICE_JOYPAD
+    }
+
     /// Picks up an intensity changed from the in-game menu, live. Only the
     /// scale is re-read: the on/off switch decides the controller port at load
     /// time and cannot be flipped while the core is running.
@@ -442,6 +486,7 @@ final class LibretroSession: NSObject {
         guard frontend.loadStateData(data) else {
             throw LibretroFrontend.FrontendError.symbolMissing("retro_unserialize")
         }
+        switchPadToAnalogIfNeeded()
         // Discard audio queued before the jump so sound doesn't trail the picture.
         frontend.flushAudio()
     }
@@ -455,6 +500,7 @@ final class LibretroSession: NSObject {
         guard frontend.loadStateData(data) else {
             throw LibretroFrontend.FrontendError.symbolMissing("retro_unserialize")
         }
+        switchPadToAnalogIfNeeded()
         try saveStates.clearUndoLoad(romId: romId)
     }
 
@@ -506,7 +552,6 @@ final class LibretroSession: NSObject {
 }
 
 final class LibretroGameViewController: UIViewController {
-    private let core: LibretroCore
     private let gameURL: URL
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     private let screenPositionPreference: PEmulatorScreenPositionPreference
@@ -533,22 +578,14 @@ final class LibretroGameViewController: UIViewController {
     }()
 
     init(
-        core: LibretroCore,
+        controllerLayout: LibretroTouchControllerView.Layout,
         gameURL: URL,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference
     ) {
-        self.core = core
         self.gameURL = gameURL
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
-        let controllerLayout: LibretroTouchControllerView.Layout
-        switch core {
-        case .beetlePCEFast: controllerLayout = .pcEngine
-        case .genesisPlusGX: controllerLayout = .genesis
-        case .flycast: controllerLayout = .dreamcast
-        default: controllerLayout = .standard
-        }
         self.controllerView = LibretroTouchControllerView(layout: controllerLayout)
         super.init(nibName: nil, bundle: nil)
     }

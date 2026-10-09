@@ -149,6 +149,7 @@ protocol PDependencyFactory {
     var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference { get }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
+    var analogSticksPreference: PAnalogSticksPreference { get }
     var rumblePreference: PRumblePreference { get }
     var emulatorBezelPreference: PEmulatorBezelPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
@@ -472,6 +473,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = UserDefaultsEmulatorScreenPositionPreferenceStore()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
+    lazy var analogSticksPreference: PAnalogSticksPreference = UserDefaultsAnalogSticksPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
     lazy var emulatorBezelPreference: PEmulatorBezelPreference = UserDefaultsEmulatorBezelPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()

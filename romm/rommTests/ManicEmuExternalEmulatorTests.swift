@@ -69,11 +69,20 @@ struct ManicEmuExternalEmulatorTests {
         #expect(manic.romExtensions?.contains(archive) == false)
     }
 
-    /// Disc formats need a sheet plus separate tracks, which a single hashed file
-    /// cannot stand in for. `bin` is also ambiguous and would match a data track.
-    @Test(arguments: ["cue", "iso", "chd", "bin", "m3u", "gdi"])
-    func declaresNoDiscExtensions(disc: String) {
+    /// Multi-file disc formats need a sheet plus separate tracks, which a single
+    /// hashed file cannot stand in for. `bin` is also ambiguous and would match a
+    /// data track.
+    @Test(arguments: ["cue", "iso", "bin", "m3u", "gdi"])
+    func declaresNoMultiFileDiscExtensions(disc: String) {
         #expect(manic.romExtensions?.contains(disc) == false)
+    }
+
+    /// Unlike `cue`/`bin`, a whole PS1 disc fits in one `chd` or `pbp` file, so
+    /// hashing it is no different from any other single ROM file. RomM serves
+    /// the vast majority of its PS1 library this way.
+    @Test(arguments: ["chd", "pbp"])
+    func declaresSingleFileDiscExtensions(disc: String) {
+        #expect(manic.romExtensions?.contains(disc) == true)
     }
 
     /// Platforms a built-in engine already plays go through their game type, whose
@@ -88,5 +97,28 @@ struct ManicEmuExternalEmulatorTests {
     @Test(arguments: ["3ds", "cia", "vb", "min", "32x", "gg", "sms", "a26", "j64", "lnx", "pce", "ngp", "wad", "jar"])
     func coversPlatformsOnlyManicPlays(extra: String) {
         #expect(manic.romExtensions?.contains(extra) == true)
+    }
+
+    /// The system's generic type for both extensions resolves to one of Manic's
+    /// own UTIs whose candidate list has no PS1 entry, so the pasteboard item has
+    /// to carry a Manic type that does list it, or the platform picker Manic
+    /// shows on paste leaves PS1 out. `chd` only ever means a PS1 disc here, so
+    /// the platform does not change its outcome.
+    @Test func overridesThePasteboardTypeForSingleFileDiscImages() {
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: "chd", platformSlug: "ps") == "public.aoshuang.game.mcd")
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: "pbp", platformSlug: "ps") == "public.aoshuang.game.ps1")
+    }
+
+    /// `pbp` is also PSP's EBOOT format, so the platform decides which of
+    /// Manic's two types the pasteboard item carries.
+    @Test func disambiguatesPbpByPlatform() {
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: "pbp", platformSlug: "psp") == "public.aoshuang.game.psp")
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: "PBP", platformSlug: "sony-psp") == "public.aoshuang.game.psp")
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: "pbp", platformSlug: "psx") == "public.aoshuang.game.ps1")
+    }
+
+    @Test(arguments: ["gba", "nds", "zip", "cue", "wad"])
+    func leavesOtherExtensionsToTheSystemsOwnTypeGuess(other: String) {
+        #expect(manic.pasteboardTypeIdentifier(forROMExtension: other, platformSlug: "ps") == nil)
     }
 }

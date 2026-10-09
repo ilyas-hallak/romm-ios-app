@@ -2,8 +2,9 @@ import GameController
 
 /// Bridges one connected GCController to one libretro player.
 ///
-/// Maps digital buttons and D-Pad only. Analog sticks never reach the core,
-/// the left one only steps through the in-game menu.
+/// Maps buttons, D-Pad and both thumbsticks. A core that never asks for the
+/// sticks simply does not read them. While the in-game menu is open nothing
+/// reaches the core, and the left stick steps through the menu instead.
 ///
 /// Layout follows the SNES/libretro convention where the bottom face button
 /// is RETRO_DEVICE_ID_JOYPAD_B (index 0) and the right face button is
@@ -112,12 +113,8 @@ final class LibretroControllerInput {
         pad.buttonMenu.valueChangedHandler = handler(for: .start)
         pad.buttonOptions?.valueChangedHandler = handler(for: .select)
 
-        // The core never sees the stick, it only steps through the menu.
-        pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
-            MainActor.assumeIsolated {
-                self?.updateStick(x: x, y: y)
-            }
-        }
+        pad.leftThumbstick.valueChangedHandler = stickHandler(for: .left)
+        pad.rightThumbstick.valueChangedHandler = stickHandler(for: .right)
     }
 
     /// Picks up the face-button swap and the menu shortcut after they changed in
@@ -210,6 +207,19 @@ final class LibretroControllerInput {
         }
     }
 
+    /// GameController reports up as positive y, libretro wants it negative; x passes through.
+    nonisolated static func libretroStickValue(x: Float, y: Float) -> (x: Double, y: Double) {
+        (Double(x), Double(-y))
+    }
+
+    private func stickHandler(for stick: LibretroABI.AnalogStick) -> GCControllerDirectionPadValueChangedHandler {
+        return { [weak self] _, x, y in
+            MainActor.assumeIsolated {
+                self?.moveStick(stick, x: x, y: y)
+            }
+        }
+    }
+
     private func send(_ button: LibretroABI.JoypadButton, pressed: Bool) {
         if isNavigatingMenu {
             if pressed, let command = Self.menuCommand(for: button) {
@@ -248,8 +258,13 @@ final class LibretroControllerInput {
         }
     }
 
-    private func updateStick(x: Float, y: Float) {
-        guard isNavigatingMenu else { return }
+    private func moveStick(_ stick: LibretroABI.AnalogStick, x: Float, y: Float) {
+        guard isNavigatingMenu else {
+            let mapped = Self.libretroStickValue(x: x, y: y)
+            frontend?.setStick(stick, x: mapped.x, y: mapped.y, player: player)
+            return
+        }
+        guard stick == .left else { return }
         for command in [stickX.update(x), stickY.update(y)].compactMap({ $0 }) {
             onMenuCommand?(command)
         }
@@ -277,10 +292,11 @@ final class LibretroControllerInput {
         pad.rightShoulder.valueChangedHandler = nil
         pad.leftTrigger.valueChangedHandler   = nil
         pad.rightTrigger.valueChangedHandler  = nil
-        pad.leftThumbstick.valueChangedHandler = nil
         pad.leftThumbstickButton?.valueChangedHandler  = nil
         pad.rightThumbstickButton?.valueChangedHandler = nil
         pad.buttonMenu.valueChangedHandler     = nil
         pad.buttonOptions?.valueChangedHandler = nil
+        pad.leftThumbstick.valueChangedHandler  = nil
+        pad.rightThumbstick.valueChangedHandler = nil
     }
 }

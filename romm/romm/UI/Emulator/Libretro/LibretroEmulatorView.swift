@@ -98,6 +98,7 @@ struct LibretroEmulatorView: View {
                 rumblePreference: viewModel.rumblePreference,
                 faceButtonPreference: viewModel.gamepadFaceButtonPreference,
                 menuShortcutPreference: viewModel.emulatorMenuShortcutPreference,
+                analogSticksPreference: viewModel.analogSticksPreference,
                 onResume: { showMenu = false },
                 onQuit: {
                     isQuitting = true
@@ -116,6 +117,7 @@ private struct LibretroMenuSheet: View {
     let rumblePreference: PRumblePreference
     let faceButtonPreference: PGamepadFaceButtonPreference
     let menuShortcutPreference: PEmulatorMenuShortcutPreference
+    let analogSticksPreference: PAnalogSticksPreference
     let onResume: () -> Void
     let onQuit: () -> Void
 
@@ -126,6 +128,7 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var aspectRatio: LibretroAspectRatio
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
     @SwiftUI.State private var rumbleIntensity: RumbleIntensity
+    @SwiftUI.State private var analogSticks: Bool
     @SwiftUI.State private var focus: EmulatorMenuFocus<MenuItem>
 
     // 0-based to match the save-state storage / cloud-sync layer
@@ -146,6 +149,7 @@ private struct LibretroMenuSheet: View {
         rumblePreference: PRumblePreference,
         faceButtonPreference: PGamepadFaceButtonPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference,
+        analogSticksPreference: PAnalogSticksPreference,
         onResume: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) {
@@ -154,10 +158,12 @@ private struct LibretroMenuSheet: View {
         self.rumblePreference = rumblePreference
         self.faceButtonPreference = faceButtonPreference
         self.menuShortcutPreference = menuShortcutPreference
+        self.analogSticksPreference = analogSticksPreference
         self.onResume = onResume
         self.onQuit = onQuit
         self._aspectRatio = SwiftUI.State(initialValue: aspectRatioPreference.psx)
         self._rumbleIntensity = SwiftUI.State(initialValue: rumblePreference.intensity)
+        self._analogSticks = SwiftUI.State(initialValue: analogSticksPreference.isEnabled)
         // Pre-select the most recently touched slot so existing saves are
         // immediately visible and loadable after the 1→0 slot renumbering (PR #57).
         let slots = Array(0...20)
@@ -331,6 +337,9 @@ private struct LibretroMenuSheet: View {
                     session?.reloadAspectRatio()
                 }
             }
+            if session?.offersAnalogSticks == true {
+                analogSticksControl
+            }
             ExternalDisplayControls(onRequestDismiss: onResume)
             hapticsControls
             if EmulatorControllerState.isConnected {
@@ -350,6 +359,28 @@ private struct LibretroMenuSheet: View {
             #if DEBUG
             EmulatorControllerDebugToggle()
             #endif
+        }
+    }
+
+    /// The core plays as a DualShock while this is on, which a few older games
+    /// do not get along with, hence the hint.
+    private var analogSticksControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Analog Sticks")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+                Spacer()
+                Toggle("", isOn: $analogSticks)
+                    .labelsHidden()
+                    .onChange(of: analogSticks) { _, newValue in
+                        analogSticksPreference.isEnabled = newValue
+                        session?.reloadAnalogSticks()
+                    }
+            }
+            Text("Plays as a DualShock. Switch off if a game does not react to the pad.")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.5))
         }
     }
 
