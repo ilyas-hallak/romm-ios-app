@@ -4,6 +4,21 @@ All builds of the RomM iOS app, newest first.
 
 ## Version 1.0
 
+### Build 56 (2026-10-09)
+
+**New**
+- Save sync overhaul: saves survive swiping the app away, web UI saves sync to the device, conflicts can be resolved in the sync sheet.
+- Steer the in-game menu with a controller.
+- Second controller support.
+- Analog sticks for PS1 and PSP.
+- Manic EMU takes PS1 discs as chd or pbp and asks before copying again.
+- Fallback server URL, recommendations on Home, segmented storage bar.
+- Games start right away when the server is unreachable.
+
+**Fixed**
+- Save states only sync when they changed, newest first.
+- A reconnected controller keeps its slot.
+
 ### Build 54 (2026-09-25)
 
 **New**
