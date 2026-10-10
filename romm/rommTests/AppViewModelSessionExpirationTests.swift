@@ -7,15 +7,18 @@ import Foundation
 import Testing
 @testable import romm
 
-/// A 401 anywhere in the app posts `.sessionExpired` on the default center;
-/// `AppViewModel` reacts by logging out and leaving a message in `AppData`
-/// for `AppView` to show once at the root level (#218).
+/// A 401 anywhere in the app posts `.sessionExpired`; `AppViewModel` reacts by
+/// logging out and leaving a message in `AppData` for `AppView` to show once
+/// at the root level (#218). Uses a private `NotificationCenter` instead of
+/// `.default`, so a concurrently running suite posting the same notification
+/// can never reach (or be reached by) the view model under test.
 @MainActor
 struct AppViewModelSessionExpirationTests {
-    private let factory = SessionExpirationFactory()
+    private let factory = AppViewModelTestFactory()
+    private let center = NotificationCenter()
 
     private func makeViewModel() -> AppViewModel {
-        AppViewModel(factory: factory)
+        AppViewModel(factory: factory, notificationCenter: center)
     }
 
     private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async {
@@ -30,7 +33,7 @@ struct AppViewModelSessionExpirationTests {
         let viewModel = makeViewModel()
         viewModel.appState = .authenticated
 
-        NotificationCenter.default.post(name: .sessionExpired, object: nil)
+        center.post(name: .sessionExpired, object: nil)
         await waitUntil { viewModel.appState == .setup }
 
         #expect(viewModel.appData.errorMessage == "Your session has expired. Please login again.")
@@ -42,7 +45,7 @@ struct AppViewModelSessionExpirationTests {
         viewModel.appState = .authenticated
         viewModel.serverVersionAlert = ServerVersionAlert(title: "Server Version Changed", message: "Update recommended.", newVersion: "5.4.0")
 
-        NotificationCenter.default.post(name: .sessionExpired, object: nil)
+        center.post(name: .sessionExpired, object: nil)
         await waitUntil { viewModel.appState == .setup }
 
         #expect(viewModel.serverVersionAlert == nil)
@@ -53,17 +56,55 @@ struct AppViewModelSessionExpirationTests {
         let viewModel = makeViewModel()
         viewModel.appState = .setup
 
-        NotificationCenter.default.post(name: .sessionExpired, object: nil)
+        center.post(name: .sessionExpired, object: nil)
         await waitUntil(timeout: 0.2) { viewModel.appData.errorMessage != nil }
 
         #expect(viewModel.appData.errorMessage == nil)
         #expect(factory.clearSetup.calls == 0)
     }
+
+    @Test func leavesADifferentMessageAndStaysAuthenticatedWhenClearingFails() async {
+        let viewModel = makeViewModel()
+        viewModel.appState = .authenticated
+        factory.clearSetup.error = ClearSetupError()
+
+        center.post(name: .sessionExpired, object: nil)
+        await waitUntil { viewModel.appData.errorMessage != nil }
+
+        #expect(viewModel.appState == .authenticated)
+        #expect(viewModel.appData.errorMessage == "Session expired - please restart the app")
+    }
 }
+
+@MainActor
+struct AppViewModelSaveConfigurationTests {
+    private let factory = AppViewModelTestFactory()
+    private let center = NotificationCenter()
+
+    private func makeViewModel() -> AppViewModel {
+        AppViewModel(factory: factory, notificationCenter: center)
+    }
+
+    /// Regression test: a guard-fail used to leave `appState` on `.loading`
+    /// forever (set just before the guard, never reset), so the error alert
+    /// appeared over a spinner instead of back on the setup screen.
+    @Test func leavesAppStateUnchangedWhenRequiredFieldsAreMissing() async {
+        let viewModel = makeViewModel()
+        viewModel.appState = .setup
+
+        await viewModel.saveConfiguration(serverURL: "", username: "user", password: "pw")
+
+        #expect(viewModel.appState == .setup)
+        #expect(viewModel.appData.errorMessage == "Please fill in all required fields")
+        #expect(factory.clearSetup.calls == 0)
+    }
+}
+
+private struct ClearSetupError: Error {}
 
 /// Swaps out everything a session-expiry logout touches, so no test reaches
 /// the keychain, `DefaultConfigurationService.shared` or a real server.
-private final class SessionExpirationFactory: MockDependencyFactory {
+private final class AppViewModelTestFactory: MockDependencyFactory {
     let clearSetup = ClearSetupSpy()
 
     init() {
@@ -79,7 +120,11 @@ private final class SessionExpirationFactory: MockDependencyFactory {
 
 private final class ClearSetupSpy: PClearSetupConfigurationUseCase {
     private(set) var calls = 0
-    func execute() throws { calls += 1 }
+    var error: Error?
+    func execute() throws {
+        calls += 1
+        if let error { throw error }
+    }
 }
 
 /// Only here so `AppViewModel.init` can build its (unused in these tests)

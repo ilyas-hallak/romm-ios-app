@@ -10,8 +10,21 @@ import os
 
 struct AppView: View {
     private let logger = Logger.ui
-    @State private var appViewModel = AppViewModel()
+    @State private var appViewModel: AppViewModel
+    /// `AppData` is a plain `ObservableObject`, not `@Observable` like `AppViewModel`,
+    /// so without this it wouldn't trigger a redraw on its own when `errorMessage` changes.
+    @ObservedObject private var appData: AppData
     @Environment(\.scenePhase) private var scenePhase
+
+    /// `appViewModel`'s default is built inside the body, not as a parameter
+    /// default value: a default-value expression doesn't inherit this init's
+    /// `@MainActor` isolation, and `AppViewModel()` requires it.
+    @MainActor
+    init(appViewModel: AppViewModel? = nil) {
+        let viewModel = appViewModel ?? AppViewModel()
+        _appViewModel = State(initialValue: viewModel)
+        _appData = ObservedObject(wrappedValue: viewModel.appData)
+    }
 
     var body: some View {
         Group {
@@ -40,7 +53,7 @@ struct AppView: View {
                 
             case .authenticated:
                 MainTabView()
-                    .environmentObject(appViewModel.appData)
+                    .environmentObject(appData)
                 
             case .authenticationFailed:
                 VStack(spacing: 20) {
@@ -80,13 +93,13 @@ struct AppView: View {
         .alert(
             "Error",
             isPresented: Binding(
-                get: { appViewModel.appData.errorMessage != nil },
-                set: { if !$0 { appViewModel.appData.updateError(nil) } }
+                get: { appData.errorMessage != nil },
+                set: { if !$0 { appViewModel.clearError() } }
             )
         ) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text(appViewModel.appData.errorMessage ?? "")
+            Text(appData.errorMessage ?? "")
         }
         .alert(
             appViewModel.serverVersionAlert?.title ?? "Server Version Changed",
