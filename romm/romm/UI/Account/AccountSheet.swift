@@ -120,7 +120,7 @@ struct AccountSheet: View {
                 onAddRom()
                 dismiss()
             } label: {
-                row(icon: "square.and.arrow.up", title: String(localized: "Add ROM"))
+                row(icon: "plus.circle", title: String(localized: "Add ROM"))
             }
             Button {
                 select(.uploads)
