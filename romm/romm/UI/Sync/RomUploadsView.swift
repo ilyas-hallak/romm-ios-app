@@ -2,9 +2,8 @@
 //  RomUploadsView.swift
 //  romm
 //
-//  Where "Uploads" in the account menu leads on the App Store build, since
-//  Save Sync (and the uploads section that normally lives inside it) is
-//  hidden there. Reuses `RomUploadsSection` rather than a second upload UI.
+//  Where "Uploads" in the account menu leads, the one place the upload
+//  queue is shown.
 //
 
 import SwiftUI

@@ -7,11 +7,7 @@ enum AccountDestination: Hashable {
     case settings
     case statistics
     case retroAchievements
-    // Save Sync (and the uploads section inside it) is hidden on the App
-    // Store build, so "Uploads" gets its own destination there instead.
-    #if APP_STORE
     case uploads
-    #endif
 }
 
 /// The account behind the avatar on Home, the way the web app hangs its
@@ -117,9 +113,7 @@ struct AccountSheet: View {
 
     // MARK: - Sections
 
-    /// Opening a file ("Add ROM") and, on the App Store build only, the
-    /// upload queue itself, since that build hides Save Sync (and the
-    /// uploads section that normally lives inside it).
+    /// Adding a ROM and the upload queue it lands in.
     private var romSection: some View {
         Section {
             Button {
@@ -128,13 +122,11 @@ struct AccountSheet: View {
             } label: {
                 row(icon: "square.and.arrow.up", title: String(localized: "Add ROM"))
             }
-            #if APP_STORE
             Button {
                 select(.uploads)
             } label: {
                 row(icon: "arrow.up.circle", title: String(localized: "Uploads"))
             }
-            #endif
         }
     }
 

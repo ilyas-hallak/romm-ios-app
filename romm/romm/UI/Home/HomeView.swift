@@ -55,9 +55,7 @@ struct HomeView: View {
                 case .settings: SettingsView()
                 case .statistics: StatsView()
                 case .retroAchievements: RetroAchievementsSettingsView()
-                #if APP_STORE
                 case .uploads: RomUploadsView()
-                #endif
                 }
             }
             .fileImporter(
