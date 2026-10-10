@@ -43,7 +43,6 @@ final class BatteryConflictResolver: PBatteryConflictResolver {
     private let saveStore: PSaveStore
     private let uploadSaveUseCase: PUploadSaveUseCase
     private let downloadSaveUseCase: PDownloadSaveUseCase
-    private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
     private let syncDevice: PSyncDeviceRepository
     private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
     /// Runs the download/trim/write/confirm chain this resolver shares with
@@ -61,7 +60,6 @@ final class BatteryConflictResolver: PBatteryConflictResolver {
         self.saveStore = saveStore
         self.uploadSaveUseCase = uploadSaveUseCase
         self.downloadSaveUseCase = downloadSaveUseCase
-        self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.syncDevice = syncDevice
         self.getDownloadedROMUseCase = getDownloadedROMUseCase
         self.batteryDownloadChain = BatteryDownloadChain(

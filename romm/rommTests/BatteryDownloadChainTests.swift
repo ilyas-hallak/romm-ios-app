@@ -17,6 +17,44 @@ private final class FakeChainDownloadSaveUseCase: PDownloadSaveUseCase, @uncheck
     }
 }
 
+/// Wraps a real `PSaveStore` but always fails `writeBattery`, to prove a
+/// write failure propagates out of `apply` without reaching `confirm`.
+private final class FailingWriteSaveStore: PSaveStore {
+    private let wrapping: PSaveStore
+    init(wrapping: PSaveStore) { self.wrapping = wrapping }
+
+    func writeBattery(romId: Int, data: Data) throws {
+        throw URLError(.cannotWriteToFile)
+    }
+
+    func readBattery(romId: Int) throws -> Data? { try wrapping.readBattery(romId: romId) }
+    func batteryModifiedAt(romId: Int) -> Date? { wrapping.batteryModifiedAt(romId: romId) }
+    func setBatteryModifiedAt(romId: Int, date: Date) throws { try wrapping.setBatteryModifiedAt(romId: romId, date: date) }
+    func backupBattery(romId: Int, data: Data, origin: BatteryBackupOrigin) throws { try wrapping.backupBattery(romId: romId, data: data, origin: origin) }
+
+    func listRomIds() throws -> [Int] { try wrapping.listRomIds() }
+    func deleteSaves(romId: Int) throws { try wrapping.deleteSaves(romId: romId) }
+    func listStates(romId: Int) throws -> [SaveStateEntry] { try wrapping.listStates(romId: romId) }
+    func readState(romId: Int, slot: Int) throws -> Data? { try wrapping.readState(romId: romId, slot: slot) }
+    func writeState(romId: Int, slot: Int, data: Data) throws { try wrapping.writeState(romId: romId, slot: slot, data: data) }
+    func deleteState(romId: Int, slot: Int) throws { try wrapping.deleteState(romId: romId, slot: slot) }
+    func stateModifiedAt(romId: Int, slot: Int) -> Date? { wrapping.stateModifiedAt(romId: romId, slot: slot) }
+    func setStateModifiedAt(romId: Int, slot: Int, date: Date) throws { try wrapping.setStateModifiedAt(romId: romId, slot: slot, date: date) }
+    func readThumbnail(romId: Int, slot: Int) throws -> Data? { try wrapping.readThumbnail(romId: romId, slot: slot) }
+    func writeThumbnail(romId: Int, slot: Int, data: Data) throws { try wrapping.writeThumbnail(romId: romId, slot: slot, data: data) }
+    func deleteThumbnail(romId: Int, slot: Int) throws { try wrapping.deleteThumbnail(romId: romId, slot: slot) }
+    func readStateBaseline(romId: Int, slot: Int) throws -> StateSyncBaseline? { try wrapping.readStateBaseline(romId: romId, slot: slot) }
+    func writeStateBaseline(romId: Int, slot: Int, baseline: StateSyncBaseline) throws { try wrapping.writeStateBaseline(romId: romId, slot: slot, baseline: baseline) }
+    func backupSlotForUndoSave(romId: Int, slot: Int) throws { try wrapping.backupSlotForUndoSave(romId: romId, slot: slot) }
+    func restoreSlotFromUndoSave(romId: Int, slot: Int) throws -> Bool { try wrapping.restoreSlotFromUndoSave(romId: romId, slot: slot) }
+    func hasUndoSave(romId: Int, slot: Int) -> Bool { wrapping.hasUndoSave(romId: romId, slot: slot) }
+    func writeUndoLoadSnapshot(romId: Int, stateData: Data, thumbnailData: Data?) throws { try wrapping.writeUndoLoadSnapshot(romId: romId, stateData: stateData, thumbnailData: thumbnailData) }
+    func readUndoLoadState(romId: Int) throws -> Data? { try wrapping.readUndoLoadState(romId: romId) }
+    func readUndoLoadThumbnail(romId: Int) throws -> Data? { try wrapping.readUndoLoadThumbnail(romId: romId) }
+    func hasUndoLoad(romId: Int) -> Bool { wrapping.hasUndoLoad(romId: romId) }
+    func clearUndoLoad(romId: Int) throws { try wrapping.clearUndoLoad(romId: romId) }
+}
+
 private final class FakeChainConfirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase, @unchecked Sendable {
     var error: Error?
     private(set) var calls: [(id: Int, deviceId: String)] = []
@@ -54,7 +92,7 @@ struct BatteryDownloadChainTests {
         BatteryDownloadChain(saveStore: store, downloadSaveUseCase: fakes.download, confirmSaveDownloadUseCase: fakes.confirm)
     }
 
-    /// When `write` allows it, the downloaded (and trimmed) bytes land on
+    /// When `shouldWrite` allows it, the downloaded (and trimmed) bytes land on
     /// disk, the server timestamp is adopted, and the download is confirmed.
     @Test func appliesWritesTrimsAndConfirmsWhenWriteAllows() async throws {
         let store = makeStore()
@@ -75,7 +113,7 @@ struct BatteryDownloadChainTests {
         #expect(fakes.confirm.calls.first?.deviceId == "device-1")
     }
 
-    /// When `write` declines (e.g. a blank candidate), nothing is written to
+    /// When `shouldWrite` declines (e.g. a blank candidate), nothing is written to
     /// disk, but the download is still confirmed so the server stops
     /// replanning it.
     @Test func skipsTheWriteButStillConfirmsWhenWriteDeclines() async throws {
@@ -126,6 +164,7 @@ struct BatteryDownloadChainTests {
 
         #expect(result.wrote)
         #expect(try store.readBattery(romId: 2) == Data([0x01]))
+        #expect(fakes.confirm.calls.map(\.id) == [9])
     }
 
     /// A nil device id skips the confirmation entirely rather than calling
@@ -141,6 +180,25 @@ struct BatteryDownloadChainTests {
         ) { _ in true }
 
         #expect(result.wrote)
+        #expect(fakes.confirm.calls.isEmpty)
+    }
+
+    /// A `writeBattery` failure (not download or confirm) propagates out of
+    /// `apply`, and confirm is never reached since the throw happens before
+    /// that call.
+    @Test func writeFailurePropagatesWithoutConfirming() async throws {
+        let store = makeStore()
+        let failingStore = FailingWriteSaveStore(wrapping: store)
+        let fakes = Fakes()
+        fakes.download.dataForId[9] = Data([0x01])
+        let chain = makeChain(store: failingStore, fakes: fakes)
+
+        await #expect(throws: (any Error).self) {
+            _ = try await chain.apply(
+                romId: 2, saveId: 9, deviceId: "device-1", serverUpdatedAt: nil, platformSlug: nil
+            ) { _ in true }
+        }
+
         #expect(fakes.confirm.calls.isEmpty)
     }
 

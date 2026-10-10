@@ -33,8 +33,6 @@ final class CloudSaveSyncService {
     private let listSavesUseCase: PListServerSavesUseCase
     private let uploadSaveUseCase: PUploadSaveUseCase
     private let updateSaveUseCase: PUpdateSaveUseCase
-    private let downloadSaveUseCase: PDownloadSaveUseCase
-    private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
     private let settings: PCloudSaveSyncSettings
     private let recordSyncUseCase: PRecordSyncUseCase
     private let apiClient: PRommAPIClient
@@ -74,8 +72,6 @@ final class CloudSaveSyncService {
         self.listSavesUseCase = listSavesUseCase
         self.uploadSaveUseCase = uploadSaveUseCase
         self.updateSaveUseCase = updateSaveUseCase
-        self.downloadSaveUseCase = downloadSaveUseCase
-        self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.settings = settings
         self.recordSyncUseCase = recordSyncUseCase ?? RecordSyncUseCase(store: CloudSaveSyncSettings.shared)
         self.apiClient = apiClient
@@ -305,8 +301,6 @@ final class CloudSaveSyncService {
             ) else { return }
 
             let deviceId = await syncDevice.deviceId()
-            // Preserve server mtime so subsequent local-vs-server compares are
-            // not skewed by device clock drift after the write-to-disk timestamp.
             let result = try await batteryDownloadChain.apply(
                 romId: config.romId, saveId: match.id, deviceId: deviceId,
                 serverUpdatedAt: match.updatedAt, platformSlug: config.platformSlug

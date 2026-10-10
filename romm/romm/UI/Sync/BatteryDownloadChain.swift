@@ -36,23 +36,26 @@ final class BatteryDownloadChain {
         self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
     }
 
-    /// Downloads `saveId`, trims it, and asks `write` whether the trimmed
-    /// bytes should replace `romId`'s battery file (e.g. a blank candidate
-    /// never may, see `BatteryDownloadDecision`). The download is confirmed
-    /// either way; confirming is best effort, a failure there is only logged.
+    /// Downloads `saveId`, trims it, and asks `shouldWrite` whether the
+    /// trimmed bytes should replace `romId`'s battery file (e.g. a blank
+    /// candidate never may, see `BatteryDownloadDecision`). The download is
+    /// confirmed either way; confirming is best effort, a failure there is
+    /// only logged.
     func apply(
         romId: Int,
         saveId: Int,
         deviceId: String?,
         serverUpdatedAt: Date?,
         platformSlug: String?,
-        write: (Data) -> Bool
+        shouldWrite: (Data) -> Bool
     ) async throws -> Result {
         let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
         let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: platformSlug)
-        let wrote = write(trimmed)
+        let wrote = shouldWrite(trimmed)
         if wrote {
             try saveStore.writeBattery(romId: romId, data: trimmed)
+            // Preserve server mtime so subsequent local-vs-server compares are
+            // not skewed by device clock drift after the write-to-disk timestamp.
             if let serverUpdatedAt {
                 try? saveStore.setBatteryModifiedAt(romId: romId, date: serverUpdatedAt)
             }

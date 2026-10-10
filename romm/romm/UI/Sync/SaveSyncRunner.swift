@@ -101,8 +101,6 @@ final class SaveSyncRunner: PSaveSyncRunner {
 
     private let saveStore: PSaveStore
     private let uploadSaveUseCase: PUploadSaveUseCase
-    private let downloadSaveUseCase: PDownloadSaveUseCase
-    private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
     /// Only used by `runExternalUpload`'s freshness gate now: battery upload and
     /// download are resolved from the plan itself (`SyncPreviewOperation`), which
     /// already carries the save id and content hash the server negotiated.
@@ -138,8 +136,6 @@ final class SaveSyncRunner: PSaveSyncRunner {
     ) {
         self.saveStore = saveStore
         self.uploadSaveUseCase = uploadSaveUseCase
-        self.downloadSaveUseCase = downloadSaveUseCase
-        self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.listServerSavesUseCase = listServerSavesUseCase
         self.completeSyncSessionUseCase = completeSyncSessionUseCase
         self.externalSaveFolderStore = externalSaveFolderStore
