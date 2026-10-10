@@ -101,8 +101,6 @@ final class SaveSyncRunner: PSaveSyncRunner {
 
     private let saveStore: PSaveStore
     private let uploadSaveUseCase: PUploadSaveUseCase
-    private let downloadSaveUseCase: PDownloadSaveUseCase
-    private let confirmSaveDownloadUseCase: PConfirmSaveDownloadUseCase
     /// Only used by `runExternalUpload`'s freshness gate now: battery upload and
     /// download are resolved from the plan itself (`SyncPreviewOperation`), which
     /// already carries the save id and content hash the server negotiated.
@@ -117,6 +115,9 @@ final class SaveSyncRunner: PSaveSyncRunner {
     /// `CloudSaveSyncService` uses, so the two never grow different ideas of
     /// "changed".
     private let stateSyncCoordinator: StateSyncCoordinator
+    /// Runs the download/trim/write/confirm chain this runner shares with
+    /// `CloudSaveSyncService` and `BatteryConflictResolver` (see issue #212).
+    private let batteryDownloadChain: BatteryDownloadChain
 
     init(
         saveStore: PSaveStore,
@@ -135,8 +136,6 @@ final class SaveSyncRunner: PSaveSyncRunner {
     ) {
         self.saveStore = saveStore
         self.uploadSaveUseCase = uploadSaveUseCase
-        self.downloadSaveUseCase = downloadSaveUseCase
-        self.confirmSaveDownloadUseCase = confirmSaveDownloadUseCase
         self.listServerSavesUseCase = listServerSavesUseCase
         self.completeSyncSessionUseCase = completeSyncSessionUseCase
         self.externalSaveFolderStore = externalSaveFolderStore
@@ -148,6 +147,11 @@ final class SaveSyncRunner: PSaveSyncRunner {
             uploadStateUseCase: uploadStateUseCase,
             updateStateUseCase: updateStateUseCase,
             downloadStateUseCase: downloadStateUseCase
+        )
+        self.batteryDownloadChain = BatteryDownloadChain(
+            saveStore: saveStore,
+            downloadSaveUseCase: downloadSaveUseCase,
+            confirmSaveDownloadUseCase: confirmSaveDownloadUseCase
         )
     }
 
@@ -336,41 +340,20 @@ final class SaveSyncRunner: PSaveSyncRunner {
             return .skipped
         }
 
-        let outcome: StepOutcome
         do {
-            let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
             let platformSlug = try? getDownloadedROMUseCase.execute(romId: op.romId).rom.platformSlug
-            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: platformSlug)
-            if BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank) {
-                try saveStore.writeBattery(romId: op.romId, data: trimmed)
-                // Preserve the server's timestamp, matching the automatic path, so
-                // a later compare is not skewed by clock drift after the write.
-                if let serverUpdatedAt = op.serverUpdatedAt {
-                    try? saveStore.setBatteryModifiedAt(romId: op.romId, date: serverUpdatedAt)
-                }
-                outcome = .downloaded
-            } else {
+            let result = try await batteryDownloadChain.apply(
+                romId: op.romId, saveId: saveId, deviceId: deviceId,
+                serverUpdatedAt: op.serverUpdatedAt, platformSlug: platformSlug
+            ) { trimmed in
                 // A blank candidate must never overwrite a real local save,
                 // but the server still has to be told this id was seen, or
                 // it keeps replanning the same download forever.
-                outcome = .skipped
+                BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank)
             }
+            return result.wrote ? .downloaded : .skipped
         } catch {
             return .failed("ROM \(op.romId): battery download failed (\(error.localizedDescription))")
-        }
-
-        await confirmDownload(saveId: saveId, deviceId: deviceId)
-        return outcome
-    }
-
-    /// Tells the server this device now has the save's content. Best-effort:
-    /// a failed confirmation only means the next negotiate may plan this same
-    /// download again, never that the just-written local save is undone.
-    private func confirmDownload(saveId: Int, deviceId: String) async {
-        do {
-            _ = try await confirmSaveDownloadUseCase.execute(id: saveId, deviceId: deviceId)
-        } catch {
-            logger.warning("Download confirmation failed (save \(saveId)): \(error.localizedDescription)")
         }
     }
 
