@@ -1,83 +1,108 @@
-# RomM iOS App
+<div align="center">
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+<img src="romm/romm/Assets.xcassets/romm_logo.imageset/romm_logo.png" width="128" alt="RomM for iOS app icon" />
 
-A native iOS companion app for [RomM](https://github.com/rommapp/romm). Connect to your self-hosted RomM server to browse, play, and manage your retro game ROM collection directly from your iPhone or iPad.
+# RomM for iOS
 
-**Compatible with RomM 5.0.***
+**Your self-hosted retro library, in your pocket.**
 
-## Download
+Browse your [RomM](https://github.com/rommapp/romm) collection, play it on iPhone and iPad, and keep your saves in sync with your server.
 
-### TestFlight Beta
+[![Join the TestFlight beta](https://img.shields.io/badge/TestFlight-Join%20the%20beta-5A3E99?style=for-the-badge&logo=apple&logoColor=white)](https://testflight.apple.com/join/F4C5mhrC)
+![App Store coming soon](https://img.shields.io/badge/App%20Store-Coming%20soon-555555?style=for-the-badge&logo=appstore&logoColor=white)
 
-Join the beta program and help improve the app:
+[![Platform](https://img.shields.io/badge/iPhone%20%7C%20iPad-iOS%2018.6%2B-000000?logo=apple&logoColor=white)](#getting-started)
+[![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](#getting-started)
+[![RomM 5.x](https://img.shields.io/badge/RomM-5.x-5A3E99)](https://github.com/rommapp/romm)
+[![16 systems](https://img.shields.io/badge/Systems-16-E5A88F)](#supported-systems)
+[![MIT License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Discord](https://img.shields.io/discord/1138838206532554853?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/wCNJVP86VX)
 
-[Join TestFlight Beta](https://testflight.apple.com/join/F4C5mhrC)
+<br />
 
-## Screenshots
+<img src="screenshots/final/00-play-ingame.png" width="160" alt="Play games directly in the app" />
+<img src="screenshots/final/01-play-anywhere.png" width="160" alt="Take your retro library anywhere" />
+<img src="screenshots/final/03-browse-platform.png" width="160" alt="Browse your collection by platform" />
+<img src="screenshots/final/05-organize-collections.png" width="160" alt="Organize with collections" />
+<img src="screenshots/final/02-sync-saves.png" width="160" alt="Sync saves with your RomM instance" />
 
-<p align="center">
-  <img src="screenshots/final/00-play-ingame.png" width="180" alt="Play games directly in the app" />
-  <img src="screenshots/final/01-play-anywhere.png" width="180" alt="Take your retro library anywhere" />
-  <img src="screenshots/final/03-browse-platform.png" width="180" alt="Browse your collection by platform" />
-  <img src="screenshots/final/05-organize-collections.png" width="180" alt="Organize with collections" />
-  <img src="screenshots/final/04-download-offline.png" width="180" alt="Download games for offline play" />
-  <img src="screenshots/final/02-sync-saves.png" width="180" alt="Sync saves with your RomM instance" />
-</p>
+</div>
+
+## Why RomM for iOS
+
+- **Play right in the app.** Native Delta cores and libretro cores run your games on the device, no second emulator needed.
+- **Saves follow you.** Save files and save states sync with your RomM server, so you can pick up where you left off on any device.
+- **Works offline.** Download games once and play on the train, on a plane, wherever.
+- **Built for iOS.** A native SwiftUI app with controller support, external display output and the look and feel of the platform.
+
+## Supported systems
+
+| System | Core |
+| --- | --- |
+| Game Boy, Game Boy Color | Delta (Gambatte) |
+| Game Boy Advance | Delta (VBA-M) |
+| NES | Delta (Nestopia) |
+| SNES | Delta (Snes9x) |
+| Nintendo 64 | Delta (Mupen64Plus) |
+| Nintendo DS | Delta (melonDS) |
+| PlayStation | libretro (PCSX ReARMed) |
+| PlayStation Portable | libretro (PPSSPP) |
+| Mega Drive / Genesis, Master System, Game Gear, Sega CD | libretro (Genesis Plus GX) |
+| Dreamcast | libretro (Flycast) |
+| PC Engine / TurboGrafx-16, SuperGrafx | libretro (Beetle PCE FAST) |
+
+Prefer another emulator?
+Games can also be handed off to RetroArch, Delta, Manic EMU or Provenance.
 
 ## Features
 
-### Emulation
-- 🎮 Play ROMs directly on your iPhone or iPad
-- 🕹️ Native Delta emulator cores for GBA, GBC, GB, NES, SNES, N64, and NDS
-- 🖥️ Libretro-based emulation for Sega Genesis/Mega Drive, Master System, Game Gear, Saturn, Dreamcast, PlayStation, PSP, and Arcade
-- ☁️ Cloud save sync — upload and download save states and save files to/from your RomM server
-- 🎛️ Physical controller support
-- ⏩ 2x fast-forward for native DeltaCore emulation from the in-game menu
+**Play**
+- Physical controllers, with an optional A/B and X/Y swap for Nintendo layouts
+- Play on TV with an Apple TV or HDMI adapter, optionally with the phone as a pure controller
+- Rumble for PlayStation games, 2x fast-forward in the native engine
+- RetroAchievements on the game page, including what you have already unlocked
+- BIOS management for the cores that need it
 
-### Library
-- 📱 Native SwiftUI design with dark mode support
-- 🖼️ Game covers, screenshots, and full metadata from your RomM server
-- 📊 Card and list view layouts
-- 🔍 Search across your entire ROM library
-- 📚 Browse by platform with ROM counts and platform logos
-- 📁 Organize games in custom collections
-- 📈 Server statistics and platform insights
-- ⚙️ QR code scanner for quick server setup
+**Library**
+- Covers, screenshots and full metadata from your RomM server
+- Browse by platform, search the whole library, organize games in collections
+- Card and list layouts, dark mode, server statistics
+- Quick server setup by scanning a QR code
 
-### Offline & Transfer
-- 💾 Download ROMs for offline play
-- 🔄 Transfer ROMs to remote devices via SFTP
-- 🗂️ BIOS file management for emulator cores
+**Sync and offline**
+- Cloud sync for save files and save states, automatic or on demand
+- Download ROMs for offline play, with progress and transfer rate
+- Transfer ROMs to other devices over SFTP
 
-### Platform
-- 📲 iPhone and iPad support
+See the [changelog](CHANGELOG.md) for what landed in each build.
 
-## Getting Started
+## Getting started
 
-This repository uses git submodules for the emulator cores in `Vendor/`. Clone with submodules:
+The easiest way is the [TestFlight beta](https://testflight.apple.com/join/F4C5mhrC).
+You need a running [RomM](https://github.com/rommapp/romm) server, version 5.0 or newer.
+
+To build it yourself, clone with submodules, the emulator cores live in `Vendor/`:
 
 ```sh
 git clone --recurse-submodules https://github.com/ilyas-hallak/romm-ios-app.git
 ```
 
-If you already cloned without submodules:
-
-```sh
-git submodule update --init --recursive
-```
-
+If you already cloned without them, run `git submodule update --init --recursive`.
 Then open `romm/romm.xcodeproj` in Xcode and build.
+The Simulator needs nothing else.
 
-### Building on a device
+Questions, ideas or bugs?
+Drop by `#ios-app` on the [RomM Discord](https://discord.gg/wCNJVP86VX) or open an [issue](https://github.com/ilyas-hallak/romm-ios-app/issues).
 
-Building for the Simulator needs nothing extra. To run on a physical device you
-need your own Apple Developer team and a bundle identifier that is unique to you.
-The upstream `de.ilyashallak.*` identifiers are already registered to the
-maintainer and cannot be re-registered to your account.
+<details>
+<summary><b>Building on a physical device</b></summary>
 
-The project reads those two values from a gitignored `Signing.xcconfig`, so you
-never have to edit `project.pbxproj`:
+<br />
+
+To run on a device you need your own Apple Developer team and a bundle identifier that is unique to you.
+The upstream `de.ilyashallak.*` identifiers are already registered to the maintainer and cannot be re-registered to your account.
+
+The project reads both values from a gitignored `Signing.xcconfig`, so you never have to edit `project.pbxproj`:
 
 ```sh
 cp romm/Config/Signing.xcconfig.template romm/Config/Signing.xcconfig
@@ -85,25 +110,20 @@ cp romm/Config/Signing.xcconfig.template romm/Config/Signing.xcconfig
 
 Then edit `romm/Config/Signing.xcconfig` and set:
 
-- `DEVELOPMENT_TEAM`, your 10-character Team ID (Xcode > Settings > Accounts, or
-  the Apple Developer site under Membership details)
+- `DEVELOPMENT_TEAM`, your 10-character Team ID (Xcode > Settings > Accounts, or the Apple Developer site under Membership details)
 - `ROMM_BUNDLE_ID_PREFIX`, a reverse-DNS prefix only you use, e.g. `com.yourname`
 
-Signing is automatic, so Xcode registers the App ID and provisioning profile the
-first time you build to a connected device.
+Signing is automatic, so Xcode registers the App ID and provisioning profile the first time you build to a connected device.
 
-#### The emulator core submodules
+**The emulator core submodules**
 
-`Signing.xcconfig` only applies to this project's targets, not to the DeltaCore
-projects under `Vendor/`. Several of those pin their own `DEVELOPMENT_TEAM`, so a
-device build needs your team applied to them too:
+`Signing.xcconfig` only applies to this project's targets, not to the DeltaCore projects under `Vendor/`.
+Several of those pin their own `DEVELOPMENT_TEAM`, so a device build needs your team applied to them too:
 
-- **Xcode (UI):** in each `Vendor/*/…xcodeproj`, select every target and set your
-  team under Signing & Capabilities. These edits stay in the submodule working
-  trees, don't commit them.
-- **Command line:** pass `DEVELOPMENT_TEAM` on the `xcodebuild` invocation. It
-  applies to every target in the graph, submodules included, so nothing under
-  `Vendor/` needs editing:
+- **Xcode (UI):** in each `Vendor/*/…xcodeproj`, select every target and set your team under Signing & Capabilities.
+  These edits stay in the submodule working trees, don't commit them.
+- **Command line:** pass `DEVELOPMENT_TEAM` on the `xcodebuild` invocation.
+  It applies to every target in the graph, submodules included, so nothing under `Vendor/` needs editing:
 
   ```sh
   xcodebuild -project romm/romm.xcodeproj -scheme romm \
@@ -113,28 +133,35 @@ device build needs your team applied to them too:
     build
   ```
 
-  `Signing.xcconfig` is still required, it supplies the unique app bundle
-  identifier (`ROMM_BUNDLE_ID_PREFIX`) that no command-line override can set
-  per-target.
+  `Signing.xcconfig` is still required, it supplies the unique app bundle identifier (`ROMM_BUNDLE_ID_PREFIX`) that no command-line override can set per-target.
+
+</details>
+
+## Contributing
+
+Issues and pull requests are welcome.
+A few rules keep the codebase consistent:
+
+1. Follow the Clean Architecture layers (Domain / Data / UI)
+2. One ViewModel per View, no sharing between views
+3. Use Cases must not call other Use Cases, compose them in the ViewModel
+4. Use the existing dependency injection
+5. All user-facing strings are in English
 
 ## Credits
 
 > *Standing on the shoulders of giants.*
 
-This app would not be possible without the outstanding open-source emulation work of:
+This app would not exist without the open-source emulation work of:
 
-- **[Delta / DeltaCore](https://github.com/rileytestut/DeltaCore)** by [Riley Testut](https://github.com/rileytestut) — the emulation framework powering GB, GBC, GBA, NES, SNES, N64, and NDS
-- **[PCSX ReARMed](https://github.com/libretro/pcsx_rearmed)** via [Libretro](https://www.libretro.com) — PlayStation emulation on ARM
-
-## Contributing
-
-1. Follow the established Clean Architecture patterns (Domain / Data / UI layers)
-2. Maintain one ViewModel per View — no sharing between views
-3. Use Cases must not call other Use Cases — compose at the ViewModel level
-4. Use the existing dependency injection system
-5. Follow SwiftUI best practices
-6. All user-facing strings must be in English
+- **[Delta / DeltaCore](https://github.com/rileytestut/DeltaCore)** by [Riley Testut](https://github.com/rileytestut), the framework behind GB, GBC, GBA, NES, SNES, N64 and NDS
+- **[libretro](https://www.libretro.com)** and the authors of PCSX ReARMed, PPSSPP, Genesis Plus GX, Flycast and Beetle PCE FAST
+- **[RomM](https://github.com/rommapp/romm)**, the self-hosted ROM manager this app is built for
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details. This project is part of the RomM ecosystem.
+MIT, see [LICENSE](LICENSE).
+This is an independent client and part of the RomM ecosystem.
+
+Made by [Ilyas Hallak](https://ilyashallak.de).
+More about the app and ways to get in touch on [ilyashallak.de/romm](https://ilyashallak.de/romm/).
