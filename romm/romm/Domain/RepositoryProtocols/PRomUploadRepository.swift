@@ -10,6 +10,9 @@ enum RomUploadAvailability: Equatable {
     case available
     /// Signed in, but the account has no `roms.write` scope.
     case missingScope
+    /// The account's role itself has no `roms.write` scope, so signing in again
+    /// would not help: a server admin has to change the role first.
+    case notAllowedForAccount
     /// The chunked upload API is only served from RomM 4.8.0 onwards.
     case serverTooOld(version: String)
     /// No server version could be established yet.

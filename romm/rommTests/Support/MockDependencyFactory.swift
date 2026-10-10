@@ -31,7 +31,8 @@ class MockDependencyFactory: PDependencyFactory {
     lazy var romUploadRepository: PRomUploadRepository = RomUploadRepository(
         apiClient: apiClient,
         tokenProvider: tokenProvider,
-        heartbeat: heartbeatRepository
+        heartbeat: heartbeatRepository,
+        authRepository: authRepository
     )
     lazy var incomingRomFileRepository: PIncomingRomFileRepository = IncomingRomFileRepository()
     var apiClient: PRommAPIClient
@@ -338,6 +339,10 @@ class MockDependencyFactory: PDependencyFactory {
     func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase {
         DiscardStagedRomUseCase(repository: incomingRomFileRepository)
     }
+
+    /// In memory rather than `.standard`: tests must not see a hint left shown
+    /// by a previous run, and must not leak one into the next.
+    lazy var romUploadSignInHintStore: PRomUploadSignInHintStore = InMemoryRomUploadSignInHintStore()
 
     // MARK: - SFTP Use Cases
 

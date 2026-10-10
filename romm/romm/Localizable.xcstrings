@@ -136,7 +136,19 @@
     "No Uploads" : {
       "extractionState" : "manual"
     },
+    "Not Now" : {
+      "extractionState" : "manual"
+    },
+    "Sign In Again" : {
+      "extractionState" : "manual"
+    },
+    "To upload ROMs from this device, sign in again and allow uploads." : {
+      "extractionState" : "manual"
+    },
     "Uploads" : {
+      "extractionState" : "manual"
+    },
+    "Uploads Need a New Sign-In" : {
       "extractionState" : "manual"
     },
     "User interface and view updates" : {

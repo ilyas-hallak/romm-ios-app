@@ -63,6 +63,8 @@ protocol PDependencyFactory {
     func makeStageIncomingRomUseCase() -> StageIncomingRomUseCase
     func makeSuggestPlatformForFileUseCase() -> SuggestPlatformForFileUseCase
     func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase
+    /// Whether the one-time "sign in again to upload" hint was already shown on Home.
+    var romUploadSignInHintStore: PRomUploadSignInHintStore { get }
 
     // Setup Use Cases
     func makeSaveSetupConfigurationUseCase() -> PSaveSetupConfigurationUseCase
@@ -206,7 +208,8 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var romUploadRepository: PRomUploadRepository = RomUploadRepository(
         apiClient: apiClient,
         tokenProvider: tokenProvider,
-        heartbeat: heartbeatRepository
+        heartbeat: heartbeatRepository,
+        authRepository: authRepository
     )
     lazy var incomingRomFileRepository: PIncomingRomFileRepository = IncomingRomFileRepository()
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
@@ -354,6 +357,8 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase {
         DiscardStagedRomUseCase(repository: incomingRomFileRepository)
     }
+
+    lazy var romUploadSignInHintStore: PRomUploadSignInHintStore = UserDefaultsRomUploadSignInHintStore()
 
     // MARK: - Setup Use Cases
     

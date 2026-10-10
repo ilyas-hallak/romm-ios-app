@@ -41,6 +41,12 @@ struct RomUploadSheet: View {
                                 .foregroundStyle(.orange)
                             Text(message)
                         }
+                        if viewModel.canSignInAgain {
+                            Button("Sign In Again") {
+                                viewModel.signInAgain()
+                                dismiss()
+                            }
+                        }
                     }
                 } else {
                     Section {

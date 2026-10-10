@@ -32,7 +32,12 @@ final class FakeRomUploadRepository: PRomUploadRepository, @unchecked Sendable {
     /// one "late" after the job has already moved on.
     private(set) var capturedProgressHandlers: [(Double) -> Void] = []
 
-    func availability() async -> RomUploadAvailability { availabilityResult }
+    private(set) var availabilityCallCount = 0
+
+    func availability() async -> RomUploadAvailability {
+        availabilityCallCount += 1
+        return availabilityResult
+    }
 
     func start(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String {
         if let startGate { try await startGate() }
