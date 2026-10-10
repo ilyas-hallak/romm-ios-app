@@ -109,6 +109,20 @@ struct SFTPServiceTests {
         #expect(items.map(\.size) == [0, 4096])
     }
 
+    @Test func listDirectoryPropagatesATypedClientErrorUnchanged() async throws {
+        client.contentsError = SFTPError.pathNotFound
+        let (service, _) = makeService()
+
+        do {
+            _ = try await service.listDirectory(at: "/roms/", connection: connection)
+            Issue.record("Expected SFTPError.pathNotFound")
+        } catch SFTPError.pathNotFound {
+            // expected: the client's own error survives instead of being degraded to .networkError
+        } catch {
+            Issue.record("Expected SFTPError.pathNotFound, got \(error)")
+        }
+    }
+
     @Test func clientIsCreatedFromTheConnectionAndStoredPassword() async throws {
         let (service, recorder) = makeService(password: "hunter2")
 

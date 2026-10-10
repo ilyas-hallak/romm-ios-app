@@ -54,12 +54,25 @@ final class MFTSFTPClient: SFTPClient {
         }
     }
 
+    /// mft requires the destination file to already exist and be writable, so create (or truncate) it first.
     func downloadFile(atPath remotePath: String, toPath localPath: String, progress: @escaping (UInt64, UInt64) -> Bool) throws {
+        try Self.prepareDownloadDestination(atPath: localPath)
         do {
             try connection.downloadFile(atPath: remotePath, toFileAtPath: localPath, progress: progress)
         } catch {
+            Self.removePartialDownload(atPath: localPath)
             throw SFTPError.downloadFailed
         }
+    }
+
+    static func prepareDownloadDestination(atPath path: String) throws {
+        guard FileManager.default.createFile(atPath: path, contents: nil) else {
+            throw SFTPError.downloadFailed
+        }
+    }
+
+    static func removePartialDownload(atPath path: String) {
+        try? FileManager.default.removeItem(atPath: path)
     }
 
     func createDirectory(atPath path: String) throws {

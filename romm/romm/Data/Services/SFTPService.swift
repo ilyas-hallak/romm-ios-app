@@ -389,8 +389,12 @@ class SFTPService: PSFTPService {
     }
     
     private func mapClientError(_ error: Error) -> SFTPError {
+        if let sftpError = error as? SFTPError {
+            return sftpError
+        }
+
         let errorString = error.localizedDescription.lowercased()
-        
+
         if errorString.contains("connect") || errorString.contains("connection") {
             return .connectionFailed
         } else if errorString.contains("auth") {

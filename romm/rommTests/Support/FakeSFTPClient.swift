@@ -15,6 +15,7 @@ final class FakeSFTPClient: SFTPClient, @unchecked Sendable {
     var uploadProgress: [UInt64] = []
     var downloadProgress: [(UInt64, UInt64)] = []
     var uploadError: Error?
+    var contentsError: Error?
 
     private(set) var removedPaths: [String] = []
     private(set) var createdDirectories: [String] = []
@@ -26,7 +27,10 @@ final class FakeSFTPClient: SFTPClient, @unchecked Sendable {
     func authenticate() throws {}
     func disconnect() { didDisconnect = true }
 
-    func contentsOfDirectory(atPath path: String) throws -> [SFTPClientItem] { directoryItems }
+    func contentsOfDirectory(atPath path: String) throws -> [SFTPClientItem] {
+        if let contentsError { throw contentsError }
+        return directoryItems
+    }
 
     func uploadFile(atPath localPath: String, toPath remotePath: String, progress: @escaping (UInt64) -> Bool) throws {
         uploads.append((localPath, remotePath))
