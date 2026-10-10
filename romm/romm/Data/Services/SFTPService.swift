@@ -13,7 +13,8 @@ enum SFTPError: LocalizedError {
     case serviceNotConfigured
     case fileValidationFailed(String)
     case incompleteDownload(actual: Int64, expected: Int64)
-    
+    case cancelled
+
     var errorDescription: String? {
         switch self {
         case .connectionFailed:
@@ -44,6 +45,8 @@ enum SFTPError: LocalizedError {
             let actualStr = ByteCountFormatter.string(fromByteCount: actual, countStyle: .file)
             let expectedStr = ByteCountFormatter.string(fromByteCount: expected, countStyle: .file)
             return "Incomplete download: got \(actualStr), expected \(expectedStr)"
+        case .cancelled:
+            return "Cancelled"
         }
     }
 }
@@ -369,7 +372,9 @@ class SFTPService: PSFTPService {
 
                         continuation.resume()
                     } catch {
-                        continuation.resume(throwing: self.mapClientError(error))
+                        // The client reports a stopped-by-progress-callback download the same way as a
+                        // real failure, so the cancellation flag is the only way to tell them apart here.
+                        continuation.resume(throwing: cancellation.cancelled ? SFTPError.cancelled : self.mapClientError(error))
                     }
                 }
             }

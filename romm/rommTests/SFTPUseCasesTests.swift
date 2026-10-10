@@ -80,4 +80,41 @@ struct SFTPUseCasesTests {
         #expect(manager.testedCredentialsConnections == [connection.id])
         #expect(isConnected == false)
     }
+
+    @Test func testConnectionUseCaseExecuteMapsConnectedStatusToTrue() async throws {
+        let manager = FakeSFTPConnectionManager()
+        manager.connectionStatus = .connected
+        let useCase = TestConnectionUseCase(connectionManager: manager)
+
+        let isConnected = await useCase.execute(connection)
+
+        #expect(manager.checkedStatusConnections == [connection.id])
+        #expect(isConnected == true)
+    }
+
+    @Test func testConnectionUseCaseExecuteMapsNonConnectedStatusToFalse() async throws {
+        let manager = FakeSFTPConnectionManager()
+        manager.connectionStatus = .error
+        let useCase = TestConnectionUseCase(connectionManager: manager)
+
+        let isConnected = await useCase.execute(connection)
+
+        #expect(isConnected == false)
+    }
+
+    @Test func testConnectionUseCaseExecuteWithCredentialsThrowsPropagatesTheManagerError() async throws {
+        let manager = FakeSFTPConnectionManager()
+        manager.testConnectionResult = .failure(SFTPError.authenticationFailed)
+        let useCase = TestConnectionUseCase(connectionManager: manager)
+        let credentials = SFTPCredentials(host: connection.host, port: connection.port, username: connection.username, authenticationType: .password, password: "secret")
+
+        do {
+            _ = try await useCase.executeWithCredentialsThrows(connection, credentials: credentials)
+            Issue.record("Expected SFTPError.authenticationFailed")
+        } catch SFTPError.authenticationFailed {
+            // expected: unlike executeWithCredentials, this entry point does not swallow the error
+        } catch {
+            Issue.record("Expected SFTPError.authenticationFailed, got \(error)")
+        }
+    }
 }

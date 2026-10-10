@@ -64,8 +64,13 @@ struct SFTPServiceTests {
         task.cancel()
         resumeAfterCancel.signal()
 
-        await #expect(throws: SFTPError.self) {
-            try await task.value
+        do {
+            _ = try await task.value
+            Issue.record("Expected SFTPError.cancelled")
+        } catch SFTPError.cancelled {
+            // expected: cancellation is reported as such, not as a generic download failure
+        } catch {
+            Issue.record("Expected SFTPError.cancelled, got \(error)")
         }
         #expect(client.downloadWasStoppedEarly)
     }
