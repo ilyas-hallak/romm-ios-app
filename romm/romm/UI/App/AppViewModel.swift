@@ -66,14 +66,19 @@ class AppViewModel {
     private var endpointResolution: Task<Void, Never>?
 
     private let factory: PDependencyFactory
+    private let notificationCenter: NotificationCenter
 
     private var cancellables = Set<AnyCancellable>()
     private var isUITesting: Bool { launchArguments.contains("-ui_testing") || launchArguments.contains("-FASTLANE_SNAPSHOT") }
     private var shouldForceSetupForUITests: Bool { launchArguments.contains("-ui_testing_force_setup") }
     private var shouldForceAuthenticatedForUITests: Bool { launchArguments.contains("-ui_testing_force_authenticated") }
 
-    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+    init(
+        factory: PDependencyFactory = DefaultDependencyFactory.shared,
+        notificationCenter: NotificationCenter = .default
+    ) {
         self.factory = factory
+        self.notificationCenter = notificationCenter
         self.saveSetupConfigurationUseCase = factory.makeSaveSetupConfigurationUseCase()
         self.getSetupConfigurationUseCase = factory.makeGetSetupConfigurationUseCase()
         self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
@@ -85,7 +90,7 @@ class AppViewModel {
         self.resolveServerEndpointUseCase = factory.makeResolveServerEndpointUseCase()
 
         // Listen for restart setup requests
-        NotificationCenter.default.addObserver(
+        notificationCenter.addObserver(
             forName: .restartSetupRequested,
             object: nil,
             queue: .main
@@ -97,7 +102,7 @@ class AppViewModel {
         }
 
         // Listen for session expiration (401 errors during usage)
-        NotificationCenter.default.addObserver(
+        notificationCenter.addObserver(
             forName: .sessionExpired,
             object: nil,
             queue: .main
@@ -161,13 +166,13 @@ class AppViewModel {
 
     func saveConfiguration(serverURL: String, username: String, password: String) async {
         logger.debug("Save configuration requested")
-        appState = .loading
         guard !serverURL.isEmpty, !username.isEmpty, !password.isEmpty else {
             logger.warning("Missing required fields")
             appData.updateError("Please fill in all required fields")
             return
         }
 
+        appState = .loading
         appData.updateLoading(true)
         appData.updateError(nil)
 
@@ -264,6 +269,10 @@ class AppViewModel {
             return
         }
         isHandlingSessionExpiration = true
+
+        // A server-version alert can be showing while an unrelated request
+        // expires; don't leave it dangling once we've already left for setup.
+        serverVersionAlert = nil
 
         // Clear configuration and redirect to setup
         do {
