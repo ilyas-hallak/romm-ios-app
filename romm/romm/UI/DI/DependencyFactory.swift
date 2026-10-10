@@ -229,7 +229,10 @@ class DefaultDependencyFactory: PDependencyFactory {
     
     lazy var sftpKeychainService: PSFTPKeychainService = SFTPKeychainService()
     lazy var sftpRepository: PSFTPRepository = SFTPRepository(keychainService: sftpKeychainService)
-    lazy var sftpService: PSFTPService = SFTPService(repository: sftpRepository)
+    lazy var sftpService: PSFTPService = SFTPService(
+        repository: sftpRepository,
+        makeClient: { MFTSFTPClient(endpoint: $0) }
+    )
     lazy var sftpConnectionManager: SFTPConnectionManager = {
         let manager = SFTPConnectionManager.shared
         manager.configure(with: sftpService)

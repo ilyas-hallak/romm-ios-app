@@ -104,6 +104,13 @@ class SFTPConnectionManager: ObservableObject {
         }
     }
     
+    func testConnection(_ connection: SFTPConnection, credentials: SFTPCredentials) async throws -> Bool {
+        guard let sftpService = sftpService else {
+            throw SFTPError.serviceNotConfigured
+        }
+        return try await sftpService.testConnectionWithCredentials(connection, credentials: credentials)
+    }
+    
     func listDirectory(at path: String, connection: SFTPConnection) async throws -> [SFTPDirectoryItem] {
         guard let sftpService = sftpService else {
             throw SFTPError.serviceNotConfigured
