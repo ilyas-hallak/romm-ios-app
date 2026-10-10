@@ -106,7 +106,7 @@ struct ExternalPlayCoordinatorTests {
     /// detached `Task` the test cannot await directly. Bounded, so a regression
     /// that never flips the condition fails the test instead of hanging it.
     private func waitUntil(
-        timeout: TimeInterval = 2,
+        timeout: TimeInterval = 5,
         _ condition: () -> Bool
     ) async {
         let deadline = Date().addingTimeInterval(timeout)

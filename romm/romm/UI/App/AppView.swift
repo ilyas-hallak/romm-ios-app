@@ -78,6 +78,17 @@ struct AppView: View {
             }
         }
         .alert(
+            "Error",
+            isPresented: Binding(
+                get: { appViewModel.appData.errorMessage != nil },
+                set: { if !$0 { appViewModel.appData.updateError(nil) } }
+            )
+        ) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(appViewModel.appData.errorMessage ?? "")
+        }
+        .alert(
             appViewModel.serverVersionAlert?.title ?? "Server Version Changed",
             isPresented: Binding(
                 get: { appViewModel.serverVersionAlert != nil },

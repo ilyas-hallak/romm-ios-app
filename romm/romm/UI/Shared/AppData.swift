@@ -33,6 +33,10 @@ struct DownloadFlight: Identifiable, Equatable {
 class AppData: ObservableObject {
     @Published var currentUser: User?
     @Published var isAuthenticated: Bool = false
+    /// Shown once as an alert at the root level (`AppView`), regardless of the
+    /// current screen, then cleared. Use this instead of a screen-local error
+    /// property for anything that can happen while the app transitions screens,
+    /// such as a session expiring.
     @Published var errorMessage: String?
     @Published var currentConfiguration: AppConfiguration?
     @Published var isLoading: Bool = false
