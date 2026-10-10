@@ -42,6 +42,39 @@ struct SFTPServiceTests {
         #expect(client.didDisconnect)
     }
 
+    @Test func cancellingTheAwaitingTaskStopsAnInProgressDownload() async throws {
+        client.downloadProgress = [(10, 100), (50, 100), (100, 100)]
+        let (service, _) = makeService()
+
+        // Only the fake's own background-queue thread blocks on the semaphore;
+        // the test awaits a continuation instead, so it never ties up a thread
+        // in the cooperative pool the awaited Task also needs to run on.
+        let reachedSecondTick = SingleSignal()
+        let resumeAfterCancel = DispatchSemaphore(value: 0)
+        client.beforeSecondDownloadTick = {
+            reachedSecondTick.signal()
+            resumeAfterCancel.wait()
+        }
+
+        let task = Task {
+            try await service.downloadFile(from: "/roms/gba/game.gba", to: "/tmp/game.gba", connection: connection) { _, _ in }
+        }
+
+        await reachedSecondTick.wait()
+        task.cancel()
+        resumeAfterCancel.signal()
+
+        do {
+            _ = try await task.value
+            Issue.record("Expected SFTPError.cancelled")
+        } catch SFTPError.cancelled {
+            // expected: cancellation is reported as such, not as a generic download failure
+        } catch {
+            Issue.record("Expected SFTPError.cancelled, got \(error)")
+        }
+        #expect(client.downloadWasStoppedEarly)
+    }
+
     @Test func downloadFileWritesThroughTheClientAndReportsProgress() async throws {
         client.downloadProgress = [(40, 100), (100, 100)]
         let (service, _) = makeService()
@@ -141,6 +174,36 @@ struct SFTPServiceTests {
 
 private final class EndpointRecorder: @unchecked Sendable {
     var endpoints: [SFTPEndpoint] = []
+}
+
+/// A one-shot async gate: `signal()` can come from any thread (here, the
+/// fake's background queue), `wait()` suspends without blocking a thread.
+nonisolated private final class SingleSignal: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var didSignal = false
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if didSignal {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                self.continuation = continuation
+                lock.unlock()
+            }
+        }
+    }
+
+    func signal() {
+        lock.lock()
+        didSignal = true
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume()
+    }
 }
 
 @MainActor

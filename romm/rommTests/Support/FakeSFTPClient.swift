@@ -16,12 +16,16 @@ final class FakeSFTPClient: SFTPClient, @unchecked Sendable {
     var downloadProgress: [(UInt64, UInt64)] = []
     var uploadError: Error?
     var contentsError: Error?
+    /// Runs right before the second download tick, so a test can cancel the
+    /// awaiting Task in between two ticks and see the next one get refused.
+    var beforeSecondDownloadTick: (() -> Void)?
 
     private(set) var removedPaths: [String] = []
     private(set) var createdDirectories: [String] = []
     private(set) var uploads: [(local: String, remote: String)] = []
     private(set) var downloads: [(remote: String, local: String)] = []
     private(set) var didDisconnect = false
+    private(set) var downloadWasStoppedEarly = false
 
     func connect() throws {}
     func authenticate() throws {}
@@ -40,7 +44,15 @@ final class FakeSFTPClient: SFTPClient, @unchecked Sendable {
 
     func downloadFile(atPath remotePath: String, toPath localPath: String, progress: @escaping (UInt64, UInt64) -> Bool) throws {
         downloads.append((remotePath, localPath))
-        for (received, total) in downloadProgress where !progress(received, total) { break }
+        for (index, tick) in downloadProgress.enumerated() {
+            if index == 1 {
+                beforeSecondDownloadTick?()
+            }
+            guard progress(tick.0, tick.1) else {
+                downloadWasStoppedEarly = true
+                throw SFTPError.downloadFailed
+            }
+        }
     }
 
     func createDirectory(atPath path: String) throws { createdDirectories.append(path) }
