@@ -79,17 +79,6 @@ struct HomeView: View {
                 if !viewModel.hasStartedLoading {
                     await viewModel.load()
                 }
-                // Skipped while the account sheet is up, so the one-time hint
-                // never has to compete with it for the screen.
-                if !showingAccount {
-                    await viewModel.checkUploadSignInHint()
-                }
-            }
-            .alert("Uploads Need a New Sign-In", isPresented: $viewModel.showUploadSignInAlert) {
-                Button("Sign In Again") { viewModel.signInAgainForUpload() }
-                Button("Not Now", role: .cancel) { viewModel.dismissUploadSignInHint() }
-            } message: {
-                Text("To upload ROMs from this device, sign in again and allow uploads.")
             }
             // Local and free, so it can run on every appearance and pick up a
             // sync that finished on the Save Sync screen. The badge never

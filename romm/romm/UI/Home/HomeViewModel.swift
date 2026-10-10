@@ -21,28 +21,15 @@ class HomeViewModel {
 
     var hasStartedLoading = false
 
-    /// Shows the one-time "sign in again to upload" hint; set by
-    /// `checkUploadSignInHint()`, cleared once the user answers either button.
-    var showUploadSignInAlert = false
-    /// The check costs a request, so it runs once per session rather than on
-    /// every return to Home.
-    private var hasCheckedUploadSignInHint = false
-
     private let getRomsWithFiltersUseCase: GetRomsWithFiltersUseCase
     private let getPlatformsUseCase: GetPlatformsUseCase
     private let getCollectionsUseCase: GetCollectionsUseCase
-    private let getRomUploadAvailabilityUseCase: GetRomUploadAvailabilityUseCase
-    private let clearSetupConfigurationUseCase: PClearSetupConfigurationUseCase
-    private let signInHintStore: PRomUploadSignInHintStore
     private let tokenProvider: PTokenProvider
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.getRomsWithFiltersUseCase = factory.makeGetRomsWithFiltersUseCase()
         self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
         self.getCollectionsUseCase = factory.makeGetCollectionsUseCase()
-        self.getRomUploadAvailabilityUseCase = factory.makeGetRomUploadAvailabilityUseCase()
-        self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
-        self.signInHintStore = factory.romUploadSignInHintStore
         self.tokenProvider = factory.tokenProvider
     }
 
@@ -68,32 +55,6 @@ class HomeViewModel {
             group.addTask { await self.fetchCollections() }
         }
         prefetchCovers()
-    }
-
-    /// Shows the upload sign-in hint at most once per installation. Only ever
-    /// turns `showUploadSignInAlert` on for `.missingScope`; every other
-    /// availability (including a failed check) leaves the hint unmarked, so an
-    /// account that is simply not allowed to upload, or a server that answers
-    /// later, still gets a fair chance to show it.
-    func checkUploadSignInHint() async {
-        guard !hasCheckedUploadSignInHint, !signInHintStore.hasShownMissingScopeHint else { return }
-        hasCheckedUploadSignInHint = true
-        let availability = await getRomUploadAvailabilityUseCase.execute()
-        guard availability == .missingScope else { return }
-        showUploadSignInAlert = true
-    }
-
-    /// "Sign In Again" on the hint. Same composition as
-    /// `ProfileViewModel.restartSetup()` and `RomUploadSheetViewModel.signInAgain()`.
-    func signInAgainForUpload() {
-        signInHintStore.markMissingScopeHintShown()
-        try? clearSetupConfigurationUseCase.execute()
-        NotificationCenter.default.post(name: .restartSetupRequested, object: nil)
-    }
-
-    /// "Not Now" on the hint: just stop asking again.
-    func dismissUploadSignInHint() {
-        signInHintStore.markMissingScopeHintShown()
     }
 
     private func fetchRecentlyAdded() async {

@@ -22,7 +22,6 @@ final class RomUploadSheetViewModel {
     private let getAvailabilityUseCase: GetRomUploadAvailabilityUseCase
     private let suggestPlatformUseCase: SuggestPlatformForFileUseCase
     private let discardStagedRomUseCase: DiscardStagedRomUseCase
-    private let clearSetupConfigurationUseCase: PClearSetupConfigurationUseCase
     private let queueManager: RomUploadQueueManager
 
     init(
@@ -35,7 +34,6 @@ final class RomUploadSheetViewModel {
         self.getAvailabilityUseCase = factory.makeGetRomUploadAvailabilityUseCase()
         self.suggestPlatformUseCase = factory.makeSuggestPlatformForFileUseCase()
         self.discardStagedRomUseCase = factory.makeDiscardStagedRomUseCase()
-        self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
         self.queueManager = queueManager
     }
 
@@ -50,7 +48,7 @@ final class RomUploadSheetViewModel {
         case .available:
             return nil
         case .missingScope:
-            return "This sign-in does not include permission to upload ROMs. Sign in again and allow uploads to fix it."
+            return "This sign-in does not include permission to upload ROMs. Sign out and sign in again to allow uploads."
         case .notAllowedForAccount:
             return "Your account is not allowed to upload ROMs. Ask a server admin for a role that can."
         case .serverTooOld(let version):
@@ -58,19 +56,6 @@ final class RomUploadSheetViewModel {
         case .unknown:
             return "Could not reach the server to check whether uploads are supported."
         }
-    }
-
-    /// Only a missing scope on the current sign-in can be fixed by signing in
-    /// again; a role without the scope needs a server admin instead.
-    var canSignInAgain: Bool {
-        availability == .missingScope
-    }
-
-    /// Same composition as `ProfileViewModel.restartSetup()`: clear the stored
-    /// setup, then let `AppViewModel` take it from there.
-    func signInAgain() {
-        try? clearSetupConfigurationUseCase.execute()
-        NotificationCenter.default.post(name: .restartSetupRequested, object: nil)
     }
 
     func load() async {

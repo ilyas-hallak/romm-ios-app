@@ -342,7 +342,6 @@ class MockDependencyFactory: PDependencyFactory {
 
     /// In memory rather than `.standard`: tests must not see a hint left shown
     /// by a previous run, and must not leak one into the next.
-    lazy var romUploadSignInHintStore: PRomUploadSignInHintStore = InMemoryRomUploadSignInHintStore()
 
     // MARK: - SFTP Use Cases
 

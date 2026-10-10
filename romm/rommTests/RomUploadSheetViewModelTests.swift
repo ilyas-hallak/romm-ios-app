@@ -7,20 +7,14 @@ import Testing
 import Foundation
 @testable import romm
 
-/// Overrides the two factory methods `RomUploadSheetViewModel` needs beyond
+/// Overrides the one factory method `RomUploadSheetViewModel` needs beyond
 /// what `MockDependencyFactory` already supports via injection: availability
-/// comes from a `FakeRomUploadRepository` this test controls directly, and
-/// "sign in again" from a use case double that records its calls.
+/// comes from a `FakeRomUploadRepository` this test controls directly.
 private final class RomUploadSheetTestFactory: MockDependencyFactory {
     let romUploadRepositoryFake = FakeRomUploadRepository()
-    let clearSetupConfigurationUseCaseFake = FakeClearSetupConfigurationUseCase()
 
     override func makeGetRomUploadAvailabilityUseCase() -> GetRomUploadAvailabilityUseCase {
         GetRomUploadAvailabilityUseCase(repository: romUploadRepositoryFake)
-    }
-
-    override func makeClearSetupConfigurationUseCase() -> PClearSetupConfigurationUseCase {
-        clearSetupConfigurationUseCaseFake
     }
 }
 
@@ -51,10 +45,10 @@ struct RomUploadSheetViewModelTests {
         #expect(vm.unavailableMessage == nil)
     }
 
-    @Test func unavailableMessageExplainsAMissingScopeAndOffersToSignInAgain() async {
+    @Test func unavailableMessageTellsAMissingScopeToSignInAgain() async {
         let (vm, _) = makeViewModel(availability: .missingScope)
         await vm.load()
-        #expect(vm.unavailableMessage == "This sign-in does not include permission to upload ROMs. Sign in again and allow uploads to fix it.")
+        #expect(vm.unavailableMessage == "This sign-in does not include permission to upload ROMs. Sign out and sign in again to allow uploads.")
     }
 
     @Test func unavailableMessageExplainsAnAccountRoleThatCannotUpload() async {
@@ -73,37 +67,5 @@ struct RomUploadSheetViewModelTests {
         let (vm, _) = makeViewModel(availability: .unknown)
         await vm.load()
         #expect(vm.unavailableMessage == "Could not reach the server to check whether uploads are supported.")
-    }
-
-    // MARK: - canSignInAgain
-
-    @Test func canSignInAgainIsTrueOnlyForMissingScope() async {
-        let (missingScope, _) = makeViewModel(availability: .missingScope)
-        await missingScope.load()
-        #expect(missingScope.canSignInAgain)
-
-        for availability: RomUploadAvailability in [.available, .notAllowedForAccount, .serverTooOld(version: "4.5.0"), .unknown] {
-            let (vm, _) = makeViewModel(availability: availability)
-            await vm.load()
-            #expect(vm.canSignInAgain == false)
-        }
-    }
-
-    // MARK: - signInAgain()
-
-    @Test func signInAgainClearsSetupAndPostsRestartSetupRequested() async {
-        let (vm, factory) = makeViewModel(availability: .missingScope)
-        await vm.load()
-
-        var observedNotification = false
-        let observer = NotificationCenter.default.addObserver(forName: .restartSetupRequested, object: nil, queue: nil) { _ in
-            observedNotification = true
-        }
-        defer { NotificationCenter.default.removeObserver(observer) }
-
-        vm.signInAgain()
-
-        #expect(factory.clearSetupConfigurationUseCaseFake.executeCallCount == 1)
-        #expect(observedNotification)
     }
 }
