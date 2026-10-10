@@ -8,9 +8,9 @@
 import Foundation
 
 class ClearConnectionCacheUseCase {
-    private let connectionManager: SFTPConnectionManager
+    private let connectionManager: PSFTPConnectionManager
     
-    init(connectionManager: SFTPConnectionManager) {
+    init(connectionManager: PSFTPConnectionManager) {
         self.connectionManager = connectionManager
     }
     

@@ -25,9 +25,22 @@ func withTimeout<T: Sendable>(_ timeout: TimeInterval, operation: @escaping () a
     }
 }
 
+protocol PSFTPConnectionManager: AnyObject {
+    func checkConnectionStatus(for connection: SFTPConnection, forceRefresh: Bool) async -> ConnectionStatus
+    func checkAllConnectionStatuses(for connections: [SFTPConnection], forceRefresh: Bool) async
+    func testConnection(_ connection: SFTPConnection, credentials: SFTPCredentials) async throws -> Bool
+    func listDirectory(at path: String, connection: SFTPConnection) async throws -> [SFTPDirectoryItem]
+    func uploadFile(from localPath: String, to remotePath: String, connection: SFTPConnection, progressHandler: @escaping @Sendable @MainActor (Int64, Int64) -> Void) async throws
+    func downloadFile(from remotePath: String, to localPath: String, connection: SFTPConnection, progressHandler: @escaping @Sendable @MainActor (Int64, Int64) -> Void) async throws
+    func createDirectory(at path: String, connection: SFTPConnection) async throws
+    func deleteFile(at path: String, connection: SFTPConnection) async throws
+    func clearCache() async
+    func clearCache(for connection: SFTPConnection) async
+}
+
 // Remove @MainActor - SFTP operations must NOT block main thread!
 // UI updates will be explicitly done via MainActor.run where needed
-class SFTPConnectionManager: ObservableObject {
+class SFTPConnectionManager: ObservableObject, PSFTPConnectionManager {
     static let shared = SFTPConnectionManager()
 
     private var sftpService: PSFTPService?
@@ -158,7 +171,14 @@ class SFTPConnectionManager: ObservableObject {
         }
         try await sftpService.createDirectory(at: path, connection: connection)
     }
-    
+
+    func deleteFile(at path: String, connection: SFTPConnection) async throws {
+        guard let sftpService = sftpService else {
+            throw SFTPError.serviceNotConfigured
+        }
+        try await sftpService.deleteFile(at: path, connection: connection)
+    }
+
     func clearCache() async {
         connectionStatusCache.removeAll()
         await MainActor.run {

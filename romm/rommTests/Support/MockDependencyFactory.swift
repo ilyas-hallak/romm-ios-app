@@ -78,12 +78,9 @@ class MockDependencyFactory: PDependencyFactory {
         _injectedSFTPService ?? { fatalError("PSFTPService was not stubbed") }()
     }
 
-    // `SFTPConnectionManager` has a private init, so no fresh instance can be
-    // created. Without injection the access traps rather than mutating the
-    // production `.shared` singleton (which would leak across parallel tests).
-    private let _injectedSFTPConnectionManager: SFTPConnectionManager?
-    var sftpConnectionManager: SFTPConnectionManager {
-        _injectedSFTPConnectionManager ?? { fatalError("SFTPConnectionManager was not stubbed") }()
+    private let _injectedSFTPConnectionManager: PSFTPConnectionManager?
+    var sftpConnectionManager: PSFTPConnectionManager {
+        _injectedSFTPConnectionManager ?? { fatalError("PSFTPConnectionManager was not stubbed") }()
     }
 
     private let _injectedFileValidationService: PFileValidationService?
@@ -155,7 +152,7 @@ class MockDependencyFactory: PDependencyFactory {
         heartbeatRepository: PHeartbeatRepository? = nil,
         sftpKeychainService: PSFTPKeychainService? = nil,
         sftpService: PSFTPService? = nil,
-        sftpConnectionManager: SFTPConnectionManager? = nil,
+        sftpConnectionManager: PSFTPConnectionManager? = nil,
         apiClient: PRommAPIClient? = nil,
         fileValidationService: PFileValidationService? = nil,
         transferHistoryRepository: PTransferHistoryRepository? = nil,

@@ -26,7 +26,7 @@ protocol PDependencyFactory {
     // Services
     var sftpKeychainService: PSFTPKeychainService { get }
     var sftpService: PSFTPService { get }
-    var sftpConnectionManager: SFTPConnectionManager { get }
+    var sftpConnectionManager: PSFTPConnectionManager { get }
     var apiClient: PRommAPIClient { get }
     var fileValidationService: PFileValidationService { get }
     var tokenProvider: PTokenProvider { get }
@@ -233,7 +233,7 @@ class DefaultDependencyFactory: PDependencyFactory {
         repository: sftpRepository,
         makeClient: { MFTSFTPClient(endpoint: $0) }
     )
-    lazy var sftpConnectionManager: SFTPConnectionManager = {
+    lazy var sftpConnectionManager: PSFTPConnectionManager = {
         let manager = SFTPConnectionManager.shared
         manager.configure(with: sftpService)
         return manager

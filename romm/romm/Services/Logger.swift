@@ -45,6 +45,7 @@ enum LogCategory: String, CaseIterable, Codable {
     /// the chain you follow when Play does not do what it should, and it spans
     /// several layers.
     case emulator = "Emulator"
+    case sftp = "SFTP"
 }
 
 class LogConfiguration: ObservableObject {
@@ -274,6 +275,7 @@ extension Logger {
     static let viewModel = Logger(category: .viewModel)
     static let sync = Logger(category: .sync)
     static let emulator = Logger(category: .emulator)
+    static let sftp = Logger(category: .sftp)
 }
 
 // MARK: - Performance Measurement Helper
