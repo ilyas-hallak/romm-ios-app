@@ -65,7 +65,7 @@ Games can also be handed off to RetroArch, Delta, Manic EMU or Provenance.
 
 **Library**
 - Covers, screenshots and full metadata from your RomM server
-- Browse by platform, search the whole library, organise games in collections
+- Browse by platform, search the whole library, organize games in collections
 - Card and list layouts, dark mode, server statistics
 - Quick server setup by scanning a QR code
 
