@@ -380,6 +380,7 @@ private final class FailingBackupSaveStore: PSaveStore {
     func setBatteryModifiedAt(romId: Int, date: Date) throws { try wrapping.setBatteryModifiedAt(romId: romId, date: date) }
 
     func listRomIds() throws -> [Int] { try wrapping.listRomIds() }
+    func deleteSaves(romId: Int) throws { try wrapping.deleteSaves(romId: romId) }
     func listStates(romId: Int) throws -> [SaveStateEntry] { try wrapping.listStates(romId: romId) }
     func readState(romId: Int, slot: Int) throws -> Data? { try wrapping.readState(romId: romId, slot: slot) }
     func writeState(romId: Int, slot: Int, data: Data) throws { try wrapping.writeState(romId: romId, slot: slot, data: data) }

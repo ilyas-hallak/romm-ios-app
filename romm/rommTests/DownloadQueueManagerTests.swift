@@ -458,6 +458,21 @@ struct DownloadQueueManagerTests {
         #expect(fixture.store.allJobs().map(\.romId) == [7])
     }
 
+    @Test func cancelAllStopsRunningAndStartingDownloads() async throws {
+        let fixture = makeFixture()
+        fixture.manager.enqueue(rom: rom())
+        await settle { isRunning(7, in: fixture.store) }
+        let jobId = try #require(fixture.store.job(romId: 7)).id
+        fixture.manager.enqueue(rom: rom(id: 8, name: "Yellow"))
+
+        fixture.manager.cancelAll()
+        await settle()
+
+        #expect(fixture.client.cancelledJobIds == [jobId])
+        #expect(fixture.store.allJobs().isEmpty)
+        #expect(fixture.manager.activeCount == 0)
+    }
+
     // MARK: - App lifecycle
 
     @Test func backgroundSessionEventsAreHandedToTheSession() async throws {

@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+/// What logging out needs from the download queue.
+protocol PDownloadCancelling {
+    func cancelAll()
+}
+
 /// The app-wide download queue as the screens see it: a flat list of ROMs with
 /// a status each.
 ///
@@ -15,7 +20,7 @@ import Observation
 /// derived from the coordinator.
 @Observable
 @MainActor
-final class DownloadQueueManager {
+final class DownloadQueueManager: PDownloadCancelling {
     static let shared = DownloadQueueManager(apiClient: DefaultDependencyFactory.shared.apiClient)
 
     /// Rows for ROMs whose file list is still being fetched. They have no job
@@ -186,6 +191,12 @@ final class DownloadQueueManager {
         disposals[id] = entry.state == .queued ? .drop : .markCancelled
         coordinator.cancel(romId: id)
         reconcile()
+    }
+
+    /// Stops every download that has not settled yet, each as its Cancel button would.
+    func cancelAll() {
+        let ids = Set(pendingTasks.map(\.id) + coordinator.jobs.map(\.romId) + startTasks.keys)
+        ids.forEach(cancel(id:))
     }
 
     /// Removes a queued, finished, failed or cancelled row. A queued one is

@@ -26,6 +26,12 @@ final class LocalSaveStoreRepository: PSaveStore {
         return entries.compactMap { Int($0.lastPathComponent) }.sorted()
     }
 
+    func deleteSaves(romId: Int) throws {
+        let url = SaveStorePaths.romDir(root: rootDirectory, romId: romId)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.removeItem(at: url)
+    }
+
     // MARK: - Battery
 
     func readBattery(romId: Int) throws -> Data? {

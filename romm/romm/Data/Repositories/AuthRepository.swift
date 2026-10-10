@@ -35,26 +35,6 @@ class AuthRepository: PAuthRepository {
         }
     }
     
-    func logout() async throws {
-        logger.info("Logging out...")
-        
-        do {
-            // Try to call logout endpoint
-            _ = try await apiClient.post("api/auth/logout", body: nil)
-            logger.info("Logout API call successful")
-        } catch {
-            logger.warning("Logout API call failed, continuing with local cleanup: \(error)")
-        }
-        
-        // Always clear local authentication state
-        await MainActor.run {
-            self.isAuthenticated = false
-            self.currentUser = nil            
-        }
-        
-        logger.info("Logout complete")
-    }
-    
     func getCurrentUser() async throws -> User? {
         logger.info("Getting current user with authenticated request...")
         
