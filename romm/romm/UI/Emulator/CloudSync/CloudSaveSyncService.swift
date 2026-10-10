@@ -48,6 +48,9 @@ final class CloudSaveSyncService {
     /// Routes every state slot through the same decision logic `SaveSyncRunner`
     /// uses, so the two never grow different ideas of "changed".
     private let stateSyncCoordinator: StateSyncCoordinator
+    /// Runs the download/trim/write/confirm chain this service shares with
+    /// `SaveSyncRunner` and `BatteryConflictResolver` (see issue #212).
+    private let batteryDownloadChain: BatteryDownloadChain
 
     init(
         config: Config,
@@ -83,6 +86,11 @@ final class CloudSaveSyncService {
             uploadStateUseCase: uploadStateUseCase,
             updateStateUseCase: updateStateUseCase,
             downloadStateUseCase: downloadStateUseCase
+        )
+        self.batteryDownloadChain = BatteryDownloadChain(
+            saveStore: saveStore,
+            downloadSaveUseCase: downloadSaveUseCase,
+            confirmSaveDownloadUseCase: confirmSaveDownloadUseCase
         )
     }
 
@@ -259,14 +267,14 @@ final class CloudSaveSyncService {
         ) else { return }
         do {
             let deviceId = await syncDevice.deviceId()
-            let data = try await downloadSaveUseCase.execute(id: saveId, deviceId: deviceId, sessionId: nil)
-            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: config.platformSlug)
-            if BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank) {
-                try saveStore.writeBattery(romId: config.romId, data: trimmed)
-                if let serverDate = op.serverUpdatedAt {
-                    try? saveStore.setBatteryModifiedAt(romId: config.romId, date: serverDate)
-                }
-                logger.info("Negotiate down: battery (\(trimmed.count) bytes)")
+            let result = try await batteryDownloadChain.apply(
+                romId: config.romId, saveId: saveId, deviceId: deviceId,
+                serverUpdatedAt: op.serverUpdatedAt, platformSlug: config.platformSlug
+            ) { trimmed in
+                BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank)
+            }
+            if result.wrote {
+                logger.info("Negotiate down: battery (\(result.data.count) bytes)")
             } else {
                 logger.info("Negotiate down: candidate battery is blank, keeping the local save")
             }
@@ -277,7 +285,6 @@ final class CloudSaveSyncService {
                 serverBatteryId = saveId
                 serverBatteryUpdatedAt = op.serverUpdatedAt
             }
-            await confirmDownload(saveId: saveId, deviceId: deviceId)
         } catch {
             logger.error("Negotiate battery download failed (id=\(saveId)): \(error.localizedDescription)")
         }
@@ -298,32 +305,21 @@ final class CloudSaveSyncService {
             ) else { return }
 
             let deviceId = await syncDevice.deviceId()
-            let data = try await downloadSaveUseCase.execute(id: match.id, deviceId: deviceId, sessionId: nil)
-            let trimmed = GBABatteryFooter.trimmingRTCFooter(from: data, platformSlug: config.platformSlug)
-            if BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank) {
-                try saveStore.writeBattery(romId: config.romId, data: trimmed)
-                // Preserve server mtime so subsequent local-vs-server compares are
-                // not skewed by device clock drift after the write-to-disk timestamp.
-                try? saveStore.setBatteryModifiedAt(romId: config.romId, date: match.updatedAt)
-                logger.info("Battery pulled (\(trimmed.count) bytes)")
+            // Preserve server mtime so subsequent local-vs-server compares are
+            // not skewed by device clock drift after the write-to-disk timestamp.
+            let result = try await batteryDownloadChain.apply(
+                romId: config.romId, saveId: match.id, deviceId: deviceId,
+                serverUpdatedAt: match.updatedAt, platformSlug: config.platformSlug
+            ) { trimmed in
+                BatteryDownloadDecision.mayReplaceLocal(downloaded: trimmed, localIsBlank: localIsBlank)
+            }
+            if result.wrote {
+                logger.info("Battery pulled (\(result.data.count) bytes)")
             } else {
                 logger.info("Battery pull: candidate is blank, keeping the local save")
             }
-            await confirmDownload(saveId: match.id, deviceId: deviceId)
         } catch {
             logger.error("Battery pull failed: \(error.localizedDescription)")
-        }
-    }
-
-    /// Tells the server this device now has the save's content, so the next
-    /// `negotiate` stops replanning the same download. Best effort: a failure
-    /// here only means the next sync re-downloads something we already have.
-    private func confirmDownload(saveId: Int, deviceId: String?) async {
-        guard let deviceId else { return }
-        do {
-            _ = try await confirmSaveDownloadUseCase.execute(id: saveId, deviceId: deviceId)
-        } catch {
-            logger.warning("Download confirmation failed (id=\(saveId)): \(error.localizedDescription)")
         }
     }
 
