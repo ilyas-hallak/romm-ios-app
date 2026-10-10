@@ -74,22 +74,6 @@ private final class FakeSyncDevice: PSyncDeviceRepository, @unchecked Sendable {
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
 }
 
-private final class FakeTokenProvider: PTokenProvider, @unchecked Sendable {
-    var serverURL: String? = "https://example.org"
-
-    func getServerURL() -> String? { serverURL }
-    func getKnownServerURLs() -> [String] { serverURL.map { [$0] } ?? [] }
-    func getAuthToken() -> String? { "token" }
-    func getUsername() -> String? { "tester" }
-    func getPassword() -> String? { nil }
-    func isConfigured() -> Bool { serverURL != nil }
-    func getAuthMethod() -> AuthMethod { .classic }
-    func getClientToken() -> String? { nil }
-    func getClientTokenInfo() -> ClientTokenInfo? { nil }
-    func hasScope(_ scope: String) -> Bool { true }
-    var availableScopes: [String]? { nil }
-}
-
 struct SyncPreviewUseCaseTests {
 
     private func makeStore() -> LocalSaveStoreRepository {

@@ -20,6 +20,8 @@ protocol PDependencyFactory {
     var localROMRepository: PLocalROMRepository { get }
     var statsRepository: PStatsRepository { get }
     var heartbeatRepository: PHeartbeatRepository { get }
+    var romUploadRepository: PRomUploadRepository { get }
+    var incomingRomFileRepository: PIncomingRomFileRepository { get }
 
     // Services
     var sftpKeychainService: PSFTPKeychainService { get }
@@ -56,7 +58,13 @@ protocol PDependencyFactory {
     func makeCreateCollectionUseCase() -> CreateCollectionUseCase
     func makeUpdateCollectionUseCase() -> UpdateCollectionUseCase
     func makeDeleteCollectionUseCase() -> DeleteCollectionUseCase
-    
+
+    // ROM Upload Use Cases
+    func makeGetRomUploadAvailabilityUseCase() -> GetRomUploadAvailabilityUseCase
+    func makeStageIncomingRomUseCase() -> StageIncomingRomUseCase
+    func makeSuggestPlatformForFileUseCase() -> SuggestPlatformForFileUseCase
+    func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase
+
     // Setup Use Cases
     func makeSaveSetupConfigurationUseCase() -> PSaveSetupConfigurationUseCase
     func makeGetSetupConfigurationUseCase() -> PGetSetupConfigurationUseCase
@@ -202,6 +210,13 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var localROMRepository: PLocalROMRepository = LocalROMRepository()
     lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
+    lazy var romUploadRepository: PRomUploadRepository = RomUploadRepository(
+        apiClient: apiClient,
+        tokenProvider: tokenProvider,
+        heartbeat: heartbeatRepository,
+        authRepository: authRepository
+    )
+    lazy var incomingRomFileRepository: PIncomingRomFileRepository = IncomingRomFileRepository()
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
     lazy var serverEndpointRepository: PServerEndpointRepository = ServerEndpointRepository()
     
@@ -333,7 +348,25 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeDeleteCollectionUseCase() -> DeleteCollectionUseCase {
         DeleteCollectionUseCase(collectionsRepository: collectionsRepository)
     }
-    
+
+    // MARK: - ROM Upload
+
+    func makeGetRomUploadAvailabilityUseCase() -> GetRomUploadAvailabilityUseCase {
+        GetRomUploadAvailabilityUseCase(repository: romUploadRepository)
+    }
+
+    func makeStageIncomingRomUseCase() -> StageIncomingRomUseCase {
+        StageIncomingRomUseCase(repository: incomingRomFileRepository)
+    }
+
+    func makeSuggestPlatformForFileUseCase() -> SuggestPlatformForFileUseCase {
+        SuggestPlatformForFileUseCase()
+    }
+
+    func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase {
+        DiscardStagedRomUseCase(repository: incomingRomFileRepository)
+    }
+
     // MARK: - Setup Use Cases
     
     func makeSaveSetupConfigurationUseCase() -> PSaveSetupConfigurationUseCase {

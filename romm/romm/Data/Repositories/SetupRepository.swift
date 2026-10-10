@@ -307,6 +307,9 @@ class SetupRepository: PSetupRepository {
         request.timeoutInterval = 30.0
 
         // OAuth2 form parameters
+        // `scope` stays empty: this call only validates the password, and asking
+        // for a scope the account's role lacks (e.g. roms.write for a viewer)
+        // makes the server answer 403 and fails the login outright.
         let formParameters = [
             "grant_type=password",
             "username=\(username.addingURLFormValueEncoding())",

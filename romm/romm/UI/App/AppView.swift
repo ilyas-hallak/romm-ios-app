@@ -85,6 +85,12 @@ struct AppView: View {
         } message: { alert in
             Text(alert.message)
         }
+        .sheet(item: Binding(
+            get: { IncomingRomFileState.shared.pendingFile },
+            set: { IncomingRomFileState.shared.pendingFile = $0 }
+        )) { file in
+            RomUploadSheet(viewModel: RomUploadSheetViewModel(file: file))
+        }
     }
 }
 

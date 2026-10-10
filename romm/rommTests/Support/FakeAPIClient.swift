@@ -162,6 +162,10 @@ final class FakeAPIClient: PRommAPIClient {
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("not used in these tests") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("not used in these tests") }
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
+    func startRomUpload(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String { fatalError("not used in these tests") }
+    func uploadRomChunk(uploadId: String, index: Int, fileURL: URL, progressHandler: ((Double) -> Void)?) async throws { fatalError("not used in these tests") }
+    func completeRomUpload(uploadId: String) async throws { fatalError("not used in these tests") }
+    func cancelRomUpload(uploadId: String) async throws { fatalError("not used in these tests") }
 }
 
 // MARK: - Fixtures

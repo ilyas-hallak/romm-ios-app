@@ -22,6 +22,9 @@ struct User: Identifiable, Equatable {
     let updatedAt: Date?
     let retroAchievementsUsername: String?
     let retroAchievementsProgression: [RetroAchievementsProgression]
+    /// The account role's OAuth scopes, as reported by `GET /api/users/me`.
+    /// Independent of the current sign-in's token scopes (see `PTokenProvider`).
+    let oauthScopes: [String]
 
     init(
         id: Int,
@@ -35,7 +38,8 @@ struct User: Identifiable, Equatable {
         createdAt: Date? = nil,
         updatedAt: Date? = nil,
         retroAchievementsUsername: String? = nil,
-        retroAchievementsProgression: [RetroAchievementsProgression] = []
+        retroAchievementsProgression: [RetroAchievementsProgression] = [],
+        oauthScopes: [String] = []
     ) {
         self.id = id
         self.username = username
@@ -49,6 +53,7 @@ struct User: Identifiable, Equatable {
         self.updatedAt = updatedAt
         self.retroAchievementsUsername = retroAchievementsUsername
         self.retroAchievementsProgression = retroAchievementsProgression
+        self.oauthScopes = oauthScopes
     }
 
     func retroAchievementsProgression(for gameId: Int?) -> RetroAchievementsProgression? {

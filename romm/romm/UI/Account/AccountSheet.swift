@@ -7,6 +7,7 @@ enum AccountDestination: Hashable {
     case settings
     case statistics
     case retroAchievements
+    case uploads
 }
 
 /// The account behind the avatar on Home, the way the web app hangs its
@@ -27,6 +28,7 @@ struct AccountSheet: View {
     /// uncached, and this view is rebuilt whenever the sync status ticks over.
     let changelog: () -> String
     let onSelect: (AccountDestination) -> Void
+    let onAddRom: () -> Void
     let onCheckSync: () -> Void
 
     @State private var showingHelp = false
@@ -36,6 +38,7 @@ struct AccountSheet: View {
         NavigationStack {
             List {
                 header
+                romSection
                 #if !APP_STORE
                 saveSyncSection
                 #endif
@@ -109,6 +112,23 @@ struct AccountSheet: View {
     }
 
     // MARK: - Sections
+
+    /// Adding a ROM and the upload queue it lands in.
+    private var romSection: some View {
+        Section {
+            Button {
+                onAddRom()
+                dismiss()
+            } label: {
+                row(icon: "plus.circle", title: String(localized: "Add ROM"))
+            }
+            Button {
+                select(.uploads)
+            } label: {
+                row(icon: "arrow.up.circle", title: String(localized: "Uploads"))
+            }
+        }
+    }
 
     private var saveSyncSection: some View {
         Section {
@@ -235,6 +255,7 @@ struct AccountSheet: View {
                 isChecking: false,
                 changelog: { "# 1.0.0\n- Erster Eintrag" },
                 onSelect: { _ in },
+                onAddRom: {},
                 onCheckSync: {}
             )
             .environmentObject(AppData())
@@ -251,6 +272,7 @@ struct AccountSheet: View {
                 isChecking: false,
                 changelog: { "# 1.0.0\n- Erster Eintrag" },
                 onSelect: { _ in },
+                onAddRom: {},
                 onCheckSync: {}
             )
             .environmentObject(AppData())
@@ -267,6 +289,7 @@ struct AccountSheet: View {
                 isChecking: false,
                 changelog: { "# 1.0.0\n- Erster Eintrag" },
                 onSelect: { _ in },
+                onAddRom: {},
                 onCheckSync: {}
             )
             .environmentObject(AppData())

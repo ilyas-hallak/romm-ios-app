@@ -38,7 +38,8 @@ struct UserMapper {
                         )
                     }
                 )
-            }
+            },
+            oauthScopes: apiUser.oauthScopes
         )
     }
 }

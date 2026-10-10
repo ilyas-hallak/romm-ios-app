@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct HomeView: View {
     @State private var viewModel = HomeViewModel()
@@ -15,6 +16,11 @@ struct HomeView: View {
     /// instead of happening behind the sheet.
     @State private var pendingDestination: AccountDestination?
     @State private var destination: AccountDestination?
+    /// Set by "Add ROM" while the account sheet is still closing, so the file
+    /// importer opens only once it is out of the way, the same way a pushed
+    /// destination waits for `pendingDestination`.
+    @State private var pendingRomImport = false
+    @State private var showingRomImporter = false
 
     var body: some View {
         contentView
@@ -31,7 +37,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingAccount, onDismiss: pushPendingDestination) {
+            .sheet(isPresented: $showingAccount, onDismiss: handleAccountSheetDismissed) {
                 AccountSheet(
                     avatarURLString: accountViewModel.avatarURL(for: appData.currentUser),
                     syncStatus: accountViewModel.syncStatus,
@@ -39,6 +45,7 @@ struct HomeView: View {
                     isChecking: accountViewModel.isChecking,
                     changelog: { accountViewModel.changelog },
                     onSelect: { pendingDestination = $0 },
+                    onAddRom: { pendingRomImport = true },
                     onCheckSync: { Task { await accountViewModel.checkNow() } }
                 )
             }
@@ -48,6 +55,21 @@ struct HomeView: View {
                 case .settings: SettingsView()
                 case .statistics: StatsView()
                 case .retroAchievements: RetroAchievementsSettingsView()
+                case .uploads: RomUploadsView()
+                }
+            }
+            .fileImporter(
+                isPresented: $showingRomImporter,
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        IncomingURLRouter.shared.handle(url)
+                    }
+                case .failure(let error):
+                    Logger.data.error("ROM import failed: \(error.localizedDescription)")
                 }
             }
             .refreshable {
@@ -64,6 +86,14 @@ struct HomeView: View {
             .onAppear {
                 accountViewModel.loadRecordedStatus()
             }
+    }
+
+    private func handleAccountSheetDismissed() {
+        pushPendingDestination()
+        if pendingRomImport {
+            pendingRomImport = false
+            showingRomImporter = true
+        }
     }
 
     private func pushPendingDestination() {
