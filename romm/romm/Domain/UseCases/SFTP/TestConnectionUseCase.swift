@@ -21,15 +21,13 @@ class TestConnectionUseCase {
     
     func executeWithCredentials(_ connection: SFTPConnection, credentials: SFTPCredentials) async -> Bool {
         do {
-            let service = SFTPService()
-            return try await service.testConnectionWithCredentials(connection, credentials: credentials)
+            return try await connectionManager.testConnection(connection, credentials: credentials)
         } catch {
             return false
         }
     }
     
     func executeWithCredentialsThrows(_ connection: SFTPConnection, credentials: SFTPCredentials) async throws -> Bool {
-        let service = SFTPService()
-        return try await service.testConnectionWithCredentials(connection, credentials: credentials)
+        try await connectionManager.testConnection(connection, credentials: credentials)
     }
 }

@@ -64,6 +64,21 @@ struct LicensesView: View {
                     notice: "© 2017-2026 Thomas Zoechling. Licensed under the MIT license.",
                     url: "https://github.com/weichsel/ZIPFoundation"
                 )
+                entry(
+                    "mft",
+                    notice: "© 2022-2025 Marcin Labenski. Licensed under the LGPL-2.1 license.",
+                    url: "https://github.com/mplpl/mft"
+                )
+                entry(
+                    "libssh",
+                    notice: "© the libssh authors. Licensed under the LGPL-2.1 license. Bundled inside mft.",
+                    url: "https://www.libssh.org"
+                )
+                entry(
+                    "OpenSSL",
+                    notice: "© the OpenSSL Project Authors. Licensed under the Apache-2.0 license. Bundled inside mft.",
+                    url: "https://www.openssl.org"
+                )
             }
         }
         .navigationTitle("Licenses")

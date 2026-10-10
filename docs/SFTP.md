@@ -160,7 +160,7 @@ DownloadManagerView + ViewModel
 
 ### Phase 1: Core SFTP Infrastructure
 1. **SFTP Library Integration**
-   - Research and integrate iOS-compatible SFTP library (likely NMSSH or similar)
+   - Use mft as the SFTP library, behind the app's own `SFTPClient` protocol
    - Create SFTP service wrapper
    - Implement basic connection management
 
@@ -205,9 +205,14 @@ DownloadManagerView + ViewModel
 ## Dependencies
 
 ### External Libraries
-- **NMSSH**: SSH and SFTP client library for iOS
-- **KeychainAccess**: Secure credential storage
-- **CommonCrypto**: Cryptographic operations
+- **mft** (github.com/mplpl/mft): SFTP client framework, LGPL-2.1.
+  It bundles libssh (LGPL-2.1) and OpenSSL (Apache-2.0).
+  The app ships it as a dynamic framework, and Settings > Licenses lists all three.
+
+### SFTP client boundary
+`SFTPService` only talks to the `SFTPClient` protocol (`Data/Services/SFTPClient.swift`).
+`MFTSFTPClient` is the only type that imports mft, and `DependencyFactory` decides which client the service gets.
+Swapping the library, for example for one under a permissive license, means writing a new adapter for that protocol and changing that one line in the factory.
 
 ### iOS Frameworks
 - **Network**: Network connectivity monitoring
