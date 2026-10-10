@@ -5,14 +5,15 @@
 
 import Foundation
 
-class StageIncomingRomUseCase {
+nonisolated final class StageIncomingRomUseCase: Sendable {
     private let repository: PIncomingRomFileRepository
 
     init(repository: PIncomingRomFileRepository) {
         self.repository = repository
     }
 
-    func execute(url: URL) throws -> StagedRomFile {
+    @concurrent
+    func execute(url: URL) async throws -> StagedRomFile {
         try repository.stage(url: url)
     }
 }

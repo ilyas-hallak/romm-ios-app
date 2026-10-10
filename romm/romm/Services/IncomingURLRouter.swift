@@ -70,14 +70,9 @@ final class IncomingURLRouter {
     private func handleIncomingRomFile(_ url: URL) {
         fileLogger.info("Received incoming ROM file: \(url.lastPathComponent)")
         let stage = makeStageIncomingRomUseCase()
-        let state = incomingFileState
-        let fileLogger = self.fileLogger
-        Task.detached(priority: .utility) {
+        Task {
             do {
-                let staged = try stage.execute(url: url)
-                await MainActor.run {
-                    state.pendingFile = staged
-                }
+                incomingFileState.pendingFile = try await stage.execute(url: url)
             } catch {
                 fileLogger.error("Could not stage incoming ROM file: \(error.localizedDescription)")
             }

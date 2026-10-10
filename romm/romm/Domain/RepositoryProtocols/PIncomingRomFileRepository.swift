@@ -7,7 +7,7 @@ import Foundation
 
 /// A ROM file handed to the app from outside (Files, Share Sheet, "Open in"),
 /// copied into the app's own storage so it survives the source URL going away.
-struct StagedRomFile: Identifiable, Equatable {
+nonisolated struct StagedRomFile: Identifiable, Equatable, Sendable {
     let id: UUID
     let fileName: String
     let fileSize: Int64
@@ -18,7 +18,8 @@ struct StagedRomFile: Identifiable, Equatable {
     let relativePath: String
 }
 
-protocol PIncomingRomFileRepository {
+/// Nonisolated so staging, a copy that can take seconds, runs off the main actor.
+nonisolated protocol PIncomingRomFileRepository: Sendable {
     /// Moves `url` into `Application Support/PendingUploads/<jobId>/<fileName>`
     /// when it sits in the app's own Inbox (the copy "Open In" already made
     /// there), or copies it otherwise (e.g. a security-scoped URL from a file

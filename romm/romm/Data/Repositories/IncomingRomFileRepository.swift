@@ -5,9 +5,8 @@
 
 import Foundation
 
-final class IncomingRomFileRepository: PIncomingRomFileRepository {
-    private let logger = Logger.data
-    private let fileManager = FileManager.default
+nonisolated final class IncomingRomFileRepository: PIncomingRomFileRepository {
+    private var fileManager: FileManager { .default }
     private let rootDirectory: URL
     private let inboxDirectory: URL
 
@@ -54,7 +53,7 @@ final class IncomingRomFileRepository: PIncomingRomFileRepository {
                 throw RomUploadError.emptyFile
             }
 
-            logger.info("Staged incoming ROM file \(fileName) (\(fileSize) bytes) as job \(jobId)")
+            log("Staged incoming ROM file \(fileName) (\(fileSize) bytes) as job \(jobId)")
             return StagedRomFile(
                 id: jobId,
                 fileName: fileName,
@@ -77,6 +76,12 @@ final class IncomingRomFileRepository: PIncomingRomFileRepository {
     /// `relativePath` is `<jobId>/<fileName>`, as produced by `stage(url:)`.
     func resolve(relativePath: String) -> URL {
         rootDirectory.appendingPathComponent(relativePath)
+    }
+
+    private func log(_ message: String) {
+        Task { @MainActor in
+            Logger.data.info(message)
+        }
     }
 
     /// Compares standardized, symlink-resolved paths, since the Inbox URL

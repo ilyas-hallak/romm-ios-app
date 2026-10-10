@@ -9,6 +9,7 @@
 import Testing
 @testable import romm
 
+@MainActor
 struct RomUploadRepositoryTests {
     private func makeRepository(
         token: FakeTokenProvider = FakeTokenProvider(),

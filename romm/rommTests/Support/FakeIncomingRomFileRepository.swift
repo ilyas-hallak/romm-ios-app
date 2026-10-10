@@ -9,7 +9,7 @@
 import Foundation
 @testable import romm
 
-final class FakeIncomingRomFileRepository: PIncomingRomFileRepository, @unchecked Sendable {
+nonisolated final class FakeIncomingRomFileRepository: PIncomingRomFileRepository, @unchecked Sendable {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("rom-upload-tests-\(UUID().uuidString)")
     private(set) var removedRelativePaths: [String] = []
     var stageError: Error?

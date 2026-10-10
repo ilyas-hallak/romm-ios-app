@@ -7,7 +7,7 @@ import Foundation
 
 /// Pure chunk math for the upload, kept apart from any networking so it can be
 /// tested without a file or a server.
-enum RomUploadChunkPlan {
+nonisolated enum RomUploadChunkPlan {
     /// Server max is 64 MiB per chunk; this stays well under it.
     static let defaultChunkSize: Int64 = 10 * 1024 * 1024
 
