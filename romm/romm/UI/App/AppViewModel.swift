@@ -265,6 +265,10 @@ class AppViewModel {
         }
         isHandlingSessionExpiration = true
 
+        // A server-version alert can be showing while an unrelated request
+        // expires; don't leave it dangling once we've already left for setup.
+        serverVersionAlert = nil
+
         // Clear configuration and redirect to setup
         do {
             try clearSetupConfigurationUseCase.execute()

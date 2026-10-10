@@ -37,6 +37,18 @@ struct AppViewModelSessionExpirationTests {
         #expect(factory.clearSetup.calls == 1)
     }
 
+    @Test func clearsADanglingServerVersionAlertSoTheTwoNeverShowAtOnce() async {
+        let viewModel = makeViewModel()
+        viewModel.appState = .authenticated
+        viewModel.serverVersionAlert = ServerVersionAlert(title: "Server Version Changed", message: "Update recommended.", newVersion: "5.4.0")
+
+        NotificationCenter.default.post(name: .sessionExpired, object: nil)
+        await waitUntil { viewModel.appState == .setup }
+
+        #expect(viewModel.serverVersionAlert == nil)
+        #expect(viewModel.appData.errorMessage == "Your session has expired. Please login again.")
+    }
+
     @Test func isIgnoredWhileStillOnTheSetupScreen() async {
         let viewModel = makeViewModel()
         viewModel.appState = .setup
