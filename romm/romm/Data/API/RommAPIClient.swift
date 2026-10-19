@@ -104,6 +104,7 @@ protocol PRommAPIClient {
 
     // Tasks
     func getTasksStatus() async throws -> [TaskStatusSchema]
+    func startLibraryScan(_ request: ScanStartRequest) async throws
 
     // Session login, the Socket.IO endpoint only accepts a session cookie
     func login(username: String, password: String) async throws -> RommSessionCookie

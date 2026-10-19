@@ -144,6 +144,14 @@ final class FakeAPIClient: PRommAPIClient {
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("not used in these tests") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("not used in these tests") }
     func getTasksStatus() async throws -> [TaskStatusSchema] { fatalError("not used in these tests") }
+
+    /// Controls `startLibraryScan`: nil succeeds, set to simulate a 409/503 etc.
+    var startLibraryScanError: Error?
+    var startLibraryScanRequests: [ScanStartRequest] = []
+    func startLibraryScan(_ request: ScanStartRequest) async throws {
+        startLibraryScanRequests.append(request)
+        if let startLibraryScanError { throw startLibraryScanError }
+    }
     func login(username: String, password: String) async throws -> RommSessionCookie { fatalError("not used in these tests") }
 }
 
