@@ -127,10 +127,7 @@ final class LibretroSession: NSObject {
         }
 
         // Wire connect/disconnect so the input bridge stays in sync.
-        var names: [NSNotification.Name] = [.GCControllerDidConnect, .GCControllerDidDisconnect]
-        #if DEBUG
-        names.append(.emulatorSimulatedControllerChanged)
-        #endif
+        let names: [NSNotification.Name] = [.GCControllerDidConnect, .GCControllerDidDisconnect]
         for name in names {
             NotificationCenter.default.addObserver(
                 self,
@@ -622,12 +619,12 @@ final class LibretroGameViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
 
-        // Re-apply placement + control visibility when a physical controller
-        // connects/disconnects, live during a session.
-        var connectionNames: [NSNotification.Name] = [.GCControllerDidConnect, .GCControllerDidDisconnect]
-        #if DEBUG
-        connectionNames.append(.emulatorSimulatedControllerChanged)
-        #endif
+        // Re-apply placement and control visibility for hardware changes and
+        // the user's touch-controls preference, live during a session.
+        let connectionNames: [NSNotification.Name] = [
+            .GCControllerDidConnect, .GCControllerDidDisconnect,
+            .emulatorTouchControlsVisibilityChanged
+        ]
         for name in connectionNames {
             NotificationCenter.default.addObserver(
                 self, selector: #selector(controllerConnectionChanged), name: name, object: nil
@@ -699,11 +696,11 @@ final class LibretroGameViewController: UIViewController {
         updateControlsVisibility()
     }
 
-    /// Hide the touch overlay when a physical controller is connected; a
-    /// standalone menu button (SwiftUI) then provides access to the in-game
-    /// menu, and the game becomes draggable.
+    /// Respect the user's touch-controls preference when a physical controller
+    /// is connected. A standalone menu button replaces hidden controls, and
+    /// the game becomes draggable.
     private func updateControlsVisibility() {
-        let hide = EmulatorControllerState.isConnected
+        let hide = EmulatorControllerState.shouldHideTouchControls
         controllerView.isHidden = hide
         screenPanRecognizer.isEnabled = hide
         if hide != controlsHidden {
@@ -782,12 +779,11 @@ final class LibretroGameViewController: UIViewController {
         updateVerticalOffsetConstant()
     }
 
-    /// Whether the user's custom vertical placement should apply right now: only
-    /// while a physical controller is connected, portrait only (in landscape the
-    /// game already fills the height).
+    /// Apply custom vertical placement while touch controls are hidden, in
+    /// portrait only (in landscape the game already fills the height).
     private var isCustomPlacementActive: Bool {
         guard view.bounds.height >= view.bounds.width else { return false }
-        return EmulatorControllerState.isConnected
+        return EmulatorControllerState.shouldHideTouchControls
     }
 
     /// Drag-to-move handler: converts the vertical pan into a `verticalOffset`

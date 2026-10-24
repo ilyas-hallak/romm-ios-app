@@ -8,16 +8,9 @@ struct EmulatorEnginePreferenceTests {
         return UserDefaults(suiteName: suiteName)!
     }
 
-    /// Expressed against the feature flag rather than hard coded to `.web`: the
-    /// store coerces to native in builds where the web engine is unavailable, and
-    /// TestFlight and the App Store ship the same binary.
-    private var expectedDefault: EmulatorEngine {
-        AppFeatures.webEmulatorEnabled ? .web : .native
-    }
-
-    @Test func defaultIsTheAvailableEngine() {
+    @Test func freshInstallDefaultsToNativeDeltaCores() {
         let pref = UserDefaultsEmulatorEnginePreferenceStore(userDefaults: makeDefaults())
-        #expect(pref.current == expectedDefault)
+        #expect(pref.current == .native)
     }
 
     @Test func persistsAcrossInstances() {
@@ -32,7 +25,7 @@ struct EmulatorEnginePreferenceTests {
         let defaults = makeDefaults()
         defaults.set("xxx", forKey: "emulator.engine.preference")
         let pref = UserDefaultsEmulatorEnginePreferenceStore(userDefaults: defaults)
-        #expect(pref.current == expectedDefault)
+        #expect(pref.current == .native)
     }
 
     /// "deltaCore" was the raw value before the rename to "native".

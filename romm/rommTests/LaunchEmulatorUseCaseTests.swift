@@ -86,6 +86,42 @@ struct LaunchEmulatorUseCaseTests {
         }
     }
 
+    @Test(arguments: [
+        ("gb", DeltaGameType.gbc),
+        ("gbc", DeltaGameType.gbc),
+        ("gba", DeltaGameType.gba),
+        ("nes", DeltaGameType.nes),
+        ("snes", DeltaGameType.snes),
+        ("n64", DeltaGameType.n64),
+        ("nds", DeltaGameType.ds),
+        ("genesis", DeltaGameType.genesis)
+    ])
+    @MainActor
+    func nativePreferenceUsesDeltaWhenWebIsAlsoAvailable(platformSlug: String, expectedGameType: DeltaGameType) async {
+        let checker = CheckEmulatorSupportUseCase()
+        let actualSupport = PlatformEngineSupport(webSupport: checker)
+        #expect(checker.execute(platformSlug: platformSlug))
+        #expect(actualSupport.supportedEngines(for: platformSlug).contains(.native))
+
+        // Keep both choices available even in builds that disable EmulatorJS.
+        let support = StubSupport()
+        support.engines = [.web, .native]
+        let useCase = LaunchEmulatorUseCase(
+            tokenProvider: StubTokenProvider(),
+            checkEmulatorSupport: checker,
+            enginePreference: StubPreference(.native),
+            platformSupport: support
+        )
+
+        let result = await useCase.execute(rom: makeRom(slug: platformSlug))
+        guard case .success(.native(let rom, let gameType)) = result else {
+            Issue.record("Native preference must select a Delta core for \(platformSlug), including Genesis where Libretro also supports it.")
+            return
+        }
+        #expect(rom.platformSlug == platformSlug)
+        #expect(gameType == expectedGameType)
+    }
+
     @Test func deltaPreferenceFallsBackToWebWhenUnsupported() async {
         let support = StubSupport(); support.engines = [.web]
         let useCase = LaunchEmulatorUseCase(

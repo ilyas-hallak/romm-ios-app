@@ -10,13 +10,12 @@ final class UserDefaultsEmulatorEnginePreferenceStore: PEmulatorEnginePreference
 
     var current: EmulatorEngine {
         get {
-            // When the web engine is disabled (distributed builds), the on-device
-            // engine is the only usable default and any previously stored `.web`
-            // is coerced. That is `.native` (DeltaCore, falling back to libretro
-            // per platform) outside the App Store build, and `.auto` inside it,
-            // since libretro is then the only on-device engine there is.
+            // Prefer on-device emulation for new and invalid preferences.
+            // Native uses DeltaCore first, then libretro for other platforms.
+            // The App Store target excludes DeltaCore and uses auto instead.
+            // Stored web choices are coerced when that engine is unavailable.
             #if !APP_STORE
-            let fallback: EmulatorEngine = AppFeatures.webEmulatorEnabled ? .web : .native
+            let fallback: EmulatorEngine = .native
             #else
             let fallback: EmulatorEngine = AppFeatures.webEmulatorEnabled ? .web : .auto
             #endif

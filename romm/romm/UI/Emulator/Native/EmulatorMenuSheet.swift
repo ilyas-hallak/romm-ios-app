@@ -12,6 +12,7 @@ struct EmulatorMenuSheet: View {
     @SwiftUI.State private var statusMessage: String?
     @SwiftUI.State private var refreshTick: Int = 0
     @SwiftUI.State private var isFastForwarding: Bool
+    @SwiftUI.State private var alwaysShowTouchControls = false
     @SwiftUI.State private var showQuitConfirmation = false
     @SwiftUI.State private var focus: EmulatorMenuFocus<MenuItem>
     @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
@@ -58,6 +59,26 @@ struct EmulatorMenuSheet: View {
     }
 
     var body: some View {
+        DuoMenuRegion { menuContent }
+            .onAppear {
+                alwaysShowTouchControls = EmulatorControllerState.alwaysShowTouchControls
+                session?.onMenuCommand = { handle($0) }
+            }
+            .onDisappear {
+                session?.onMenuCommand = nil
+            }
+            .onChange(of: alwaysShowTouchControls) { _, newValue in
+                EmulatorControllerState.alwaysShowTouchControls = newValue
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .emulatorTouchControlsVisibilityChanged)) { _ in
+                let current = EmulatorControllerState.alwaysShowTouchControls
+                if alwaysShowTouchControls != current {
+                    alwaysShowTouchControls = current
+                }
+            }
+    }
+
+    private var menuContent: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -82,6 +103,9 @@ struct EmulatorMenuSheet: View {
                                 ExternalDisplayControls(onRequestDismiss: onResume)
                                     .padding(16)
                             }
+                            Divider().background(Color.white.opacity(0.1))
+                            touchControls
+                                .padding(16)
                             if EmulatorControllerState.isConnected {
                                 Divider().background(Color.white.opacity(0.1))
                                 EmulatorControllerControls(
@@ -95,7 +119,7 @@ struct EmulatorMenuSheet: View {
                                 .padding(16)
                             }
                             if let preference = session?.screenPositionPreference,
-                               EmulatorControllerState.isConnected {
+                               EmulatorControllerState.isConnected, !alwaysShowTouchControls {
                                 Divider().background(Color.white.opacity(0.1))
                                 EmulatorScreenControls(preference: preference) {
                                     session?.refreshScreenPlacement()
@@ -141,11 +165,19 @@ struct EmulatorMenuSheet: View {
                 onQuit: onQuit
             )
         }
-        .onAppear {
-            session?.onMenuCommand = { handle($0) }
-        }
-        .onDisappear {
-            session?.onMenuCommand = nil
+    }
+
+    private var touchControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: $alwaysShowTouchControls) {
+                Label("Always show touch controls", systemImage: "hand.tap")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            .accessibilityIdentifier("emulator.alwaysShowTouchControls")
+            Text("Touch controls hide automatically when a controller is connected. Turn this on to keep them visible.")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
         }
     }
 
