@@ -39,7 +39,7 @@ and pause-menu reserved-region handling:
 - Opening the hinge or dismissing the cover releases the lid and clears only the cover pause reason.
 - Menu, scene, manual, and state-restore pauses remain independent.
 - The cover follows the interface orientation, blocks gameplay touches, and provides an accessible Open console action.
-- The save-state menu uses the trailing/bottom pane when iOS reports a division region.
+- The save-state menu uses iOS division-region information to choose a display pane.
 
 The iOS 27.1 APIs are availability guarded; older devices keep their existing
 layout and controls. Existing external-display rendering remains registered
@@ -77,10 +77,33 @@ Simulator, working around a crash in the Simulator's OpenGLES/CoreImage path.
 This app-level workaround does not change the pinned vendor source, N64's
 OpenGLES renderer, or the renderer chosen on physical devices. Game Boy playback
 and touch Start, D-pad, and menu input were observed working on the iPhone Duo
-simulator with this path. DS still presents black in the tested simulator
-session. Runtime inspection found nonblack GPU buffers, enabled video output,
-two game views, and a 256 × 384 image in the rendering path; the visible
-presentation remains under investigation.
+simulator with this path.
+
+In a fresh, unlocked DS session, both screens rendered and Start/A loaded an
+existing Pokémon Black 2 save. X opened the game's lower-screen menu, and a
+stylus tap selected Bag. Closing the hinge displayed the pink Delta cover and
+its accessible Open console action.
+
+In the checked hinge cycle, closing left the core paused with only the DS lid
+input active (`0x4000`); reopening returned it to running with the lid released
+and no active inputs. Stylus input responded after reopening. The native Save
+States menu also stayed visible across a close/reopen cycle. With that menu
+still presented after reopening, the core remained paused and the lid input
+was released, confirming that reopening preserved the independent menu pause.
+
+With the native menu open, partially opening the device in portrait kept the
+menu visible. Rotating to landscape kept it within one display pane (the
+leading pane in the observed configuration). Opening fully produced a centered
+sheet; Done dismissed it and the DS scene displayed. Restoring portrait kept
+the same game and controls visible. These observations cover menu retention and
+basic layout, rather than exact trailing/bottom reserved-region placement or
+every landscape touch target.
+
+Earlier black output was observed during the locked-desktop investigation and
+was not reproduced after the fresh launch. Its cause has not been established,
+and this retest does not represent a new rendering fix. A default `simctl`
+screenshot also sampled an inactive display. In this run, `--display=3` captured
+the active inner display and `--display=1` captured the closed outer display.
 
 ## Validation status
 
@@ -92,6 +115,10 @@ Evidence collected on October 24, 2026:
 | iPad Pro 13-inch (M5) simulator, iOS 27.0, full `rommTests` | 1,089 tests in 147 suites passed; zero failures | Same final compiled suite, run with `test-without-building` |
 | iPhone Duo simulator, iOS 27.1, focused checks | 20 test definitions in 5 suites passed; zero failures, including parameterized core/skin cases and pause-policy checks | Before the final preference-default-only change; native-default behavior is covered by the final iPhone/iPad suites |
 | iPhone Duo simulator, iOS 27.1, final app build | Build succeeded; installed and relaunched | Final revision; persisted engine is Native and Always show touch controls is enabled |
+| iPhone Duo simulator, DS runtime | Both screens rendered; Start/A loaded an existing save; X opened the lower-screen game menu; stylus Bag selection worked; closed cover appeared | Fresh, unlocked session |
+| iPhone Duo simulator, DS hinge runtime | Closing paused the core with lid input `0x4000`; reopening resumed it with no active inputs; stylus input responded afterward | Checked close/reopen cycle |
+| iPhone Duo simulator, native menu pause | Save States menu remained visible across close/reopen; reopened core stayed paused with lid released and no active inputs | Independent menu pause preserved |
+| iPhone Duo simulator, menu orientation | Partially open portrait retained the menu; landscape kept it in one pane; opening fully centered the sheet; Done returned to the DS scene; portrait restored the same game and controls | Observed configuration; exact reserved-region placement and exhaustive landscape touch targets remain unverified |
 | Real-service integration on iPhone and iPad simulators | Token-authenticated app services and read APIs passed on both | Read-only service evidence; not gameplay acceptance |
 | Generic physical-device `romm` Release build, unsigned | Build succeeded | Final native-default and touch-control override revision |
 | Generic physical-device `romm-AppStore` Release build, unsigned | Build succeeded | Final native-default and touch-control override revision |
@@ -105,13 +132,18 @@ bundles are `iphone18pro-native-default-regression.xcresult` and
 `ipadpro13-native-default-regression.xcresult`, with matching
 `*-native-default-summary.json` summaries. The focused Duo result is
 `duo-touch-regression.xcresult` with `duo-touch-summary.json`.
+The inspected runtime captures are `duo-ds-inner-unlocked.png` and
+`duo-ds-closed-cover.png` in the same directory. The core/lid state snapshots are
+`duo-closed-runtime.log`, `duo-reopened-runtime.log`, and
+`duo-menu-reopened-runtime.log`.
 
-DS gameplay acceptance is blocked by the black output. Stylus interaction with
-a running DS game, hinge sleep/wake, inner/outer display transitions during
-gameplay, and external-display coexistence still need runtime verification.
-Unsigned device builds do not establish installation, physical-device gameplay,
-signing, or distribution. The app retains its iOS 18.6 minimum, but an actual
-iOS 18.6 runtime or device has not been exercised in this validation.
+Exhaustive reserved-region placement and landscape touch-target checks,
+closing/reopening inside the one-second lid interval, background trips, and
+external-display coexistence still need runtime verification. Audible playback
+has not been checked. Unsigned device builds do not establish installation,
+physical-device gameplay, signing, or distribution. The app retains its iOS 18.6
+minimum, but an actual iOS 18.6 runtime or device has not been exercised in this
+validation.
 
 ## Xcode 27.1 simulator build
 
