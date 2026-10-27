@@ -13,8 +13,8 @@ class HeartbeatRepository: PHeartbeatRepository {
     // MARK: - Constants
 
     let minSupportedServerVersion = "4.1.0"
-    // Only major.minor counts for the upper bound, so every 5.3.x is supported.
-    let maxSupportedServerVersion = "5.3.0"
+    // Only major.minor counts for the upper bound, so every 5.4.x is supported.
+    let maxSupportedServerVersion = "5.4.1"
     let versionCheckThrottleSeconds: TimeInterval = 30
 
     // MARK: - UserDefaults Keys
