@@ -82,13 +82,10 @@ class MockDependencyFactory: PDependencyFactory {
         _injectedFileValidationService ?? { fatalError("PFileValidationService was not stubbed") }()
     }
 
-    // Starting a scan logs in for a session cookie and opens a web socket, so
-    // there is no safe real implementation to fall back to.
     private let _injectedScanRepository: PScanRepository?
     var scanRepository: PScanRepository {
         _injectedScanRepository ?? { fatalError("PScanRepository was not stubbed") }()
     }
-    lazy var scanCredentialsPrompt = ScanCredentialsPromptPresenter()
 
     // Emulator engine
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
@@ -188,10 +185,6 @@ class MockDependencyFactory: PDependencyFactory {
 
     func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase {
         StartLibraryScanUseCase(scanRepository: scanRepository)
-    }
-
-    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase {
-        StopLibraryScanUseCase(scanRepository: scanRepository)
     }
 
     func makeLogoutUseCase() -> LogoutUseCase {

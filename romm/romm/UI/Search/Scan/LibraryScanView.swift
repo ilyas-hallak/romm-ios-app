@@ -4,8 +4,8 @@
 //
 //  Created by Ilyas Hallak on 12.09.26.
 //
-//  The library scan sheet (issue #160): the status of the last run, the live
-//  view of a running one, and the controls to start and stop a scan.
+//  The library scan sheet (issue #160): the status of the last run, polled
+//  from the server, and the controls to start one.
 //
 
 import SwiftUI
@@ -29,9 +29,6 @@ struct LibraryScanView: View {
                 .safeAreaInset(edge: .bottom) {
                     actionBar
                 }
-                .sheet(isPresented: credentialsPromptBinding) {
-                    ScanCredentialsSheet(prompt: viewModel.credentialsPrompt)
-                }
                 .onAppear {
                     if viewModel.scan == nil && !viewModel.isLoading {
                         Task {
@@ -40,8 +37,7 @@ struct LibraryScanView: View {
                     }
                 }
                 .onDisappear {
-                    // The server keeps scanning, this only closes the socket
-                    // and stops polling.
+                    // The server keeps scanning, this only stops polling.
                     viewModel.cancelAllTasks()
                 }
         }
@@ -50,24 +46,11 @@ struct LibraryScanView: View {
         }
     }
 
-    /// Every way the sheet can close, the cancel button and a swipe alike,
-    /// has to answer the pending request or the scan waits forever.
-    private var credentialsPromptBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.credentialsPrompt.isPresented },
-            set: { isPresented in
-                if !isPresented {
-                    viewModel.credentialsPrompt.cancel()
-                }
-            }
-        )
-    }
-
     @ViewBuilder
     private var content: some View {
-        if viewModel.isLoading && viewModel.scan == nil && !viewModel.isLive {
+        if viewModel.isLoading && viewModel.scan == nil {
             LoadingView("Loading scan status...", fillScreen: true)
-        } else if let errorMessage = viewModel.errorMessage, !viewModel.isLive {
+        } else if let errorMessage = viewModel.errorMessage {
             errorStateView(message: errorMessage)
         } else {
             scanList
@@ -79,51 +62,31 @@ struct LibraryScanView: View {
     @ViewBuilder
     private var scanList: some View {
         List {
-            if viewModel.isLive {
-                Section {
-                    LibraryScanLiveHeader(platform: viewModel.currentPlatform, stats: viewModel.liveStats)
-                } header: {
-                    Text("Running now")
-                }
-            }
-
             if let notice = viewModel.scanNotice {
                 Section {
                     noticeView(notice)
                 }
             }
 
-            if let scan = viewModel.scan, !viewModel.isLive {
+            if let scan = viewModel.scan {
                 Section {
                     statusHeader(scan: scan)
                 } header: {
-                    Text("Last scan")
+                    Text(viewModel.isScanRunning ? "Running now" : "Last scan")
                 }
             }
 
-            if let stats = displayedStats {
+            if let stats = viewModel.scan?.stats {
                 Section {
                     LibraryScanStatsGrid(stats: stats)
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         .listRowBackground(Color.clear)
                 } header: {
-                    Text(viewModel.isLive ? "Counters" : "Scan results")
+                    Text(viewModel.isScanRunning ? "Counters" : "Scan results")
                 }
             }
 
-            if !viewModel.recentRoms.isEmpty {
-                Section {
-                    ForEach(viewModel.recentRoms) { rom in
-                        LibraryScanRomRow(rom: rom)
-                    }
-                } header: {
-                    Text("ROMs found")
-                } footer: {
-                    Text("The most recent \(LibraryScanViewModel.liveRomLimit) ROMs of this run, newest first.")
-                }
-            }
-
-            if viewModel.scan == nil && !viewModel.isLive && viewModel.scanNotice == nil {
+            if viewModel.scan == nil && viewModel.scanNotice == nil {
                 Section {
                     emptyStateView
                         .listRowBackground(Color.clear)
@@ -135,10 +98,6 @@ struct LibraryScanView: View {
         }
     }
 
-    private var displayedStats: LibraryScanStats? {
-        viewModel.liveStats ?? viewModel.scan?.stats
-    }
-
     // MARK: - Action bar
 
     @ViewBuilder
@@ -147,18 +106,14 @@ struct LibraryScanView: View {
             Divider()
 
             Button {
-                if viewModel.isScanRunning {
-                    viewModel.stopScan()
-                } else {
-                    viewModel.showStartSheet()
-                }
+                viewModel.showStartSheet()
             } label: {
                 HStack(spacing: 8) {
-                    if viewModel.isStarting || viewModel.isStopping {
+                    if viewModel.isStarting || viewModel.isScanRunning {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Image(systemName: viewModel.isScanRunning ? "stop.fill" : "play.fill")
+                        Image(systemName: "play.fill")
                     }
                     Text(actionTitle)
                         .fontWeight(.semibold)
@@ -167,8 +122,8 @@ struct LibraryScanView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .tint(viewModel.isScanRunning ? .red : .blue)
-            .disabled(viewModel.isStarting || viewModel.isStopping)
+            .tint(.blue)
+            .disabled(viewModel.isStarting || viewModel.isScanRunning)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
@@ -177,8 +132,8 @@ struct LibraryScanView: View {
 
     private var actionTitle: String {
         if viewModel.isStarting { return "Starting..." }
-        if viewModel.isStopping { return "Stopping..." }
-        return viewModel.isScanRunning ? "Stop Scan" : "Start Scan"
+        if viewModel.isScanRunning { return "Scan Running..." }
+        return "Start Scan"
     }
 
     // MARK: - Status
@@ -205,7 +160,7 @@ struct LibraryScanView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title(for: scan))
                         .font(.headline)
-                    Text("Scanning, started elsewhere or earlier")
+                    Text("In progress")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

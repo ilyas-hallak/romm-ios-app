@@ -152,7 +152,6 @@ final class FakeAPIClient: PRommAPIClient {
         startLibraryScanRequests.append(request)
         if let startLibraryScanError { throw startLibraryScanError }
     }
-    func login(username: String, password: String) async throws -> RommSessionCookie { fatalError("not used in these tests") }
 }
 
 // MARK: - Fixtures

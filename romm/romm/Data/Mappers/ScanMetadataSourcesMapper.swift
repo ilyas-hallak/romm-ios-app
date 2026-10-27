@@ -7,18 +7,15 @@
 
 import Foundation
 
-/// What the `scan` event has to say about metadata sources.
+/// What `POST /api/tasks/scan` expects under `apis`.
 struct ScanMetadataSources: Equatable {
-    /// The `apis` list. An empty list does not mean "server defaults", it means
-    /// the server uses no metadata source at all, so a scan would only
-    /// reconcile files and an `update` or `unmatched` scan would do nothing.
+    /// An empty list does not mean "server defaults", it means the server
+    /// uses no metadata source at all, so a scan would only reconcile files
+    /// and an `update` or `unmatched` scan would do nothing.
     let apis: [String]
-    /// Playmatch is not an `apis` entry, it rides on its own flag and the
-    /// server only honours it together with IGDB.
-    let playmatchEnabled: Bool
 }
 
-/// Turns the heartbeat's per-source flags into the payload the scan socket
+/// Turns the heartbeat's per-source flags into the payload the scan endpoint
 /// expects. The app does not let the user pick sources, so it sends every
 /// source the server has configured, which is what the web UI does by default.
 struct ScanMetadataSourcesMapper {
@@ -44,13 +41,16 @@ struct ScanMetadataSourcesMapper {
     ]
 
     static func mapFromAPI(_ metadataSources: MetadataSourcesDict) -> ScanMetadataSources {
-        let apis = sources
+        var apis = sources
             .filter { metadataSources[keyPath: $0.enabled] }
             .map(\.api)
 
-        return ScanMetadataSources(
-            apis: apis,
-            playmatchEnabled: metadataSources.PLAYMATCH_API_ENABLED && apis.contains("igdb")
-        )
+        // Playmatch is picked through `apis` like any other source, but the
+        // server only honours it together with IGDB.
+        if metadataSources.PLAYMATCH_API_ENABLED && apis.contains("igdb") {
+            apis.append("playmatch")
+        }
+
+        return ScanMetadataSources(apis: apis)
     }
 }

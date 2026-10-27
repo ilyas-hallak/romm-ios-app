@@ -35,19 +35,18 @@ struct ScanMetadataSourcesMapperTests {
         let sources = ScanMetadataSourcesMapper.mapFromAPI(MetadataSourcesDict())
 
         #expect(sources.apis.isEmpty)
-        #expect(sources.playmatchEnabled == false)
     }
 
     @Test func playmatchRidesAlongWithIGDB() {
+        // Playmatch is picked through `apis` like any other source, the server
+        // just only honours it together with IGDB.
         let sources = ScanMetadataSourcesMapper.mapFromAPI(MetadataSourcesDict(
             ANY_SOURCE_ENABLED: true,
             IGDB_API_ENABLED: true,
             PLAYMATCH_API_ENABLED: true
         ))
 
-        #expect(sources.playmatchEnabled)
-        // Playmatch is a flag of its own, never an entry in the api list.
-        #expect(sources.apis == ["igdb"])
+        #expect(sources.apis == ["igdb", "playmatch"])
     }
 
     @Test func playmatchWithoutIGDBIsNotSent() {
@@ -59,7 +58,6 @@ struct ScanMetadataSourcesMapperTests {
             PLAYMATCH_API_ENABLED: true
         ))
 
-        #expect(sources.playmatchEnabled == false)
         #expect(sources.apis == ["moby"])
     }
 }

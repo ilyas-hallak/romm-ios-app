@@ -22,7 +22,6 @@ protocol PDependencyFactory {
     var heartbeatRepository: PHeartbeatRepository { get }
     var tasksRepository: PTasksRepository { get }
     var scanRepository: PScanRepository { get }
-    var scanCredentialsPrompt: ScanCredentialsPromptPresenter { get }
 
     // Services
     var sftpKeychainService: PSFTPKeychainService { get }
@@ -51,7 +50,6 @@ protocol PDependencyFactory {
     func makeGetStatsUseCase() -> GetStatsUseCase
     func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase
     func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase
-    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase
     func makeCheckServerVersionUseCase() -> CheckServerVersionUseCase
     func makeClearServerVersionUseCase() -> ClearServerVersionUseCase
@@ -180,11 +178,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
     lazy var tasksRepository: PTasksRepository = TasksRepository(apiClient: apiClient)
-    lazy var scanRepository: PScanRepository = ScanRepository(
-        apiClient: apiClient,
-        tokenProvider: tokenProvider,
-        sessionProvider: scanSessionProvider
-    )
+    lazy var scanRepository: PScanRepository = ScanRepository(apiClient: apiClient)
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
     
     // MARK: - Services (Singletons)
@@ -203,12 +197,6 @@ class DefaultDependencyFactory: PDependencyFactory {
     }()
     lazy var apiClient: PRommAPIClient = RommAPIClient.shared
     lazy var tokenProvider: PTokenProvider = TokenProvider()
-    lazy var scanCredentialsPrompt = ScanCredentialsPromptPresenter()
-    lazy var scanSessionProvider: PScanSessionProvider = ScanSessionProvider(
-        apiClient: apiClient,
-        tokenProvider: tokenProvider,
-        credentialsPrompt: scanCredentialsPrompt
-    )
 
     private init() {}
     
@@ -286,10 +274,6 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase {
         StartLibraryScanUseCase(scanRepository: scanRepository)
-    }
-
-    func makeStopLibraryScanUseCase() -> StopLibraryScanUseCase {
-        StopLibraryScanUseCase(scanRepository: scanRepository)
     }
 
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase {

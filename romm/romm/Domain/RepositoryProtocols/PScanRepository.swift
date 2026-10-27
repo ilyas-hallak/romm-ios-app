@@ -8,12 +8,9 @@
 import Foundation
 
 protocol PScanRepository {
-    /// Starts a scan and returns the live event stream of that run. The stream
-    /// finishes when the scan ends, when it is refused, or when the caller stops
-    /// iterating, which also tears the socket down.
-    func startScan(type: LibraryScanType, platformIds: [Int]) async throws -> AsyncStream<LibraryScanEvent>
-
-    /// Asks the server to stop the running scan. Works whether the scan was
-    /// started from this app or somewhere else.
-    func stopScan() async throws
+    /// Queues a scan over `POST /api/tasks/scan`. Throws `ScanStartError.refused`
+    /// when the server declines it (a scan is already running, or no worker is
+    /// listening), any other error when the request itself failed. The caller
+    /// follows the run through `PTasksRepository`.
+    func startScan(type: LibraryScanType, platformIds: [Int]) async throws
 }

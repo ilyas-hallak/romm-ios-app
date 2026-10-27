@@ -14,7 +14,7 @@ class StartLibraryScanUseCase {
         self.scanRepository = scanRepository
     }
 
-    func execute(type: LibraryScanType, platformIds: [Int]) async throws -> AsyncStream<LibraryScanEvent> {
-        return try await scanRepository.startScan(type: type, platformIds: platformIds)
+    func execute(type: LibraryScanType, platformIds: [Int]) async throws {
+        try await scanRepository.startScan(type: type, platformIds: platformIds)
     }
 }
