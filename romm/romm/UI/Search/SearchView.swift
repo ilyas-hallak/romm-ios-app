@@ -10,14 +10,6 @@ import SwiftUI
 struct SearchView: View {
     @State private var searchViewModel = SearchViewModel()
     @State private var searchText = ""
-    @State private var showingLibraryScan = false
-    @State private var canViewLibraryScan = false
-
-    private let factory: PDependencyFactory
-
-    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
-        self.factory = factory
-    }
 
     var body: some View {
         searchContentView
@@ -28,7 +20,6 @@ struct SearchView: View {
             }
             .toolbar {
                 keyboardToolbar
-                libraryScanToolbar
             }
             .alert(
                 "Error",
@@ -47,24 +38,6 @@ struct SearchView: View {
             .onDisappear {
                 searchViewModel.cancelAllTasks()
             }
-            .task {
-                await loadLibraryScanAvailability()
-            }
-            .sheet(isPresented: $showingLibraryScan) {
-                LibraryScanView()
-            }
-    }
-
-    /// Whether the current user has the `tasks.run` scope, which is what
-    /// `GET /api/tasks/status` requires. Runs once, off to the side, so the
-    /// search screen never waits on it before becoming usable.
-    private func loadLibraryScanAvailability() async {
-        do {
-            let user = try await factory.makeGetCurrentUserUseCase().execute()
-            canViewLibraryScan = user?.hasScope("tasks.run") ?? false
-        } catch {
-            canViewLibraryScan = false
-        }
     }
 
     @ViewBuilder
@@ -178,20 +151,6 @@ struct SearchView: View {
                     #selector(UIResponder.resignFirstResponder),
                     to: nil, from: nil, for: nil
                 )
-            }
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var libraryScanToolbar: some ToolbarContent {
-        if canViewLibraryScan {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingLibraryScan = true
-                } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                }
-                .accessibilityLabel("Library Scan")
             }
         }
     }

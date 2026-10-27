@@ -161,7 +161,13 @@ final class FakeAPIClient: PRommAPIClient {
     func deleteStates(ids: [Int]) async throws {}
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("not used in these tests") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("not used in these tests") }
-    func getTasksStatus() async throws -> [TaskStatusSchema] { fatalError("not used in these tests") }
+    /// Controls `getTasksStatus`: nil error returns `tasksStatusToReturn`.
+    var tasksStatusToReturn: [TaskStatusSchema] = []
+    var getTasksStatusError: Error?
+    func getTasksStatus() async throws -> [TaskStatusSchema] {
+        if let getTasksStatusError { throw getTasksStatusError }
+        return tasksStatusToReturn
+    }
 
     /// Controls `startLibraryScan`: nil succeeds, set to simulate a 409/503 etc.
     var startLibraryScanError: Error?

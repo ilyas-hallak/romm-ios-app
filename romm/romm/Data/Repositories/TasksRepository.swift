@@ -35,7 +35,7 @@ class TasksRepository: PTasksRepository {
             return domainScan
         } catch {
             logger.error("Error getting task status: \(error)")
-            throw error
+            throw LibraryScanAccessError.mapIfMissingScope(error)
         }
     }
 }

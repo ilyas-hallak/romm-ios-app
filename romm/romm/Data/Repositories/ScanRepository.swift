@@ -37,7 +37,7 @@ class ScanRepository: PScanRepository {
             if let message = Self.refusalMessage(for: error) {
                 throw ScanStartError.refused(message)
             }
-            throw error
+            throw LibraryScanAccessError.mapIfMissingScope(error)
         }
     }
 

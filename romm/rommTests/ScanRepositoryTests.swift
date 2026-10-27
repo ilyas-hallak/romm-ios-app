@@ -81,4 +81,17 @@ struct ScanRepositoryTests {
             try await repository.startScan(type: .quick, platformIds: [])
         }
     }
+
+    @Test func aForbiddenResponseMeansTheTokenIsMissingTheScope() async {
+        // Same scope mismatch as on the status poll: the role allows
+        // `tasks.run`, but the current sign-in's token was never granted it.
+        let apiClient = FakeAPIClient()
+        apiClient.heartbeatToReturn = Self.heartbeat()
+        apiClient.startLibraryScanError = APIClientError.invalidResponse(403, "Forbidden")
+        let repository = ScanRepository(apiClient: apiClient)
+
+        await #expect(throws: LibraryScanAccessError.missingScope) {
+            try await repository.startScan(type: .quick, platformIds: [])
+        }
+    }
 }

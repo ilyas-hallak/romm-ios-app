@@ -33,7 +33,8 @@ final class DeviceAuthService {
         "roms.user.write",
         "collections.read",
         "firmware.read",
-        "roms.write"
+        "roms.write",
+        "tasks.run"
     ]
 
     private let deviceIdentifierKey = "auth.clientDeviceIdentifier"

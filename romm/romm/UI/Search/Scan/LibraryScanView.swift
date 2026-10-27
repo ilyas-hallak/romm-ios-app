@@ -4,46 +4,36 @@
 //
 //  Created by Ilyas Hallak on 12.09.26.
 //
-//  The library scan sheet (issue #160): the status of the last run, polled
-//  from the server, and the controls to start one.
+//  The library scan screen (issue #160): the status of the last run, polled
+//  from the server, and the controls to start one. Reached from the account
+//  menu on Home, pushed like the other account destinations.
 //
 
 import SwiftUI
 
 struct LibraryScanView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var viewModel = LibraryScanViewModel()
 
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle("Library Scan")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            dismiss()
-                        }
-                        .fontWeight(.semibold)
+        content
+            .navigationTitle("Library Scan")
+            .safeAreaInset(edge: .bottom) {
+                actionBar
+            }
+            .onAppear {
+                if viewModel.scan == nil && !viewModel.isLoading {
+                    Task {
+                        await viewModel.load()
                     }
                 }
-                .safeAreaInset(edge: .bottom) {
-                    actionBar
-                }
-                .onAppear {
-                    if viewModel.scan == nil && !viewModel.isLoading {
-                        Task {
-                            await viewModel.load()
-                        }
-                    }
-                }
-                .onDisappear {
-                    // The server keeps scanning, this only stops polling.
-                    viewModel.cancelAllTasks()
-                }
-        }
-        .sheet(isPresented: $viewModel.isShowingStartSheet) {
-            LibraryScanStartSheet(viewModel: viewModel)
-        }
+            }
+            .onDisappear {
+                // The server keeps scanning, this only stops polling.
+                viewModel.cancelAllTasks()
+            }
+            .sheet(isPresented: $viewModel.isShowingStartSheet) {
+                LibraryScanStartSheet(viewModel: viewModel)
+            }
     }
 
     @ViewBuilder
@@ -294,10 +284,12 @@ struct LibraryScanView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Button("Retry") {
-                viewModel.retry()
+            if viewModel.canRetryError {
+                Button("Retry") {
+                    viewModel.retry()
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
@@ -343,5 +335,7 @@ struct LibraryScanView: View {
 }
 
 #Preview {
-    LibraryScanView()
+    NavigationStack {
+        LibraryScanView()
+    }
 }

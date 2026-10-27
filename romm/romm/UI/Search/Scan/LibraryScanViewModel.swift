@@ -15,6 +15,9 @@ class LibraryScanViewModel {
     var scan: LibraryScanStatus?
     var isLoading = false
     var errorMessage: String?
+    /// False for a permission error: retrying would fail identically until the
+    /// account reconnects, so the error view skips the dead-end Retry button.
+    var canRetryError = true
 
     // Start sheet
     var isShowingStartSheet = false
@@ -54,6 +57,7 @@ class LibraryScanViewModel {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
+        canRetryError = true
 
         do {
             let latestScan = try await getLatestLibraryScanUseCase.execute()
@@ -65,6 +69,7 @@ class LibraryScanViewModel {
             if !Task.isCancelled {
                 isLoading = false
                 errorMessage = error.localizedDescription
+                canRetryError = !(error is LibraryScanAccessError)
             }
         }
     }
@@ -129,6 +134,7 @@ class LibraryScanViewModel {
         isShowingStartSheet = false
         scanNotice = nil
         errorMessage = nil
+        canRetryError = true
         isStarting = true
 
         let type = selectedScanType
@@ -153,6 +159,7 @@ class LibraryScanViewModel {
         } catch {
             isStarting = false
             errorMessage = error.localizedDescription
+            canRetryError = !(error is LibraryScanAccessError)
         }
     }
 
