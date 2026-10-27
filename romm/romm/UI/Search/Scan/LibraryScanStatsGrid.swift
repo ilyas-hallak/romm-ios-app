@@ -10,7 +10,12 @@ import SwiftUI
 /// One counter of a scan. Deliberately flatter than `StatCardView`: eight of
 /// these sit next to each other, so the value has to read at a glance without
 /// the card taking over the screen.
+///
+/// Every tile shares a fixed height, so a one-line label next to a two-line
+/// one doesn't leave the grid looking unevenly sized.
 struct ScanStatTile: View {
+    static let height: CGFloat = 64
+
     let icon: String
     let value: Int
     let label: String
@@ -40,7 +45,7 @@ struct ScanStatTile: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: Self.height, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
@@ -57,10 +62,10 @@ struct LibraryScanStatsGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 12) {
             ScanStatTile(icon: "gamecontroller", value: stats.scannedPlatforms, label: "Platforms scanned")
-            ScanStatTile(icon: "plus.circle", value: stats.newPlatforms, label: "New platforms", tint: .green)
-            ScanStatTile(icon: "checkmark.circle", value: stats.identifiedPlatforms, label: "Identified platforms")
+            ScanStatTile(icon: "plus.square.on.square", value: stats.newPlatforms, label: "New platforms", tint: .green)
+            ScanStatTile(icon: "checkmark.seal", value: stats.identifiedPlatforms, label: "Identified platforms")
             ScanStatTile(icon: "opticaldisc", value: stats.scannedRoms, label: "ROMs scanned")
-            ScanStatTile(icon: "plus.circle", value: stats.newRoms, label: "New ROMs", tint: .green)
+            ScanStatTile(icon: "sparkles", value: stats.newRoms, label: "New ROMs", tint: .green)
             ScanStatTile(icon: "checkmark.circle", value: stats.identifiedRoms, label: "Identified ROMs")
             ScanStatTile(icon: "cpu", value: stats.scannedFirmware, label: "Firmware scanned")
             ScanStatTile(icon: "plus.circle", value: stats.newFirmware, label: "New firmware", tint: .green)

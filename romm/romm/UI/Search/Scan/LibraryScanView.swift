@@ -17,9 +17,6 @@ struct LibraryScanView: View {
     var body: some View {
         content
             .navigationTitle("Library Scan")
-            .safeAreaInset(edge: .bottom) {
-                actionBar
-            }
             .onAppear {
                 if viewModel.scan == nil && !viewModel.isLoading {
                     Task {
@@ -82,42 +79,36 @@ struct LibraryScanView: View {
                         .listRowBackground(Color.clear)
                 }
             }
+
+            startSection
         }
         .refreshable {
             await viewModel.load()
         }
     }
 
-    // MARK: - Action bar
+    // MARK: - Start section
 
-    @ViewBuilder
-    private var actionBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-
+    /// Matches the "Sync Now" row on the Save Sync screen: a plain, centered
+    /// button row at the end of the list rather than a floating action bar.
+    private var startSection: some View {
+        Section {
             Button {
                 viewModel.showStartSheet()
             } label: {
-                HStack(spacing: 8) {
+                HStack {
+                    Spacer()
                     if viewModel.isStarting || viewModel.isScanRunning {
                         ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "play.fill")
+                            .padding(.trailing, 8)
                     }
                     Text(actionTitle)
                         .fontWeight(.semibold)
+                    Spacer()
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(.blue)
             .disabled(viewModel.isStarting || viewModel.isScanRunning)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
-        .background(.bar)
     }
 
     private var actionTitle: String {
