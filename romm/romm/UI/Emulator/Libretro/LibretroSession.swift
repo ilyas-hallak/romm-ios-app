@@ -9,9 +9,11 @@ final class LibretroSession: NSObject {
     private let core: LibretroCore
     private let romId: Int
     private let saveStates: PEmulatorSaveStatesUseCase
+    private let findROMsByFileStem: PFindROMsByFileStemUseCase
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     let screenPositionPreference: PEmulatorScreenPositionPreference
     private let rumblePreference: PRumblePreference?
+    private let analogSticksPreference: PAnalogSticksPreference?
     private let cloudSync: CloudSaveSyncService?
     private let frontend = LibretroFrontend.shared
 
@@ -22,7 +24,21 @@ final class LibretroSession: NSObject {
     /// this is true, a slider that does nothing would be worse than none.
     private(set) var isRumbleActive = false
 
+    /// Only PlayStation lets the player choose between the plain pad and the
+    /// one with two sticks. PSP always has its stick.
+    var offersAnalogSticks: Bool { core == .pcsxRearmed }
+    private var usesAnalogSticks: Bool {
+        Self.usesAnalogSticks(core: core, analogSticksPreference: analogSticksPreference)
+    }
+
+    private static func usesAnalogSticks(core: LibretroCore, analogSticksPreference: PAnalogSticksPreference?) -> Bool {
+        core == .pcsxRearmed && (analogSticksPreference?.isEnabled ?? false)
+    }
+
     var onMenuRequested: (() -> Void)?
+    /// Menu steps from player one's pad while the menu is open. The other
+    /// players are muted then, but cannot steer it.
+    var onMenuCommand: ((EmulatorMenuCommand) -> Void)?
     /// Reports whether the on-screen touch controls are currently hidden, so the
     /// SwiftUI layer can show a standalone menu button in their place.
     var onControlsHiddenChanged: ((Bool) -> Void)?
@@ -33,46 +49,65 @@ final class LibretroSession: NSObject {
     /// outlive the session it paints from.
     private var externalRenderTarget: LibretroExternalRenderTarget?
 
-    // MARK: - Physical controller input bridge
-    private let controllerInput: LibretroControllerInput
-    /// The controller currently wired to the input bridge, if any.
-    private var attachedController: GCController?
+    // MARK: - Physical controller input bridges
+    /// One bridge per libretro player, built once and re-pointed as controllers
+    /// come and go.
+    private let controllerInputs: [LibretroControllerInput]
+    /// The controller wired to each bridge, in player order.
+    private var attachedControllers: [GCController?]
+    /// Whether a phone on the network is playing as the second player.
+    private var hasRemotePad = false
+    private var isStopped = false
+    /// Flushing before the stored save reached the core would treat whatever
+    /// file is lying around as this game's progress.
+    private var isBatteryStaged = false
 
     init(
         gameURL: URL,
         core: LibretroCore,
         romId: Int,
         saveStates: PEmulatorSaveStatesUseCase,
+        findROMsByFileStem: PFindROMsByFileStemUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference,
         menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil,
         faceButtonPreference: PGamepadFaceButtonPreference? = nil,
         rumblePreference: PRumblePreference? = nil,
+        analogSticksPreference: PAnalogSticksPreference? = nil,
         cloudSync: CloudSaveSyncService? = nil
     ) {
         self.gameURL = gameURL
         self.core = core
         self.romId = romId
         self.saveStates = saveStates
+        self.findROMsByFileStem = findROMsByFileStem
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
         self.rumblePreference = rumblePreference
+        self.analogSticksPreference = analogSticksPreference
         self.cloudSync = cloudSync
         self.externalRenderTarget = nil
         self.viewController = LibretroGameViewController(
-            core: core,
+            controllerLayout: .forCore(
+                core,
+                analogSticks: Self.usesAnalogSticks(core: core, analogSticksPreference: analogSticksPreference)
+            ),
             gameURL: gameURL,
             aspectRatioPreference: aspectRatioPreference,
             screenPositionPreference: screenPositionPreference
         )
-        // controllerInput must be created before super.init() because stored
+        // The bridges must be created before super.init() because stored
         // properties must be initialised before the instance escapes.
         // onMenuRequested is wired after super.init() once self is available.
-        self.controllerInput = LibretroControllerInput(
-            frontend: LibretroFrontend.shared,
-            menuShortcutPreference: menuShortcutPreference,
-            faceButtonPreference: faceButtonPreference
-        )
+        self.controllerInputs = (0..<LibretroFrontend.maxPlayers).map { player in
+            LibretroControllerInput(
+                frontend: LibretroFrontend.shared,
+                player: player,
+                menuShortcutPreference: menuShortcutPreference,
+                faceButtonPreference: faceButtonPreference
+            )
+        }
+        self.attachedControllers = Array(repeating: nil, count: LibretroFrontend.maxPlayers)
         super.init()
         self.viewController.controllerView.onMenuTapped = { [weak self] in
             self?.onMenuRequested?()
@@ -82,8 +117,13 @@ final class LibretroSession: NSObject {
         }
 
         // Forward menu requests from the optional controller shortcut combo.
-        controllerInput.onMenuRequested = { [weak self] in
+        // Only from player one: a second player pressing their own combo would
+        // pause a game that is not theirs to pause.
+        controllerInputs[0].onMenuRequested = { [weak self] in
             self?.onMenuRequested?()
+        }
+        controllerInputs[0].onMenuCommand = { [weak self] command in
+            self?.onMenuCommand?(command)
         }
 
         // Wire connect/disconnect so the input bridge stays in sync.
@@ -101,7 +141,7 @@ final class LibretroSession: NSObject {
         }
 
         // Attach to any controller that is already connected at launch.
-        attachControllerIfPresent()
+        attachConnectedControllers()
     }
 
     // MARK: - Lifecycle
@@ -124,8 +164,13 @@ final class LibretroSession: NSObject {
         Task { [weak self] in
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
+            // The player may have quit while the pull was still running.
+            guard !self.isStopped else { return }
             self.stageBatteryForCore()
             self.startCore()
+            // After the core is up: port two is a call into it, and a pad that
+            // joined before the game started still has to be picked up.
+            SecondControllerManager.shared.setInput(self)
             guard let slot = resumeSlot else { return }
             // Give the core a few frames so its serialize size is initialized,
             // then load while paused.
@@ -144,20 +189,36 @@ final class LibretroSession: NSObject {
     /// save directory so the core actually loads it on `retro_load_game`.
     /// Without this step, freshly pulled cloud saves are written to
     /// `Saves/<romId>/battery.sav` but the libretro core reads
-    /// `LibretroSaves/<stem>.srm` — two different files, so the save never
-    /// reaches the running game.
+    /// `LibretroSaves/<romId>-<stem>.srm`, two different files, so the save
+    /// never reaches the running game.
     private func stageBatteryForCore() {
-        guard let data = try? saveStates.readBattery(romId: romId) else { return }
-        let dir = libretroSaveDirectory()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        isBatteryStaged = true
+        legacySRAMFile.migrate()
+        guard case .adoptedCoreFile(let data) = batteryFile.stage() else { return }
+        print("[Libretro] kept the newer .srm over the stored battery (\(data.count) bytes)")
+        cloudSync?.pushBattery(data: data)
+    }
+
+    private var batteryFile: CoreBatteryFile {
+        CoreBatteryFile(url: sramURL, romId: romId, saveStates: saveStates)
+    }
+
+    private var legacySRAMFile: LegacySRAMFile {
         let stem = gameURL.deletingPathExtension().lastPathComponent
-        let dst = dir.appendingPathComponent("\(stem).srm")
-        do {
-            try data.write(to: dst, options: .atomic)
-            print("[Libretro] staged battery into saveDir (\(data.count) bytes)")
-        } catch {
-            print("[Libretro] failed to stage battery: \(error.localizedDescription)")
-        }
+        return LegacySRAMFile(
+            legacyURL: libretroSaveDirectory().appendingPathComponent("\(stem).srm"),
+            url: sramURL,
+            romId: romId,
+            saveStates: saveStates,
+            findROMsByFileStem: findROMsByFileStem
+        )
+    }
+
+    /// All cores share one save directory, so the rom id keeps two games with
+    /// the same file name apart.
+    private var sramURL: URL {
+        let stem = gameURL.deletingPathExtension().lastPathComponent
+        return libretroSaveDirectory().appendingPathComponent("\(romId)-\(stem).srm")
     }
 
     // MARK: - HW-Render Meilenstein 1 (TEMPORAER)
@@ -230,20 +291,18 @@ final class LibretroSession: NSObject {
             }
 
             // pcsx_rearmed only reports rumble on a DualShock port, and that port
-            // also changes what the core expects from us. With rumble switched
-            // off we stay on the plain pad, which is exactly the old behaviour.
-            // The preference is read once here, never per frame.
+            // also changes what the core expects from us. The preference is read
+            // once here, never per frame.
             let preference = rumblePreference
             let rumbleActive = (preference?.isEnabled ?? false) && core == .pcsxRearmed
-            let portDevice = rumbleActive
-                ? LibretroABI.DEVICE_PSE_DUALSHOCK
-                : LibretroABI.DEVICE_JOYPAD
+            let portDevice = Self.playerOneDevice(rumble: rumbleActive, analogSticks: usesAnalogSticks)
 
             try frontend.load(
                 corePath: corePath,
                 gamePath: gameURL.path,
                 systemDir: systemDir,
                 saveDir: saveDir,
+                sramURL: sramURL,
                 portDevice: portDevice
             )
 
@@ -254,13 +313,14 @@ final class LibretroSession: NSObject {
                 isRumbleActive = true
                 rumbleOutput.scale = preference.intensity.scale
                 rumbleOutput.start()
-                rumbleOutput.attach(controller: attachedController)
+                rumbleOutput.attach(controller: attachedControllers.first ?? nil)
                 frontend.onRumbleChanged = { [weak self] strong, weak in
                     self?.rumbleOutput.setMotors(strong: strong, weak: weak)
                 }
                 print("[Libretro] rumble enabled (\(preference.intensity.rawValue))")
             }
 
+            switchPadToAnalogIfNeeded()
             frontend.startRunLoop()
         } catch let error as LibretroFrontend.FrontendError {
             print("[Libretro] start failed: \(error.diagnosticDescription)")
@@ -271,28 +331,68 @@ final class LibretroSession: NSObject {
         }
     }
 
-    func pause() { frontend.pause() }
+    func pause() {
+        frontend.pause()
+        // A pause is often the last thing that runs: iOS can end a backgrounded
+        // app without `stop()` ever being called.
+        flushBatteryFromSaveDir(pushesUnchanged: false)
+    }
     func resume() { frontend.resume() }
+
+    /// Hands the pads to the in-game menu. The frontend keeps reading the
+    /// button state while paused, so the bridges stop writing to it.
+    func beginMenuNavigation() {
+        controllerInputs.forEach { $0.isNavigatingMenu = true }
+    }
+
+    func endMenuNavigation() {
+        controllerInputs.forEach { $0.isNavigatingMenu = false }
+    }
+
+    /// Re-applies the hidden-video state on returning to the foreground.
+    /// A background trip can rebuild the external display scene without
+    /// `isActive` changing, so waiting for that publisher alone is not enough.
+    func updatePhoneVideoVisibility() {
+        viewController.updatePhoneVideoVisibility()
+    }
 
     // MARK: - Physical controller input
 
     @objc private func handleControllerConnectionChanged() {
-        // Release every button that might be latched on the outgoing controller
+        // Release every button that might be latched on an outgoing controller
         // before re-evaluating; prevents permanently-stuck inputs across
         // connect/disconnect events.
-        controllerInput.detach(from: attachedController)
-        attachedController = nil
-        // Back to the device haptics until a controller shows up again.
-        rumbleOutput.attach(controller: nil)
-        attachControllerIfPresent()
+        detachControllers()
+        attachConnectedControllers()
     }
 
-    private func attachControllerIfPresent() {
-        guard let controller = GCController.controllers().first else { return }
-        attachedController = controller
-        controllerInput.attach(to: controller)
-        rumbleOutput.attach(controller: controller)
-        print("[Libretro] physical controller attached: \(controller.vendorName ?? "unknown")")
+    private func detachControllers() {
+        for (player, input) in controllerInputs.enumerated() {
+            input.detach(from: attachedControllers[player])
+            attachedControllers[player] = nil
+        }
+        // Back to the device haptics until a controller shows up again.
+        rumbleOutput.attach(controller: nil)
+    }
+
+    /// Hands out the players in the order the system lists the controllers, so
+    /// a second pad joins as player two.
+    private func attachConnectedControllers() {
+        let controllers = GCController.controllers().prefix(LibretroFrontend.maxPlayers)
+        for (player, controller) in controllers.enumerated() {
+            attachedControllers[player] = controller
+            controllerInputs[player].attach(to: controller)
+            print("[Libretro] controller attached as player \(player + 1): \(controller.vendorName ?? "unknown")")
+        }
+        // Rumble follows whoever holds player one.
+        rumbleOutput.attach(controller: attachedControllers.first ?? nil)
+        updateSecondPlayerPort()
+    }
+
+    /// Plugs port two in or out, from whichever of the two second players is
+    /// there: another gamepad, or a phone on the network.
+    private func updateSecondPlayerPort() {
+        frontend.setSecondPlayerConnected(hasRemotePad || attachedControllers[Self.remotePadPlayer] != nil)
     }
 
     func reloadAspectRatio() {
@@ -303,7 +403,38 @@ final class LibretroSession: NSObject {
     /// in-game menu, live. Both only affect how the input bridge reads the pad,
     /// so nothing about the running core has to be touched.
     func reloadControllerPreferences() {
-        controllerInput.reloadPreferences(for: attachedController)
+        for (player, input) in controllerInputs.enumerated() {
+            input.reloadPreferences(for: attachedControllers[player])
+        }
+    }
+
+    /// Picks up the analog stick switch from the in-game menu, live: the touch
+    /// layout changes and the core gets the matching pad in port one.
+    func reloadAnalogSticks() {
+        guard offersAnalogSticks else { return }
+        viewController.controllerView.layout = .forCore(core, analogSticks: usesAnalogSticks)
+        let device = Self.playerOneDevice(rumble: isRumbleActive, analogSticks: usesAnalogSticks)
+        frontend.setPlayerOneDevice(device)
+        if usesAnalogSticks {
+            switchPadToAnalogIfNeeded()
+        } else if device == LibretroABI.DEVICE_PSE_DUALSHOCK {
+            // Rumble keeps the port on the DualShock even with sticks off, so the
+            // pad itself also needs to be switched back to digital.
+            frontend.requestDualShockMode(analog: false)
+        }
+    }
+
+    /// Needed after every load and pad swap: both leave the DualShock in
+    /// whatever mode the core or the save state brings, mostly digital.
+    private func switchPadToAnalogIfNeeded() {
+        guard usesAnalogSticks else { return }
+        frontend.requestDualShockMode(analog: true)
+    }
+
+    /// Sticks and rumble both only exist on the DualShock, without either the
+    /// plain pad keeps the old behaviour for every PlayStation title.
+    static func playerOneDevice(rumble: Bool, analogSticks: Bool) -> UInt32 {
+        rumble || analogSticks ? LibretroABI.DEVICE_PSE_DUALSHOCK : LibretroABI.DEVICE_JOYPAD
     }
 
     /// Picks up an intensity changed from the in-game menu, live. Only the
@@ -314,12 +445,12 @@ final class LibretroSession: NSObject {
         rumbleOutput.scale = preference.intensity.scale
     }
 
-
     func stop() {
-        // Detach the physical controller before tearing down the frontend so
-        // clearAllButtons() runs while the frontend is still live.
-        controllerInput.detach(from: attachedController)
-        attachedController = nil
+        isStopped = true
+        // Detach both input sides before tearing down the frontend so their
+        // button-lifting runs while it is still live.
+        SecondControllerManager.shared.setInput(nil)
+        detachControllers()
         // Unwire both sinks BEFORE tearing down the core: pcsx_rearmed can emit a
         // final video frame during retro_unload_game / retro_deinit, and after
         // dlclose() any CGImage backed by core memory would crash on render.
@@ -329,17 +460,16 @@ final class LibretroSession: NSObject {
         frontend.stop()
         rumbleOutput.stop()
         isRumbleActive = false
-        flushBatteryFromSaveDir()
+        flushBatteryFromSaveDir(pushesUnchanged: true)
     }
 
-    /// Libretro cores persist their battery saves (.srm) into `saveDir` during
-    /// runtime — we read the file once the core has stopped and push it.
-    private func flushBatteryFromSaveDir() {
-        let stem = gameURL.deletingPathExtension().lastPathComponent
-        let candidate = libretroSaveDirectory().appendingPathComponent("\(stem).srm")
-        guard let data = try? Data(contentsOf: candidate) else { return }
-        try? saveStates.writeBattery(romId: romId, data: data)
-        cloudSync?.pushBattery(data: data)
+    /// The frontend writes the core's battery save (.srm) into `saveDir` on
+    /// every pause and on stop, this hands it on to the store and the server.
+    /// - Parameter pushesUnchanged: Also push a save the store already had. Done
+    ///   on quit, so a push that failed earlier, offline for example, gets retried.
+    private func flushBatteryFromSaveDir(pushesUnchanged: Bool) {
+        guard isBatteryStaged, let battery = batteryFile.collect(), battery.isNew || pushesUnchanged else { return }
+        cloudSync?.pushBattery(data: battery.data)
     }
 
     // MARK: - Save state API (mirrors DeltaCoreSession)
@@ -370,7 +500,7 @@ final class LibretroSession: NSObject {
         if let thumb {
             try saveStates.writeThumbnail(romId: romId, slot: slot, data: thumb)
         }
-        cloudSync?.pushState(slot: slot, data: data, thumbnail: thumb)
+        cloudSync?.pushState(slot: slot)
     }
 
     func loadState(slot: Int) throws {
@@ -382,6 +512,7 @@ final class LibretroSession: NSObject {
         guard frontend.loadStateData(data) else {
             throw LibretroFrontend.FrontendError.symbolMissing("retro_unserialize")
         }
+        switchPadToAnalogIfNeeded()
         // Discard audio queued before the jump so sound doesn't trail the picture.
         frontend.flushAudio()
     }
@@ -395,6 +526,7 @@ final class LibretroSession: NSObject {
         guard frontend.loadStateData(data) else {
             throw LibretroFrontend.FrontendError.symbolMissing("retro_unserialize")
         }
+        switchPadToAnalogIfNeeded()
         try saveStates.clearUndoLoad(romId: romId)
     }
 
@@ -446,7 +578,6 @@ final class LibretroSession: NSObject {
 }
 
 final class LibretroGameViewController: UIViewController {
-    private let core: LibretroCore
     private let gameURL: URL
     private let aspectRatioPreference: PLibretroAspectRatioPreference
     private let screenPositionPreference: PEmulatorScreenPositionPreference
@@ -473,22 +604,14 @@ final class LibretroGameViewController: UIViewController {
     }()
 
     init(
-        core: LibretroCore,
+        controllerLayout: LibretroTouchControllerView.Layout,
         gameURL: URL,
         aspectRatioPreference: PLibretroAspectRatioPreference,
         screenPositionPreference: PEmulatorScreenPositionPreference
     ) {
-        self.core = core
         self.gameURL = gameURL
         self.aspectRatioPreference = aspectRatioPreference
         self.screenPositionPreference = screenPositionPreference
-        let controllerLayout: LibretroTouchControllerView.Layout
-        switch core {
-        case .beetlePCEFast: controllerLayout = .pcEngine
-        case .genesisPlusGX: controllerLayout = .genesis
-        case .flycast: controllerLayout = .dreamcast
-        default: controllerLayout = .standard
-        }
         self.controllerView = LibretroTouchControllerView(layout: controllerLayout)
         super.init(nibName: nil, bundle: nil)
     }
@@ -587,6 +710,16 @@ final class LibretroGameViewController: UIViewController {
             controlsHidden = hide
             onControlsHiddenChanged?(hide)
         }
+        updatePhoneVideoVisibility()
+    }
+
+    /// Hides the phone's own game picture once the TV already carries it and
+    /// phone-controller-only mode is on, so the touch controls get the full
+    /// screen. Safe to hide: the external picture is painted through a separate
+    /// mirror layer (`LibretroExternalRenderTarget`), not through this view, so
+    /// `isHidden` here has no effect on the TV feed.
+    func updatePhoneVideoVisibility() {
+        videoView.isHidden = ExternalDisplayManager.shared.isPhoneVideoHidden(areTouchControlsHidden: controlsHidden)
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
@@ -691,5 +824,20 @@ final class LibretroGameViewController: UIViewController {
         if abs(target - top.constant) > 0.5 {
             top.constant = target
         }
+    }
+}
+
+// MARK: - Second player over the network
+
+extension LibretroSession: PSecondPlayerInput {
+
+    func setSecondPlayerConnected(_ connected: Bool) {
+        hasRemotePad = connected
+        if !connected { frontend.clearAllButtons(player: Self.remotePadPlayer) }
+        updateSecondPlayerPort()
+    }
+
+    func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool) {
+        frontend.setButton(button.libretroButton, pressed: pressed, player: Self.remotePadPlayer)
     }
 }

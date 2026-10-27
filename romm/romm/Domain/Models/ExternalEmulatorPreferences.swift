@@ -15,6 +15,13 @@ protocol PExternalEmulatorHandoffStore: AnyObject {
     /// Drops the handoff state for a ROM, e.g. after it was deleted locally.
     func forget(romId: Int)
 
+    /// A ROM already put on this target's pasteboard once, with no confirmed
+    /// import since. Weaker than `hasHandedOff`: nothing reports back from a
+    /// paste, so this only justifies asking before the next deep link, not
+    /// assuming it landed.
+    func hasCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID) -> Bool
+    func markCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID)
+
     /// A previously worked out game identifier.
     ///
     /// Cached because deriving one can mean unpacking an archive and hashing the

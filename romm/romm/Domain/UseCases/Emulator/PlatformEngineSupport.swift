@@ -16,6 +16,12 @@ final class PlatformEngineSupport: PPlatformEngineSupport {
     }
 
     func supportedEngines(for platformSlug: String) -> Set<EmulatorEngine> {
+        #if APP_STORE
+        // No engines ship in the App Store build: no Delta cores, no
+        // libretro cores, no bundled EmulatorJS. Play always hands off to
+        // an external emulator app instead.
+        return []
+        #else
         let slug = platformSlug.lowercased()
         var result: Set<EmulatorEngine> = []
         if AppFeatures.webEmulatorEnabled, webSupport.execute(platformSlug: slug) {
@@ -25,12 +31,16 @@ final class PlatformEngineSupport: PPlatformEngineSupport {
             result.insert(.native)
         }
         return result
+        #endif
     }
 
     func preferred(for platformSlug: String) -> EmulatorEngine {
+        #if APP_STORE
+        return .auto
+        #else
         let supported = supportedEngines(for: platformSlug)
-        if supported.contains(.web) { return .web }
-        return .native
+        return supported.contains(.web) ? .web : .native
+        #endif
     }
 
     func isEmulationAvailable(for platformSlug: String) -> Bool {

@@ -1,3 +1,4 @@
+#if !APP_STORE
 import Foundation
 import Observation
 import SwiftUI
@@ -76,7 +77,8 @@ final class NativeEmulatorViewModel {
             let cloudSync = factory.makeCloudSaveSyncService(
                 romId: rom.id,
                 emulator: "delta-ios",
-                batteryFileName: batteryFileName
+                batteryFileName: batteryFileName,
+                platformSlug: rom.platformSlug
             )
             let skinURL = factory.makeControllerSkinsUseCase()
                 .selectedSkinFileURL(forGameType: gameType.gameTypeIdentifier)
@@ -125,3 +127,4 @@ final class NativeEmulatorViewModel {
         }
     }
 }
+#endif

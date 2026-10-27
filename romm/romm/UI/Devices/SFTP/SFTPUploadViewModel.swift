@@ -565,6 +565,10 @@ class SFTPUploadViewModel {
             return .downloadFailed
         case .cloudflareProtection(_):
             return .connectionFailed
+        case .conflict:
+            // Not reachable from a plain download, but the switch has to be
+            // exhaustive over every APIClientError case.
+            return .downloadFailed
         }
     }
     

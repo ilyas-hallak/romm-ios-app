@@ -36,8 +36,11 @@ class AppViewModel {
     /// Non-nil while a server-version change alert should be shown to the user.
     var serverVersionAlert: ServerVersionAlert?
 
+    /// Shown once on the setup screen after a sign out that left something behind.
+    var setupNotice: String?
+
     /// Single-flight guard: opening a game fires several requests at once, so an
-    /// expired/revoked token produces a burst of parallel 401/403s. Without this,
+    /// expired/revoked token produces a burst of parallel 401s. Without this,
     /// each one would re-run the logout, causing the reported sign-in loop (#59).
     private var isHandlingSessionExpiration = false
 
@@ -56,16 +59,26 @@ class AppViewModel {
     private let saveServerVersionUseCase: SaveServerVersionUseCase
     private let getHeartbeatUseCase: GetHeartbeatUseCase
     private let getCurrentUserUseCase: GetCurrentUserUseCase
+    private let resolveServerEndpointUseCase: PResolveServerEndpointUseCase
+
+    /// Launch, coming back to the foreground and a network change can all ask
+    /// at once, they share the one check that is running.
+    private var endpointResolution: Task<Void, Never>?
 
     private let factory: PDependencyFactory
+    private let notificationCenter: NotificationCenter
 
     private var cancellables = Set<AnyCancellable>()
     private var isUITesting: Bool { launchArguments.contains("-ui_testing") || launchArguments.contains("-FASTLANE_SNAPSHOT") }
     private var shouldForceSetupForUITests: Bool { launchArguments.contains("-ui_testing_force_setup") }
     private var shouldForceAuthenticatedForUITests: Bool { launchArguments.contains("-ui_testing_force_authenticated") }
 
-    init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
+    init(
+        factory: PDependencyFactory = DefaultDependencyFactory.shared,
+        notificationCenter: NotificationCenter = .default
+    ) {
         self.factory = factory
+        self.notificationCenter = notificationCenter
         self.saveSetupConfigurationUseCase = factory.makeSaveSetupConfigurationUseCase()
         self.getSetupConfigurationUseCase = factory.makeGetSetupConfigurationUseCase()
         self.clearSetupConfigurationUseCase = factory.makeClearSetupConfigurationUseCase()
@@ -74,20 +87,22 @@ class AppViewModel {
         self.saveServerVersionUseCase = factory.makeSaveServerVersionUseCase()
         self.getHeartbeatUseCase = factory.makeGetHeartbeatUseCase()
         self.getCurrentUserUseCase = factory.makeGetCurrentUserUseCase()
+        self.resolveServerEndpointUseCase = factory.makeResolveServerEndpointUseCase()
 
         // Listen for restart setup requests
-        NotificationCenter.default.addObserver(
+        notificationCenter.addObserver(
             forName: .restartSetupRequested,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let notice = notification.userInfo?[RestartSetupNotice.userInfoKey] as? String
             Task { @MainActor in
-                self?.handleRestartSetupRequest()
+                self?.handleRestartSetupRequest(notice: notice)
             }
         }
 
         // Listen for session expiration (401 errors during usage)
-        NotificationCenter.default.addObserver(
+        notificationCenter.addObserver(
             forName: .sessionExpired,
             object: nil,
             queue: .main
@@ -96,6 +111,8 @@ class AppViewModel {
                 self?.handleSessionExpiration()
             }
         }
+
+        observeNetworkChanges()
     }
 
     // MARK: - Public Methods
@@ -128,6 +145,8 @@ class AppViewModel {
 
             if hasAuth {
                 logger.info("Authentication state: \(appData.isAuthenticated) (method: \(authMethod.displayName))")
+                // Before the first request, so it already goes to an address that answers.
+                await resolveServerEndpoint()
                 updateAppConfig(config)
                 appState = .authenticated
                 await loadCurrentUser()
@@ -147,13 +166,13 @@ class AppViewModel {
 
     func saveConfiguration(serverURL: String, username: String, password: String) async {
         logger.debug("Save configuration requested")
-        appState = .loading
         guard !serverURL.isEmpty, !username.isEmpty, !password.isEmpty else {
             logger.warning("Missing required fields")
             appData.updateError("Please fill in all required fields")
             return
         }
 
+        appState = .loading
         appData.updateLoading(true)
         appData.updateError(nil)
 
@@ -226,11 +245,12 @@ class AppViewModel {
 
     // MARK: - Private Methods
 
-    private func handleRestartSetupRequest() {
+    private func handleRestartSetupRequest(notice: String?) {
         logger.info("Handling restart setup request from notification")
         resetAuthenticationState()
         clearServerVersionUseCase.execute()
         appData.updateConfiguration(nil)
+        setupNotice = notice
         appState = .setup
     }
 
@@ -243,12 +263,16 @@ class AppViewModel {
             return
         }
 
-        // Collapse a burst of parallel 401/403s into a single logout (#59).
+        // Collapse a burst of parallel 401s into a single logout (#59).
         guard !isHandlingSessionExpiration else {
             logger.debug("Ignoring session expiration - already handling one")
             return
         }
         isHandlingSessionExpiration = true
+
+        // A server-version alert can be showing while an unrelated request
+        // expires; don't leave it dangling once we've already left for setup.
+        serverVersionAlert = nil
 
         // Clear configuration and redirect to setup
         do {
@@ -264,6 +288,43 @@ class AppViewModel {
             logger.error("Failed to clear configuration on session expiration: \(error)")
             appData.updateError("Session expired - please restart the app")
         }
+    }
+
+    // MARK: - Server Address
+
+    func appDidBecomeActive() async {
+        if appState == .authenticated {
+            await resolveServerEndpoint()
+        }
+        await checkServerVersionOnForeground()
+    }
+
+    private func resolveServerEndpoint() async {
+        if let running = endpointResolution {
+            await running.value
+            return
+        }
+        let resolution = Task { _ = await resolveServerEndpointUseCase.execute() }
+        endpointResolution = resolution
+        await resolution.value
+        endpointResolution = nil
+    }
+
+    /// Leaving the home Wi-Fi is the typical moment the other address is needed.
+    private func observeNetworkChanges() {
+        let monitor = NetworkMonitor.shared
+        monitor.$isConnected
+            .combineLatest(monitor.$connectionType)
+            .dropFirst()
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .filter { isConnected, _ in isConnected }
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.appState == .authenticated else { return }
+                    await self.resolveServerEndpoint()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Server Version Check

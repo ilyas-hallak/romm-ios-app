@@ -298,7 +298,7 @@ struct SFTPUploadView: View {
 
             // Cover with success badge
             ZStack(alignment: .bottomTrailing) {
-                CachedKFImage(urlString: viewModel.rom.urlCover) { image in
+                CachedKFImage(urlString: viewModel.rom.listCoverURL) { image in
                     image
                         .resizable()
                         .scaledToFill()

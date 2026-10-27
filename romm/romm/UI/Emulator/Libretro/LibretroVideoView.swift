@@ -1,5 +1,6 @@
 import UIKit
 import CoreGraphics
+import QuartzCore
 
 /// Naive Software-Blit-View: nimmt rohe libretro-Frames entgegen und rendert
 /// sie als `CGImage` in ein `CALayer.contents`. Reicht für PCSX ReARMed
@@ -14,7 +15,18 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
     /// `contents` costs next to nothing.
     weak var mirrorLayer: CALayer?
 
-    override init(frame: CGRect) {
+    /// Told about every frame that reaches the mirror layer. Injected so a test
+    /// can watch that without an external display.
+    private let diagnostics: PExternalDisplayDiagnostics
+
+    /// The path UIKit takes, `UIView()` included, so the default has to live here
+    /// rather than on the designated initialiser below.
+    override convenience init(frame: CGRect) {
+        self.init(frame: frame, diagnostics: DefaultDependencyFactory.shared.externalDisplayDiagnostics)
+    }
+
+    init(frame: CGRect, diagnostics: PExternalDisplayDiagnostics) {
+        self.diagnostics = diagnostics
         super.init(frame: frame)
         backgroundColor = .black
         layer.magnificationFilter = .nearest
@@ -100,7 +112,18 @@ final class LibretroVideoView: UIView, LibretroVideoSink {
         ) else { return }
 
         layer.contents = image
-        mirrorLayer?.contents = image
+        if let mirrorLayer {
+            // Our own layer backs a view, which suppresses implicit animations.
+            // The external one may not, and then Core Animation cross fades every
+            // assigned frame into the previous one over a quarter of a second.
+            // `ExternalDisplayContentView` already refuses those actions, this
+            // keeps it true for any other layer handed in here.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            mirrorLayer.contents = image
+            CATransaction.commit()
+            diagnostics.externalFrameRendered()
+        }
         lastCGImage = image
     }
 

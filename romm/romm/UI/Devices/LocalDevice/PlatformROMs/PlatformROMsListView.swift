@@ -31,6 +31,9 @@ struct PlatformROMsListView: View {
     @State private var romPendingLaunch: PendingLaunch?
     /// Slot chosen in the pre-launch sheet; read by the emulator cover builder.
     @State private var pendingResumeSlot: Int?
+    /// Files a Share swipe has staged, held here rather than in the swipe action
+    /// so the presentation survives the row snapping shut.
+    @State private var share: ShareROMViewModel
     /// Play destination and handoff state, the same object the ROM detail screen
     /// uses, so Play lands in the app the user picked from here as well.
     @State private var externalPlay: ExternalPlayCoordinator
@@ -47,6 +50,7 @@ struct PlatformROMsListView: View {
         self.launchUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
         self.saveStore = factory.saveStore
+        _share = State(initialValue: factory.makeShareROMViewModel())
         _externalPlay = State(initialValue: ExternalPlayCoordinator(factory: factory))
     }
 
@@ -55,17 +59,14 @@ struct PlatformROMsListView: View {
             ForEach(roms) { rom in
                 ROMCardRow(
                     rom: rom,
-                    // An external app decides for itself what it can play, and it
-                    // covers systems no built-in engine does, so the built-in
-                    // support list must not gate Play when one is selected.
-                    isPlayable: isPlatformSupported(rom.platformSlug) || externalPlay.playsExternally,
+                    isPlayable: canPlay(rom.platformSlug),
                     isLaunching: launchingRomId == rom.id,
                     isDisabled: launchingRomId != nil && launchingRomId != rom.id,
                     hasSaveGame: hasSaveGame(romId: rom.id),
                     hasSaveState: hasSaveState(romId: rom.id),
                     lastSync: viewModel.lastSync(romId: rom.id),
                     onPlay: {
-                        guard isPlatformSupported(rom.platformSlug), launchingRomId == nil else { return }
+                        guard canPlay(rom.platformSlug), launchingRomId == nil else { return }
                         launchingRomId = rom.id
                         Task { await startPlay(rom: rom) }
                     },
@@ -80,7 +81,7 @@ struct PlatformROMsListView: View {
                     }
                 }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    ShareSwipeButton(rom: rom)
+                    ShareSwipeButton { share.prepareShare(rom: rom) }
                 }
             }
         }
@@ -89,6 +90,7 @@ struct PlatformROMsListView: View {
         .navigationDestination(item: $detailRom) { rom in
             RomDetailView(rom: rom.toRom())
         }
+        #if !APP_STORE
         .fullScreenCover(item: $launchDecision, onDismiss: {
             launchingRomId = nil
             pendingResumeSlot = nil
@@ -110,6 +112,7 @@ struct PlatformROMsListView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        #endif
         .confirmationDialog(
             "Delete ROM?",
             isPresented: Binding(
@@ -128,9 +131,17 @@ struct PlatformROMsListView: View {
             Text("This will remove all files (\(rom.formattedSize)).")
         }
         .sheet(item: $romPendingSync) { rom in
-            SyncSaveSheet(viewModel: factory.makeSyncSaveViewModel(rom: rom)) { romPendingSync = nil }
+            SyncSaveSheet(viewModel: factory.makeSyncSaveViewModel(rom: rom), onDismiss: { romPendingSync = nil }, factory: factory)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $share.shareSheetItem, onDismiss: share.cleanupTemporaryFiles) { item in
+            ShareSheet(activityItems: item.urls)
+        }
+        .alert("Files Not Found", isPresented: $share.showFileNotFoundAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The ROM files could not be found on this device. They may have been deleted or moved.")
         }
         // A settings change while this list is open has to be picked up, or Play
         // would still route to the previous target.
@@ -188,7 +199,19 @@ struct PlatformROMsListView: View {
         }
     }
 
+    /// An external app decides for itself what it can play, and it covers
+    /// systems no built-in engine does, so the built-in support list must not
+    /// gate Play when one is selected.
+    private func canPlay(_ platformSlug: String) -> Bool {
+        isPlatformSupported(platformSlug) || externalPlay.playsExternally
+    }
+
     private func isPlatformSupported(_ platformSlug: String) -> Bool {
+        #if APP_STORE
+        // No built-in engine ships in this build, so Play only ever goes
+        // through canPlay's externalPlay.playsExternally fallback above.
+        return false
+        #else
         let supportedPlatforms: Set<String> = [
             "nes", "snes", "n64", "gba", "gbc", "gb", "nds",
             // "dc" fehlt bewusst: Dreamcast ist wegen der Audioausgabe deaktiviert,
@@ -200,5 +223,6 @@ struct PlatformROMsListView: View {
             "arcade"
         ]
         return supportedPlatforms.contains { platformSlug.lowercased().contains($0) }
+        #endif
     }
 }

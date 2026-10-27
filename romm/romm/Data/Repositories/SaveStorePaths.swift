@@ -17,6 +17,10 @@ enum SaveStorePaths {
         romDir(root: root, romId: romId).appendingPathComponent("states", isDirectory: true)
     }
 
+    static func backupsDir(root: URL, romId: Int) -> URL {
+        romDir(root: root, romId: romId).appendingPathComponent("backups", isDirectory: true)
+    }
+
     static func batteryURL(root: URL, romId: Int) -> URL {
         romDir(root: root, romId: romId).appendingPathComponent("battery.sav")
     }
@@ -27,6 +31,10 @@ enum SaveStorePaths {
 
     static func thumbURL(root: URL, romId: Int, slot: Int) -> URL {
         statesDir(root: root, romId: romId).appendingPathComponent("\(slot).png")
+    }
+
+    static func stateBaselineURL(root: URL, romId: Int, slot: Int) -> URL {
+        statesDir(root: root, romId: romId).appendingPathComponent("\(slot).baseline.json")
     }
 
     static func undoSaveStateURL(root: URL, romId: Int, slot: Int) -> URL {

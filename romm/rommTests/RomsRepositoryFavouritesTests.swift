@@ -112,6 +112,19 @@ struct RomsRepositoryFavouritesTests {
         #expect(try await repository.isRomFavorite(romId: 100) == false)
     }
 
+    @Test func isRomFavoritePropagatesErrorInsteadOfReturningFalse() async {
+        let api = FakeAPIClient()
+        api.errorToThrow = FakeAPIError()
+        let repository = RomsRepository(apiClient: api)
+
+        do {
+            _ = try await repository.isRomFavorite(romId: 100)
+            Issue.record("expected the lookup failure to propagate")
+        } catch {
+            #expect(error is FakeAPIError)
+        }
+    }
+
     @Test func toggleThrowsNetworkErrorWhenCollectionLookupFails() async {
         let api = FakeAPIClient()
         api.errorToThrow = FakeAPIError()

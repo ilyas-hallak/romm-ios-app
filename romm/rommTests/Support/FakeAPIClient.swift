@@ -39,6 +39,12 @@ final class FakeAPIClient: PRommAPIClient {
     /// Id handed back by `addPlatform`, so tests can assert the new platform lands in the list.
     var addedPlatformId = 77
 
+    /// Response served by `getRecommendations`; records the requested limit so tests can assert it's passed through.
+    var recommendationsToReturn: [RecommendedRomSchema] = []
+    var recommendationsLimitRequested: Int?
+    /// Separate from `errorToThrow` so a test can fail recommendations without affecting other endpoints the same load hits.
+    var recommendationsErrorToThrow: Error?
+
     // MARK: - Favourites relevant
 
     func getCurrentUser() async throws -> UserSchema {
@@ -88,6 +94,8 @@ final class FakeAPIClient: PRommAPIClient {
         return heartbeatToReturn
     }
 
+    func isServerReachable() async -> Bool { true }
+
     // MARK: - Unused
 
     func makeRequest<T: Codable>(path: String, method: HTTPMethod, body: Data?, responseType: T.Type) async throws -> T { fatalError("not used in these tests") }
@@ -107,8 +115,17 @@ final class FakeAPIClient: PRommAPIClient {
     func getManualPDFData(manualURL: String) async throws -> Data { fatalError("not used in these tests") }
     func getRomDetails(id: Int) async throws -> DetailedRomSchema { fatalError("not used in these tests") }
     func getRoms(searchTerm: String?, platformId: Int?, limit: Int) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
-    func getRomsWithFilters(searchTerm: String?, platformId: Int?, collectionId: Int?, limit: Int, offset: Int?, withCharIndex: Bool?, orderBy: String?, orderDir: String?, filters: RomFilters) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
+    func getRomsWithFilters(searchTerm: String?, platformId: Int?, collectionId: Int?, limit: Int, offset: Int?, withCharIndex: Bool?, orderBy: String?, orderDir: String?, filters: RomFilters) async throws -> CustomLimitOffsetPageSimpleRomSchema {
+        if let errorToThrow { throw errorToThrow }
+        return CustomLimitOffsetPageSimpleRomSchema(items: [], total: 0, limit: limit, offset: offset, charIndex: [:])
+    }
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("not used in these tests") }
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema] {
+        if let recommendationsErrorToThrow { throw recommendationsErrorToThrow }
+        if let errorToThrow { throw errorToThrow }
+        recommendationsLimitRequested = limit
+        return recommendationsToReturn
+    }
     func getCollection(id: Int) async throws -> CollectionSchema { fatalError("not used in these tests") }
     func getVirtualCollections(type: String, limit: Int?) async throws -> [VirtualCollectionSchema] { fatalError("not used in these tests") }
     func getVirtualCollection(id: String) async throws -> VirtualCollectionSchema { fatalError("not used in these tests") }
@@ -133,10 +150,11 @@ final class FakeAPIClient: PRommAPIClient {
     func getStats() async throws -> StatsReturn { fatalError("not used in these tests") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("not used in these tests") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("not used in these tests") }
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data { fatalError("not used in these tests") }
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("not used in these tests") }
+    func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data { fatalError("not used in these tests") }
     func deleteSaves(ids: [Int]) async throws {}
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema { fatalError("not used in these tests") }
     func uploadState(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("not used in these tests") }
     func updateState(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("not used in these tests") }
     func downloadState(id: Int) async throws -> Data { fatalError("not used in these tests") }
@@ -152,6 +170,11 @@ final class FakeAPIClient: PRommAPIClient {
         startLibraryScanRequests.append(request)
         if let startLibraryScanError { throw startLibraryScanError }
     }
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
+    func startRomUpload(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String { fatalError("not used in these tests") }
+    func uploadRomChunk(uploadId: String, index: Int, fileURL: URL, progressHandler: ((Double) -> Void)?) async throws { fatalError("not used in these tests") }
+    func completeRomUpload(uploadId: String) async throws { fatalError("not used in these tests") }
+    func cancelRomUpload(uploadId: String) async throws { fatalError("not used in these tests") }
 }
 
 // MARK: - Fixtures
@@ -223,6 +246,94 @@ func makeUser(id: Int) -> UserSchema {
         lastActive: nil,
         createdAt: Date(timeIntervalSince1970: 0),
         updatedAt: Date(timeIntervalSince1970: 0)
+    )
+}
+
+func makeSimpleRom(id: Int, name: String) -> SimpleRomSchema {
+    SimpleRomSchema(
+        id: id,
+        igdbId: nil,
+        sgdbId: nil,
+        mobyId: nil,
+        ssId: nil,
+        raId: nil,
+        launchboxId: nil,
+        hasheousId: nil,
+        tgdbId: nil,
+        platformId: 1,
+        platformSlug: "snes",
+        platformFsSlug: "snes",
+        platformName: "Super Nintendo",
+        platformCustomName: nil,
+        platformDisplayName: "Super Nintendo",
+        fsName: "\(name).sfc",
+        fsNameNoTags: name,
+        fsNameNoExt: name,
+        fsExtension: "sfc",
+        fsPath: "snes/\(name).sfc",
+        fsSizeBytes: 1024,
+        name: name,
+        slug: name.lowercased().replacingOccurrences(of: " ", with: "-"),
+        summary: nil,
+        alternativeNames: [],
+        youtubeVideoId: nil,
+        metadatum: RomMetadataSchema(
+            romId: id,
+            genres: [],
+            franchises: [],
+            collections: [],
+            companies: [],
+            gameModes: [],
+            ageRatings: [],
+            firstReleaseDate: nil,
+            averageRating: nil
+        ),
+        igdbMetadata: nil,
+        mobyMetadata: nil,
+        ssMetadata: nil,
+        launchboxMetadata: nil,
+        hasheousMetadata: nil,
+        pathCoverSmall: nil,
+        pathCoverLarge: nil,
+        urlCover: nil,
+        hasManual: false,
+        pathManual: nil,
+        urlManual: nil,
+        isUnidentified: false,
+        isIdentified: true,
+        revision: nil,
+        regions: [],
+        languages: [],
+        tags: [],
+        crcHash: nil,
+        md5Hash: nil,
+        sha1Hash: nil,
+        multi: nil,
+        files: [],
+        fullPath: "snes/\(name).sfc",
+        createdAt: Date(timeIntervalSince1970: 0),
+        updatedAt: Date(timeIntervalSince1970: 0),
+        missingFromFs: false,
+        siblings: [],
+        romUser: RomUserSchema(
+            id: 1,
+            userId: 1,
+            romId: id,
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0),
+            lastPlayed: nil,
+            noteRawMarkdown: nil,
+            noteIsPublic: nil,
+            isMainSibling: nil,
+            backlogged: false,
+            nowPlaying: false,
+            hidden: false,
+            rating: 0,
+            difficulty: 0,
+            completion: 0,
+            status: nil,
+            userUsername: "user1"
+        )
     )
 }
 

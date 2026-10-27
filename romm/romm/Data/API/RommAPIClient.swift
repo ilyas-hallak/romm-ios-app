@@ -56,6 +56,9 @@ protocol PRommAPIClient {
     // ROM Search API Wrapper methods
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema
 
+    // Recommendations API Wrapper methods
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema]
+
     // Collections API Wrapper methods
     func getCollections(limit: Int?, offset: Int?) async throws -> [CollectionSchema]
     func getCollection(id: Int) async throws -> CollectionSchema
@@ -81,6 +84,9 @@ protocol PRommAPIClient {
     // Heartbeat API Wrapper methods
     func getHeartbeat() async throws -> HeartbeatResponse
     func getHeartbeat(from serverURL: String) async throws -> HeartbeatResponse
+    /// Quick check with a few seconds budget, for work that must not wait on
+    /// a server that is down or a device that is offline.
+    func isServerReachable() async -> Bool
 
     // ROM user props
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema
@@ -107,10 +113,11 @@ protocol PRommAPIClient {
     func startLibraryScan(_ request: ScanStartRequest) async throws
 
     // Saves sync
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema
+    func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data
     func deleteSaves(ids: [Int]) async throws
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema
 
     // States sync
     func uploadState(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema
@@ -121,6 +128,13 @@ protocol PRommAPIClient {
     // Save-sync API (RomM 5.0+)
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws
+
+    // ROM upload (RomM 4.8.0+, chunked)
+    func startRomUpload(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String
+    func uploadRomChunk(uploadId: String, index: Int, fileURL: URL, progressHandler: ((Double) -> Void)?) async throws
+    func completeRomUpload(uploadId: String) async throws
+    func cancelRomUpload(uploadId: String) async throws
 }
 
 enum APIClientError: LocalizedError {
@@ -132,6 +146,10 @@ enum APIClientError: LocalizedError {
     case invalidResponse(Int, String)
     case decodingError(Error)
     case cloudflareProtection(String)
+    /// HTTP 409. The sync API uses this specifically to mean a slot moved on
+    /// since this device's last sync, so callers need to tell it apart from a
+    /// generic failure instead of counting it as one.
+    case conflict(String)
 
     var errorDescription: String? {
         switch self {
@@ -151,6 +169,8 @@ enum APIClientError: LocalizedError {
             return "Data decoding error: \(error.localizedDescription)"
         case .cloudflareProtection(let details):
             return "Server is protected by Cloudflare - browser authentication required"
+        case .conflict(let message):
+            return "Conflict: \(message)"
         }
     }
 }
@@ -172,7 +192,7 @@ class RommAPIClient: PRommAPIClient {
         if let urlSession = urlSession {
             self.urlSession = urlSession
         } else {
-            let configuration = URLSessionConfiguration.default
+            let configuration = URLSessionConfiguration.default.withoutCookies()
             configuration.timeoutIntervalForRequest = 30.0
             configuration.timeoutIntervalForResource = 60 * 60
             configuration.waitsForConnectivity = true
@@ -240,7 +260,7 @@ class RommAPIClient: PRommAPIClient {
                 return data
             case 401:
                 logger.warning("Authentication failed - invalid credentials")
-                NotificationCenter.default.post(name: .sessionExpired, object: nil)
+                NotificationCenter.default.post(name: .sessionExpired, object: self)
                 throw APIClientError.authenticationRequired
             case 403:
                 let msg = String(data: data, encoding: .utf8) ?? "Forbidden"
@@ -251,16 +271,14 @@ class RommAPIClient: PRommAPIClient {
                     throw APIClientError.cloudflareProtection(msg)
                 }
 
-                // For client token auth, 403 means token was revoked/invalid
-                if tokenProvider.getAuthMethod() == .clientToken {
-                    logger.warning("Client token rejected (403) - session expired")
-                    NotificationCenter.default.post(name: .sessionExpired, object: nil)
-                    throw APIClientError.authenticationRequired
-                }
-
-                // Regular 403 error
+                // 403 is a regular error, never a logout trigger. Only 401 means the
+                // credentials themselves are rejected.
                 logger.error("Forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
+            case 409:
+                let msg = String(data: data, encoding: .utf8) ?? "Conflict"
+                logger.warning("Conflict (409): \(msg)")
+                throw APIClientError.conflict(msg)
             case 400...499:
                 let msg = String(data: data, encoding: .utf8) ?? "Client error"
                 logger.error("Client error (\(httpResponse.statusCode)): \(msg)")
@@ -442,7 +460,7 @@ class RommAPIClient: PRommAPIClient {
         case 401:
             try? FileManager.default.removeItem(at: tempURL)
             logger.warning("Authentication failed during download")
-            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            NotificationCenter.default.post(name: .sessionExpired, object: self)
             throw APIClientError.authenticationRequired
 
         case 400...599:
@@ -506,7 +524,7 @@ class RommAPIClient: PRommAPIClient {
                 return data
             case 401:
                 logger.warning("Authentication failed for multipart request")
-                NotificationCenter.default.post(name: .sessionExpired, object: nil)
+                NotificationCenter.default.post(name: .sessionExpired, object: self)
                 throw APIClientError.authenticationRequired
             case 403:
                 let msg = String(data: data, encoding: .utf8) ?? "Forbidden"
@@ -516,14 +534,14 @@ class RommAPIClient: PRommAPIClient {
                     throw APIClientError.cloudflareProtection(msg)
                 }
 
-                if tokenProvider.getAuthMethod() == .clientToken {
-                    logger.warning("Client token rejected (403) on multipart - session expired")
-                    NotificationCenter.default.post(name: .sessionExpired, object: nil)
-                    throw APIClientError.authenticationRequired
-                }
-
+                // 403 is a regular error, never a logout trigger. Only 401 means the
+                // credentials themselves are rejected.
                 logger.error("Multipart forbidden (\(httpResponse.statusCode)): \(msg)")
                 throw APIClientError.invalidResponse(httpResponse.statusCode, msg)
+            case 409:
+                let msg = String(data: data, encoding: .utf8) ?? "Conflict"
+                logger.warning("Multipart conflict (409): \(msg)")
+                throw APIClientError.conflict(msg)
             case 400...499:
                 let msg = String(data: data, encoding: .utf8) ?? "Client error"
                 logger.error("Multipart client error (\(httpResponse.statusCode)): \(msg)")
@@ -571,7 +589,7 @@ class RommAPIClient: PRommAPIClient {
         switch http.statusCode {
         case 200...299: return data
         case 401:
-            NotificationCenter.default.post(name: .sessionExpired, object: nil)
+            NotificationCenter.default.post(name: .sessionExpired, object: self)
             throw APIClientError.authenticationRequired
         default:
             let msg = String(data: data.prefix(500), encoding: .utf8) ?? "Error"
@@ -660,8 +678,7 @@ class RommAPIClient: PRommAPIClient {
     func withQuery(_ path: String, _ params: [(String, String?)]) -> String {
         let parts = params.compactMap { key, value -> String? in
             guard let value else { return nil }
-            let encoded = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
-            return "\(key)=\(encoded)"
+            return "\(key)=\(value.addingURLFormValueEncoding())"
         }
         guard !parts.isEmpty else { return path }
         return "\(path)?\(parts.joined(separator: "&"))"

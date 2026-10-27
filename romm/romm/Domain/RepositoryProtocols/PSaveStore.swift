@@ -8,10 +8,19 @@ protocol PSaveStore {
     /// read here needs a ROM id it does not yet know.
     func listRomIds() throws -> [Int]
 
+    /// Removes everything held for this ROM: battery, states, backups.
+    func deleteSaves(romId: Int) throws
+
     func readBattery(romId: Int) throws -> Data?
     func writeBattery(romId: Int, data: Data) throws
     func batteryModifiedAt(romId: Int) -> Date?
     func setBatteryModifiedAt(romId: Int, date: Date) throws
+
+    /// Snapshots `data` into this ROM's backups folder before a battery
+    /// conflict resolution overwrites something, pruning down to the newest
+    /// `BatteryBackupNaming.keepCount`. Throws on a write failure, so a caller
+    /// can abort the resolution instead of overwriting without a safety copy.
+    func backupBattery(romId: Int, data: Data, origin: BatteryBackupOrigin) throws
 
     func listStates(romId: Int) throws -> [SaveStateEntry]
     func readState(romId: Int, slot: Int) throws -> Data?
@@ -22,6 +31,12 @@ protocol PSaveStore {
 
     func readThumbnail(romId: Int, slot: Int) throws -> Data?
     func writeThumbnail(romId: Int, slot: Int, data: Data) throws
+    func deleteThumbnail(romId: Int, slot: Int) throws
+
+    // Sync baseline: what this device last agreed with the server about a
+    // slot, see StateSyncBaseline/StateSyncDecision.
+    func readStateBaseline(romId: Int, slot: Int) throws -> StateSyncBaseline?
+    func writeStateBaseline(romId: Int, slot: Int, baseline: StateSyncBaseline) throws
 
     // Undo Save: snapshot existing slot before overwrite
     func backupSlotForUndoSave(romId: Int, slot: Int) throws

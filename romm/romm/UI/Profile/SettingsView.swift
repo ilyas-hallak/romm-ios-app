@@ -6,19 +6,21 @@
 //
 
 import SwiftUI
-import os
 
+/// The app's own settings, plus signing out. Who is signed in, which server,
+/// and the pages about the app live in ``AccountSheet``, which is also what
+/// opens this screen.
 struct SettingsView: View {
-    private let logger = Logger.ui
     @EnvironmentObject var appData: AppData
     @State private var profileViewModel = ProfileViewModel()
     @StateObject private var experimentalSettings = ExperimentalFeatureSettings.shared
     @StateObject private var cloudSyncSettings = CloudSaveSyncSettings.shared
-    @State private var showingLogoutAlert = false
     @State private var showingResetAlert = false
-    @State private var showingWhatsNew = false
-    @State private var showingHelp = false
-    private let updateStore: AppUpdateStore = DefaultDependencyFactory.shared.appUpdateStore
+    private let enginePreference: PEmulatorEnginePreference = DefaultDependencyFactory.shared.enginePreference
+    private let playTargetPreference: PPlayTargetPreference = DefaultDependencyFactory.shared.playTargetPreference
+    /// Read on appear rather than computed, so coming back from the engine
+    /// settings picks up a changed Play destination.
+    @State private var playsOnDevice = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -27,84 +29,48 @@ struct SettingsView: View {
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
+
+    /// The App Store build has no in-app engine, so its Emulator section only
+    /// ever offers the external-app picker, always visible there. Everywhere
+    /// else the in-app engine stays the TestFlight/Debug experiment it has been.
+    private var showsEmulatorSection: Bool {
+        #if APP_STORE
+        return true
+        #else
+        return Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild
+        #endif
+    }
+
+    /// True when Play runs the game here with a built-in engine, the only case
+    /// a BIOS image is ever read. The web engine runs on the server, and an
+    /// external app brings whatever it needs itself.
+    ///
+    /// The engine preference already coerces a stored `.web` away in builds
+    /// without the web engine, so comparing against it is enough.
+    private func refreshPlayDestination() {
+        guard case .builtIn = playTargetPreference.current else {
+            playsOnDevice = false
+            return
+        }
+        playsOnDevice = enginePreference.current != .web
+    }
+
+    private var emulatorSectionFooter: String {
+        #if APP_STORE
+        return "Hand downloaded ROMs to an emulator app you already have to play them."
+        #else
+        return "Experimental: play ROMs directly in the app. Only available in TestFlight and Debug builds."
+        #endif
+    }
     
     var body: some View {
         @Bindable var profileVM = profileViewModel
         return List {
-            // The RomM account and the server it lives on, in one place. The
-            // username used to appear twice, once from /api/users/me and once
-            // from the stored setup config, which are always the same login.
-            Section {
-                HStack {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.blue)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(appData.currentUser?.username ?? appData.currentConfiguration?.username ?? "Signed in")
-                            .font(.headline)
-
-                        if let role = appData.currentUser?.role {
-                            Text(role.displayName)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-
-                if let config = appData.currentConfiguration {
-                    HStack {
-                        Image(systemName: "server.rack")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Server")
-                            Text(config.serverURL)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-
-                Button(action: {
-                    showingLogoutAlert = true
-                }) {
-                    HStack {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                        Text("Logout")
-                    }
-                    .foregroundColor(.red)
-                }
-
-                if appData.currentConfiguration != nil {
-                    Button(action: {
-                        showingResetAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Reset Configuration")
-                        }
-                        .foregroundColor(.orange)
-                    }
-                }
-            } header: {
-                Text("RomM account")
-            }
-
-            // Statistics Section
-            Section("Statistics") {
-                NavigationLink(destination: StatsView()) {
-                    HStack {
-                        Image(systemName: "chart.bar.fill")
-                        Text("Server Statistics")
-                    }
-                }
-            }
-
             // Platforms Section
             Section {
                 Toggle(isOn: $profileVM.groupRomsByMetaId) {
                     HStack {
-                        Image(systemName: "rectangle.stack")
+                        rowIcon("rectangle.stack")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Group ROMs")
                             Text("Group versions of the same ROM together in the gallery")
@@ -121,31 +87,11 @@ struct SettingsView: View {
             Section("App Settings") {
                 UpdateAvailableRow()
 
-                Button {
-                    showingHelp = true
-                } label: {
-                    HStack {
-                        Image(systemName: "questionmark.circle")
-                        Text("Help")
-                    }
-                    .foregroundStyle(.primary)
-                }
-
-                Button {
-                    showingWhatsNew = true
-                } label: {
-                    HStack {
-                        Image(systemName: "clock.arrow.circlepath")
-                        Text("Version History")
-                    }
-                    .foregroundStyle(.primary)
-                }
-
                 // Logging Configuration (TestFlight & Debug only)
                 if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
                     NavigationLink(destination: LoggingConfigurationView()) {
                         HStack {
-                            Image(systemName: "doc.text.magnifyingglass")
+                            rowIcon("doc.text.magnifyingglass")
                             Text("Logging Configuration")
                         }
                     }
@@ -153,25 +99,35 @@ struct SettingsView: View {
 
                 NavigationLink(destination: ImageCacheSettingsView()) {
                     HStack {
-                        Image(systemName: "photo.stack")
+                        rowIcon("photo.stack")
                         Text("Image Cache Settings")
                     }
                 }
 
                 NavigationLink(destination: LicensesView()) {
                     HStack {
-                        Image(systemName: "doc.text")
+                        rowIcon("doc.text")
                         Text("Licenses")
                     }
                 }
             }
 
-            // Emulator Section (TestFlight & Debug only)
-            if Bundle.main.isTestFlightBuild || Bundle.main.isDebugBuild {
+            // Emulator Section
+            if showsEmulatorSection {
                 Section {
-                    Toggle(isOn: $experimentalSettings.isEmulatorEnabled) {
+                    #if APP_STORE
+                    // No in-app engine to switch on, so this is just the door to
+                    // picking (and setting up) an external emulator app.
+                    NavigationLink(destination: EmulatorEngineSettingsView()) {
                         HStack {
                             Image(systemName: "gamecontroller")
+                            Text("Emulator App")
+                        }
+                    }
+                    #else
+                    Toggle(isOn: $experimentalSettings.isEmulatorEnabled) {
+                        HStack {
+                            rowIcon("gamecontroller")
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("In-App Emulator")
                                 Text("Plays ROMs directly in the app")
@@ -184,48 +140,46 @@ struct SettingsView: View {
                     if experimentalSettings.isEmulatorEnabled {
                         NavigationLink(destination: EmulatorEngineSettingsView()) {
                             HStack {
-                                Image(systemName: "cpu.fill")
+                                rowIcon("cpu.fill")
                                 Text("Emulator Engine")
                             }
                         }
 
-                        NavigationLink(destination: BIOSSettingsView()) {
-                            HStack {
-                                Image(systemName: "cpu")
-                                Text("BIOS Files")
+                        // Only shown while a game actually runs here, the row
+                        // means nothing for the web engine or an external app.
+                        if playsOnDevice {
+                            NavigationLink(destination: BIOSSettingsView()) {
+                                HStack {
+                                    rowIcon("cpu")
+                                    Text("BIOS Files")
+                                }
                             }
                         }
 
                         NavigationLink(destination: ControllerSkinsSettingsView()) {
                             HStack {
-                                Image(systemName: "paintbrush.fill")
+                                rowIcon("paintbrush.fill")
                                 Text("Controller Skins")
                             }
                         }
 
                         NavigationLink(destination: ExternalDisplaySettingsView()) {
                             HStack {
-                                Image(systemName: "tv")
+                                rowIcon("tv")
                                 Text("Play on TV")
                             }
                         }
 
-                        NavigationLink(destination: RetroAchievementsSettingsView()) {
+                        NavigationLink(destination: SecondControllerSettingsView()) {
                             HStack {
-                                Image(systemName: "trophy.fill")
-                                    .foregroundStyle(.orange)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("RetroAchievements")
-                                    Text(appData.currentUser?.linkedRetroAchievementsUsername ?? "No account linked")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
+                                Image(systemName: "gamecontroller")
+                                Text("Second Controller")
                             }
                         }
 
                         Toggle(isOn: $cloudSyncSettings.isEnabled) {
                             HStack {
-                                Image(systemName: "icloud.and.arrow.up")
+                                rowIcon("icloud.and.arrow.up")
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Cloud Save Sync")
                                     Text("Sync game saves and save states with the RomM server")
@@ -235,14 +189,17 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    #endif
                 } header: {
                     Text("Emulator")
                 } footer: {
-                    Text("Experimental: play ROMs directly in the app. Only available in TestFlight and Debug builds.")
+                    Text(emulatorSectionFooter)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
+
+            accountSection
 
             Section {
                 VStack(spacing: 4) {
@@ -269,38 +226,120 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
-        .sheet(isPresented: $showingWhatsNew) {
-            // The whole history from Settings, and no mark-seen side effect.
-            ChangelogView(markdown: updateStore.changelog, mode: .versionHistory)
+        .onAppear {
+            refreshPlayDestination()
+            profileViewModel.refreshServerConnection()
         }
-        .sheet(isPresented: $showingHelp) {
-            HelpView()
-        }
-        .alert("Logout", isPresented: $showingLogoutAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Logout", role: .destructive) {
-                profileViewModel.logout()
-            }
+        .alert("Logout", isPresented: $profileViewModel.isLogoutConfirmationPresented) {
+            logoutButtons
         } message: {
-            Text("Are you sure you want to logout?")
+            Text(profileViewModel.logoutMessage)
         }
         .alert("Reset Configuration", isPresented: $showingResetAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Reset", role: .destructive) {
-                resetConfiguration()
+                profileViewModel.restartSetup()
             }
         } message: {
             Text("This will delete all configuration settings including your server connection and credentials. You will be returned to the setup screen.")
         }
     }
-    
-    private func resetConfiguration() {
-        logger.info("Resetting configuration...")
-        
-        // Use ProfileViewModel's restart setup method
-        profileViewModel.restartSetup()
-        
-        logger.info("Configuration reset complete")
+}
+
+extension SettingsView {
+    @ViewBuilder
+    private var logoutButtons: some View {
+        if profileViewModel.logoutSummary?.hasDownloads == true {
+            Button("Log out and keep downloads") {
+                Task { await profileViewModel.logout(deletingDownloads: false) }
+            }
+            Button("Log out and delete downloads", role: .destructive) {
+                Task { await profileViewModel.logout(deletingDownloads: true) }
+            }
+        } else {
+            Button("Logout", role: .destructive) {
+                Task { await profileViewModel.logout(deletingDownloads: false) }
+            }
+        }
+        Button("Cancel", role: .cancel) { }
+    }
+
+    /// The server addresses, signing out and starting over. Kept at the end,
+    /// out of the way of the settings one changes more often.
+    private var accountSection: some View {
+        Section {
+            if let connection = profileViewModel.serverConnection {
+                serverRow(
+                    title: "Server URL",
+                    url: connection.primaryURL,
+                    icon: "server.rack",
+                    isInUse: connection.alternativeURL != nil && connection.activeEndpoint == .primary
+                )
+
+                NavigationLink(destination: AlternativeServerURLView()) {
+                    serverRow(
+                        title: "Alternative URL",
+                        url: connection.alternativeURL,
+                        icon: "arrow.triangle.branch",
+                        isInUse: connection.activeEndpoint == .alternative
+                    )
+                }
+            }
+
+            Button(role: .destructive) {
+                Task { await profileViewModel.prepareLogout() }
+            } label: {
+                HStack {
+                    rowIcon("rectangle.portrait.and.arrow.right")
+                    Text("Logout")
+                }
+                .foregroundStyle(.red)
+            }
+
+            if appData.currentConfiguration != nil {
+                Button {
+                    showingResetAlert = true
+                } label: {
+                    HStack {
+                        rowIcon("arrow.clockwise")
+                        Text("Reset Configuration")
+                    }
+                    .foregroundStyle(.orange)
+                }
+            }
+        } header: {
+            Text("RomM account")
+        } footer: {
+            if profileViewModel.serverConnection != nil {
+                Text("When the server URL can't be reached, the app switches to the alternative URL, for example a local address at home and a public one on the go.")
+            }
+        }
+    }
+
+    /// One width for every symbol, so the titles line up.
+    private func rowIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .frame(width: 28)
+    }
+
+    private func serverRow(title: LocalizedStringKey, url: String?, icon: String, isInUse: Bool) -> some View {
+        HStack {
+            rowIcon(icon)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(url ?? String(localized: "Not set"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            if isInUse {
+                Text("In use")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+        }
     }
 }
 

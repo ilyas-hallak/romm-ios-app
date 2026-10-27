@@ -290,6 +290,7 @@ struct LogEntryRow: View {
         case .viewModel: return "🔄"
         case .sync: return "🔄"
         case .emulator: return "🎮"
+        case .sftp: return "📡"
         }
     }
 
@@ -441,6 +442,7 @@ struct LogFilterView: View {
         case .viewModel: return "🔄"
         case .sync: return "🔄"
         case .emulator: return "🎮"
+        case .sftp: return "📡"
         }
     }
 
@@ -456,6 +458,7 @@ struct LogFilterView: View {
         case .viewModel: return "View model layer, state"
         case .sync: return "Synchronization operations"
         case .emulator: return "Launching games, ROM resolution, external apps"
+        case .sftp: return "SFTP connections, file transfers"
         }
     }
 }

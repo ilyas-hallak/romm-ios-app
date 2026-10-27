@@ -7,6 +7,14 @@ PROJECT_PATH = 'romm/romm.xcodeproj'
 DEFAULT_SCHEME = 'romm'
 DEFAULT_TARGET = 'romm'
 
+# The signing team is no longer stored in the project file, it comes from a
+# gitignored Signing.xcconfig that a release worktree does not have. So the
+# build has to be told the team explicitly. Override with IOS_DEVELOPMENT_TEAM.
+DEFAULT_DEVELOPMENT_TEAM = '8J69P655GN'
+SIGNING_TEAM_ID = ENV['IOS_DEVELOPMENT_TEAM'].to_s.strip.then do |team|
+  team.empty? ? DEFAULT_DEVELOPMENT_TEAM : team
+end
+
 private_lane :resolve_optional_app_store_api_key do
   key_id = ENV['APP_STORE_CONNECT_API_KEY_KEY_ID'].to_s.strip
   issuer_id = ENV['APP_STORE_CONNECT_API_KEY_ISSUER_ID'].to_s.strip
@@ -70,12 +78,15 @@ platform :ios do
       message: commit_message
     )
 
+    # Both phases need it: xcargs covers the archive, export_team_id the export.
     build_app(
       project: PROJECT_PATH,
       scheme: scheme,
       configuration: 'Release',
       clean: true,
       export_method: 'app-store',
+      export_team_id: SIGNING_TEAM_ID,
+      xcargs: "DEVELOPMENT_TEAM=#{SIGNING_TEAM_ID}",
       output_directory: 'build',
       output_name: 'romm.ipa'
     )

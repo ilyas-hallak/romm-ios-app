@@ -83,4 +83,19 @@ struct RetroAchievementsProgressionTests {
     func rejectsUnparseableTimestamps(_ raw: String) {
         #expect(EarnedRetroAchievement.parseTimestamp(raw) == nil)
     }
+
+    @Test func findsProgressionForARomGameIdentifier() {
+        let progression = RetroAchievementsProgression(
+            gameId: 7,
+            awardedCount: 2,
+            awardedHardcoreCount: 1,
+            maximumCount: 10,
+            earnedAchievements: []
+        )
+        let user = User(id: 1, username: "player", role: .viewer, retroAchievementsProgression: [progression])
+
+        #expect(user.retroAchievementsProgression(for: 7) == progression)
+        #expect(user.retroAchievementsProgression(for: 8) == nil)
+        #expect(user.retroAchievementsProgression(for: nil) == nil)
+    }
 }

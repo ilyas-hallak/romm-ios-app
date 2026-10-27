@@ -8,6 +8,12 @@ struct SyncPlanDetailView: View {
     let preview: SyncPreview
     /// Resolves a ROM id to a name, already done by the overview.
     let romName: (Int) -> String
+    var factory: PDependencyFactory = DefaultDependencyFactory.shared
+    /// Lets the caller (the overview) refresh its own plan once a conflict
+    /// here gets resolved.
+    var onResolved: () async -> Void = {}
+
+    @State private var conflictViewModel: BatteryConflictViewModel?
 
     var body: some View {
         List {
@@ -16,6 +22,9 @@ struct SyncPlanDetailView: View {
         }
         .navigationTitle("This Device")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $conflictViewModel) { conflictViewModel in
+            BatteryConflictResolutionSheet(viewModel: conflictViewModel, romName: romName(conflictViewModel.romId))
+        }
     }
 
     private var countsSection: some View {
@@ -67,6 +76,14 @@ struct SyncPlanDetailView: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                if operation.direction == .conflict, let saveId = operation.saveId {
+                    Button("Resolve…") {
+                        conflictViewModel = factory.makeBatteryConflictViewModel(
+                            romId: operation.romId, saveId: saveId
+                        ) { await onResolved() }
+                    }
+                    .font(.caption)
                 }
             }
             Spacer()

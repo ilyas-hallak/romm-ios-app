@@ -17,6 +17,7 @@ final class LibretroEmulatorViewModel {
 
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let resolveROMFile: PResolveROMFileUseCase
+    private let findROMsByFileStem: PFindROMsByFileStemUseCase
     private let saveStates: PEmulatorSaveStatesUseCase
     private let biosSync: PBIOSSyncUseCase
     let aspectRatioPreference: PLibretroAspectRatioPreference
@@ -30,6 +31,7 @@ final class LibretroEmulatorViewModel {
         core: LibretroCore,
         getDownloadedROM: PGetDownloadedROMUseCase,
         resolveROMFile: PResolveROMFileUseCase,
+        findROMsByFileStem: PFindROMsByFileStemUseCase,
         saveStates: PEmulatorSaveStatesUseCase,
         biosSync: PBIOSSyncUseCase,
         aspectRatioPreference: PLibretroAspectRatioPreference,
@@ -41,6 +43,7 @@ final class LibretroEmulatorViewModel {
         self.core = core
         self.getDownloadedROM = getDownloadedROM
         self.resolveROMFile = resolveROMFile
+        self.findROMsByFileStem = findROMsByFileStem
         self.saveStates = saveStates
         self.biosSync = biosSync
         self.aspectRatioPreference = aspectRatioPreference
@@ -54,6 +57,7 @@ final class LibretroEmulatorViewModel {
     var rumblePreference: PRumblePreference { factory.rumblePreference }
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { factory.gamepadFaceButtonPreference }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { factory.emulatorMenuShortcutPreference }
+    var analogSticksPreference: PAnalogSticksPreference { factory.analogSticksPreference }
 
     /// Save-state slot to auto-load once the core is running (chosen in the
     /// pre-launch sheet), or `nil` for a fresh start.
@@ -93,18 +97,21 @@ final class LibretroEmulatorViewModel {
             let cloudSync = factory.makeCloudSaveSyncService(
                 romId: rom.id,
                 emulator: "libretro-\(core.dylibName)",
-                batteryFileName: batteryFileName
+                batteryFileName: batteryFileName,
+                platformSlug: rom.platformSlug
             )
             let s = LibretroSession(
                 gameURL: url,
                 core: core,
                 romId: rom.id,
                 saveStates: saveStates,
+                findROMsByFileStem: findROMsByFileStem,
                 aspectRatioPreference: aspectRatioPreference,
                 screenPositionPreference: screenPositionPreference,
                 menuShortcutPreference: menuShortcutPreference,
                 faceButtonPreference: factory.gamepadFaceButtonPreference,
                 rumblePreference: factory.rumblePreference,
+                analogSticksPreference: factory.analogSticksPreference,
                 cloudSync: cloudSync
             )
             s.onMenuRequested = { [weak self] in self?.onMenuRequested?() }

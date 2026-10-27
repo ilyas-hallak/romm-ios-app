@@ -1,3 +1,4 @@
+#if !APP_STORE
 import Foundation
 import UIKit
 import AVFoundation
@@ -48,6 +49,55 @@ final class RommGameViewController: GameViewController {
     var isScreenDragEnabled: Bool {
         get { screenPanRecognizer.isEnabled }
         set { screenPanRecognizer.isEnabled = newValue }
+    }
+
+    /// Whether the phone's own game picture should be invisible right now (Phone
+    /// as Controller: the TV already shows the game, so the phone only needs its
+    /// touch controls). The core keeps rendering into these views regardless,
+    /// only their on-screen presentation is suppressed.
+    var isPhoneVideoHidden = false {
+        didSet { applyPhoneVideoHiddenState() }
+    }
+
+    /// Re-applies `isPhoneVideoHidden` to the current `gameViews`. DeltaCore's
+    /// `updateGameViews()` rebuilds that array on every skin or trait change and
+    /// always starts a rebuilt view unhidden, so this has to run again after
+    /// every rebuild, not just when the flag itself changes.
+    ///
+    /// A touch screen stays visible throughout: on the DS the lower screen is
+    /// what the player taps on, hiding it would mean tapping blind.
+    func applyPhoneVideoHiddenState() {
+        for (gameView, isTouchScreen) in zip(gameViews, touchScreenFlags) {
+            gameView.isHidden = isPhoneVideoHidden && !isTouchScreen
+        }
+    }
+
+    /// One flag per entry in `gameViews`, in the same order: DeltaCore builds
+    /// the views from the skin's screens in exactly that order.
+    private var touchScreenFlags: [Bool] {
+        ExternalDisplayPolicy.touchScreenFlags(
+            from: skinScreens,
+            gameViewCount: gameViews.count
+        )
+    }
+
+    /// Asks the skin about its screens. The traits arrive with the first layout
+    /// pass, and a skin may well name no screen at all for the ones it gets.
+    private var skinScreens: ExternalDisplayPolicy.SkinScreens {
+        // No items means the skin has no layout for these traits at all, which
+        // tells us nothing, so it must not release the picture.
+        guard let traits = controllerView?.controllerSkinTraits,
+              let skin = controllerView?.controllerSkin,
+              let items = skin.items(for: traits)
+        else { return .unknown }
+
+        guard let screens = skin.screens(for: traits), !screens.isEmpty else {
+            // Nothing named, so ask what the skin puts on the picture instead.
+            // A touch item means the picture carries a touch screen, even though
+            // no screen says so.
+            return .noneNamed(touches: items.contains { $0.kind == .touchScreen })
+        }
+        return .screens(screens.map(\.isTouchScreen))
     }
 
     override func viewDidLoad() {
@@ -187,11 +237,15 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     let screenPositionPreference: PEmulatorScreenPositionPreference
     private let faceButtonPreference: PGamepadFaceButtonPreference?
 
-    /// Watches the pad for the configured menu shortcut. Held strongly because
-    /// DeltaCore keeps its receivers weakly.
-    private let menuShortcutInput: NativeMenuShortcutInput
+    /// Watches the pad for the configured menu shortcut and steers the open menu.
+    /// Held strongly because DeltaCore keeps its receivers weakly.
+    private let menuInput: NativeMenuInput
 
     var onMenuRequested: (() -> Void)?
+    /// Controller steps for the open in-game menu, see `beginMenuNavigation()`.
+    var onMenuCommand: ((EmulatorMenuCommand) -> Void)?
+    /// While the menu is open the controllers drive it instead of the game.
+    private var isMenuNavigating = false
     /// Reports whether the on-screen touch controls are currently hidden, so the
     /// SwiftUI layer can show a standalone menu button in their place.
     var onControlsHiddenChanged: ((Bool) -> Void)?
@@ -204,14 +258,29 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     let viewController: GameViewController
 
+    private enum Phase { case launching, running, stopped }
+    /// The pull before launch can take a while. Until `start()` has set the
+    /// core up, `resume()` must not start it: DeltaCore would run a `.stopped`
+    /// core without controllers or the battery save (issue #178).
+    private var phase = Phase.launching
+
     /// Owned here so the display manager can hold it weakly: the target must not
     /// outlive the core it renders from.
     private var externalRenderTarget: DeltaCoreExternalRenderTarget?
+
+    /// The phone on the network that plays as the second player, while one is
+    /// connected. Held strongly because DeltaCore keeps its controllers weakly.
+    private var remoteController: RemoteGameController?
 
     // MARK: - GameViewControllerDelegate
 
     func gameViewController(_ gameViewController: GameViewController, handleMenuInputFrom gameController: GameController) {
         onMenuRequested?()
+    }
+
+    /// DeltaCore calls this after every gameViews rebuild, so re-apply the hidden state.
+    func gameViewController(_ gameViewController: GameViewController, didUpdateGameViews gameViews: [GameView]) {
+        (viewController as? RommGameViewController)?.applyPhoneVideoHiddenState()
     }
 
     private var emulatorCore: EmulatorCore? {
@@ -226,7 +295,10 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         self.cloudSync = cloudSync
         self.screenPositionPreference = screenPositionPreference
         self.faceButtonPreference = faceButtonPreference
-        self.menuShortcutInput = NativeMenuShortcutInput(menuShortcutPreference: menuShortcutPreference)
+        self.menuInput = NativeMenuInput(
+            menuShortcutPreference: menuShortcutPreference,
+            faceButtonPreference: faceButtonPreference
+        )
 
         let vc = RommGameViewController()
         vc.screenPositionPreference = screenPositionPreference
@@ -243,8 +315,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         vc.delegate = self
         // Routed through the same entry point as DeltaCore's own `.menu` input
         // below, so the menu opens the same way whichever path got there.
-        menuShortcutInput.onMenuRequested = { [weak self] in
+        menuInput.onMenuRequested = { [weak self] in
             self?.onMenuRequested?()
+        }
+        menuInput.onMenuCommand = { [weak self] command in
+            self?.onMenuCommand?(command)
         }
     }
 
@@ -296,20 +371,30 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         Task { [weak self] in
             guard let self else { return }
             await self.cloudSync?.pullBeforeLaunch()
+            // The player may have quit while the pull was still running.
+            guard self.phase == .launching else { return }
             self.loadBatteryIfAvailable()
             // First: DeltaCore picks its output volume as the core comes up, and
             // would mute itself if another app still held the audio by then.
             EmulatorAudioSession.activate()
+            // Starting the core takes the session to `.playAndRecord`, the slower
+            // category to play out of. Left alone on purpose: melonDS opens the DS
+            // microphone on the input it provides, and taking it back kills that
+            // microphone and rebuilds DeltaCore's audio engine mid start.
             self.viewController.startEmulation()
             self.emulatorCore?.rate = NativeEmulatorPlaybackRate.normal
             // Assigning this re-runs that volume decision, now without the
             // ring switch muting a console the user deliberately started.
             self.emulatorCore?.audioManager.respectsSilentMode = false
             self.attachExternalControllers()
+            // After the core is up: the pad needs something to send its input
+            // to, and one that joined before the game started is picked up here.
+            SecondControllerManager.shared.setInput(self)
             self.observeControllerConnections()
             self.observeAudioSessionChanges()
             self.recheckOutputVolumeAfterStart()
             self.registerExternalRenderTarget()
+            self.phase = .running
             guard let slot = resumeSlot else { return }
             try? await Task.sleep(nanoseconds: 600_000_000)
             self.viewController.pauseEmulation()
@@ -325,8 +410,12 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     func pause() {
         setFastForwarding(false)
         viewController.pauseEmulation()
+        // A pause is often the last thing that runs: iOS can end a backgrounded
+        // app without `stop()` ever being called.
+        flushBattery(pushesUnchanged: false)
     }
     func resume() {
+        guard phase == .running else { return }
         viewController.resumeEmulation()
         // Controller may have (dis)connected while paused in the menu.
         updateOnScreenControlsVisibility()
@@ -338,12 +427,14 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     func stop() {
+        phase = .stopped
         setFastForwarding(false)
         // Pause the render thread before flushing battery — DeltaCore expects
         // the emulator to be paused around save(), otherwise the save can race
         // with an in-flight frame and crash.
         viewController.pauseEmulation()
-        flushBattery()
+        flushBattery(pushesUnchanged: true)
+        SecondControllerManager.shared.setInput(nil)
         detachExternalControllers()
         // Before `core.stop()`: the core must not be torn down while a view of
         // ours is still registered as one of its render targets.
@@ -464,17 +555,21 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     /// Wires one controller to the core and the view controller. Passing the
     /// default mapping through is exactly what `addReceiver(_:)` does, so with
-    /// the swap off this stays the behaviour the app always had.
+    /// the swap off this stays the behaviour the app always had. While the menu
+    /// is open only the menu input is wired, the rest follows when it closes.
     private func attach(_ controller: GameController, to core: EmulatorCore) {
+        // Registers itself with the controller's default mapping, on purpose:
+        // the menu is about physical buttons, not about what the running
+        // system calls them. See NativeMenuInput.
+        if drivesMenu(controller) {
+            menuInput.attach(to: controller)
+        }
+        guard !isMenuNavigating else { return }
         let mapping = (faceButtonPreference?.isSwapped ?? false)
             ? FaceButtonInputMapping.swappingFaceButtons(of: controller.defaultInputMapping)
             : controller.defaultInputMapping
         controller.addReceiver(core, inputMapping: mapping)
         controller.addReceiver(viewController, inputMapping: mapping)
-        // Registers itself with the controller's default mapping, on purpose:
-        // the shortcut is about physical buttons, not about what the running
-        // system calls them. See NativeMenuShortcutInput.
-        menuShortcutInput.attach(to: controller)
     }
 
     /// Re-applies the face-button swap to every connected controller after it
@@ -489,10 +584,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// before the swap.
     func reloadFaceButtonMapping() {
         guard let core = emulatorCore else { return }
+        menuInput.reloadPreferences()
         for controller in ExternalGameControllerManager.shared.connectedControllers {
-            for input in controller.activatedInputs.keys {
-                controller.deactivate(input)
-            }
+            releaseHeldInputs(of: controller)
             attach(controller, to: core)
         }
     }
@@ -500,18 +594,59 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// Picks up a menu shortcut changed in the in-game menu, live. Only the combo
     /// is re-read, the controllers stay wired exactly as they are.
     func reloadMenuShortcut() {
-        menuShortcutInput.reloadPreferences()
+        menuInput.reloadPreferences()
+    }
+
+    /// Hands the controllers to the in-game menu. The core and the view
+    /// controller are unhooked rather than told to ignore input: the core takes
+    /// button presses even while paused, and they would land in the first frame
+    /// after the menu closes. Held inputs are lifted first for the same reason.
+    func beginMenuNavigation() {
+        guard !isMenuNavigating else { return }
+        if let core = emulatorCore {
+            for controller in ExternalGameControllerManager.shared.connectedControllers {
+                releaseHeldInputs(of: controller)
+                controller.removeReceiver(core)
+                controller.removeReceiver(viewController)
+            }
+        }
+        // Only now, so the releases above are not read as menu steps.
+        isMenuNavigating = true
+        menuInput.isNavigatingMenu = true
+    }
+
+    func endMenuNavigation() {
+        guard isMenuNavigating else { return }
+        isMenuNavigating = false
+        menuInput.isNavigatingMenu = false
+        guard let core = emulatorCore else { return }
+        for controller in ExternalGameControllerManager.shared.connectedControllers {
+            attach(controller, to: core)
+        }
+    }
+
+    /// Only player one opens and steers the menu, like on the libretro engine.
+    private func drivesMenu(_ controller: GameController) -> Bool {
+        controller.playerIndex == 0
+    }
+
+    /// A press routed to one receiver set must not have its release go to
+    /// another, or the input stays stuck down in the core.
+    private func releaseHeldInputs(of controller: GameController) {
+        for input in controller.activatedInputs.keys {
+            controller.deactivate(input)
+        }
     }
 
     private func detachExternalControllers() {
         // Unconditional: the core can already be gone when a session is torn down
         // early, and a button held at that point must not survive into the next one.
-        menuShortcutInput.reset()
+        menuInput.reset()
         guard let core = emulatorCore else { return }
         for controller in ExternalGameControllerManager.shared.connectedControllers {
             controller.removeReceiver(core)
             controller.removeReceiver(viewController)
-            menuShortcutInput.detach(from: controller)
+            menuInput.detach(from: controller)
         }
     }
 
@@ -548,7 +683,11 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     @objc private func externalControllerDidConnect(_ notification: Notification) {
         guard let controller = notification.object as? GameController,
               let core = emulatorCore else { return }
-        let usedIndexes = Set(ExternalGameControllerManager.shared.connectedControllers.compactMap { $0.playerIndex })
+        // The manager already lists the new controller, and can announce one that
+        // is attached already. Counting it as taken would push it to player two.
+        let usedIndexes = Set(ExternalGameControllerManager.shared.connectedControllers
+            .filter { !$0.isEqual(controller) }
+            .compactMap { $0.playerIndex })
         var nextIndex = 0
         while usedIndexes.contains(nextIndex) { nextIndex += 1 }
         controller.playerIndex = nextIndex
@@ -561,7 +700,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
               let core = emulatorCore else { return }
         controller.removeReceiver(core)
         controller.removeReceiver(viewController)
-        menuShortcutInput.detach(from: controller)
+        if drivesMenu(controller) {
+            menuInput.detach(from: controller)
+        }
         updateOnScreenControlsVisibility()
     }
 
@@ -571,12 +712,19 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         // Drag-to-move is only available when the touch skin is out of the way.
         (viewController as? RommGameViewController)?.isScreenDragEnabled = hide
         onControlsHiddenChanged?(hide)
+        updatePhoneVideoVisibility()
     }
 
     /// Hide the on-screen buttons when a physical controller is connected — a
     /// standalone menu button takes over and the game becomes draggable.
     private var shouldHideOnScreenControls: Bool {
         EmulatorControllerState.isConnected
+    }
+
+    /// Recomputes whether the phone's picture should be hidden, so the in-game toggle applies live.
+    func updatePhoneVideoVisibility() {
+        let hidden = ExternalDisplayManager.shared.isPhoneVideoHidden(areTouchControlsHidden: shouldHideOnScreenControls)
+        (viewController as? RommGameViewController)?.isPhoneVideoHidden = hidden
     }
 
     // MARK: - Save / Load
@@ -596,7 +744,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         if let thumb {
             try saveStates.writeThumbnail(romId: romId, slot: slot, data: thumb)
         }
-        cloudSync?.pushState(slot: slot, data: data, thumbnail: thumb)
+        cloudSync?.pushState(slot: slot)
     }
 
     func loadState(slot: Int) async throws {
@@ -672,11 +820,18 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
 
     // MARK: - Battery
 
+    private var batteryFile: CoreBatteryFile {
+        CoreBatteryFile(
+            url: Game(fileURL: gameURL, type: gameType).gameSaveURL,
+            romId: romId,
+            saveStates: saveStates
+        )
+    }
+
     private func loadBatteryIfAvailable() {
-        guard let raw = try? saveStates.readBattery(romId: romId) else { return }
-        let data = adaptBatteryForCore(raw: raw)
-        let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
-        try? data.write(to: savURL, options: .atomic)
+        guard case .adoptedCoreFile(let data) = batteryFile.stage(adapt: adaptBatteryForCore) else { return }
+        logger.info("Kept the core's newer battery save over the stored one")
+        cloudSync?.pushBattery(data: data)
     }
 
     /// VBA-M (`CPUReadBatteryFile`) routes the .sav purely by file size:
@@ -717,15 +872,53 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         return nil
     }
 
-    private func flushBattery() {
+    /// - Parameter pushesUnchanged: Also push a save the store already had. Done
+    ///   on quit, so a push that failed earlier, offline for example, gets retried.
+    private func flushBattery(pushesUnchanged: Bool) {
         // If the view disappears before startEmulation() runs, the core is still
         // .stopped and save() dereferences NULL (EXC_BAD_ACCESS in N64/GPGX).
         guard let core = emulatorCore, core.state != .stopped else { return }
         core.save()
-        let savURL = Game(fileURL: gameURL, type: gameType).gameSaveURL
-        if let data = try? Data(contentsOf: savURL) {
-            try? saveStates.writeBattery(romId: romId, data: data)
-            cloudSync?.pushBattery(data: data)
-        }
+        guard let battery = batteryFile.collect(), battery.isNew || pushesUnchanged else { return }
+        cloudSync?.pushBattery(data: battery.data)
     }
 }
+
+// MARK: - Second player over the network
+
+extension NativeEmulatorSession: PSecondPlayerInput {
+
+    func setSecondPlayerConnected(_ connected: Bool) {
+        if connected {
+            attachRemoteController()
+        } else {
+            detachRemoteController()
+        }
+    }
+
+    func setSecondPlayerButton(_ button: RemoteGamepadButton, pressed: Bool) {
+        remoteController?.set(button, pressed: pressed)
+    }
+
+    private func attachRemoteController() {
+        guard remoteController == nil, let core = emulatorCore else { return }
+        let controller = RemoteGameController(
+            name: SecondControllerManager.shared.padName ?? "Remote pad",
+            playerIndex: Self.remotePadPlayer
+        )
+        // Only the core, not the game view controller: the menu input belongs to
+        // whoever holds the phone the game runs on.
+        controller.addReceiver(core, inputMapping: controller.defaultInputMapping)
+        remoteController = controller
+    }
+
+    private func detachRemoteController() {
+        guard let controller = remoteController else { return }
+        controller.releaseAll()
+        if let core = emulatorCore {
+            controller.removeReceiver(core)
+        }
+        remoteController = nil
+    }
+}
+#endif

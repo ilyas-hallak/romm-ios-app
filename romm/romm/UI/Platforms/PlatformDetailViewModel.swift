@@ -408,7 +408,7 @@ class PlatformDetailViewModel {
     }
 
     private func prefetchCovers(for roms: [Rom]) {
-        let urls = roms.compactMap { $0.urlCover }.compactMap { URL(string: $0) }
+        let urls = roms.compactMap { $0.listCoverURL }.compactMap { URL(string: $0) }
         KingfisherCacheManager.shared.preloadImages(urls: urls)
     }
 

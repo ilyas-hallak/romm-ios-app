@@ -26,6 +26,8 @@ struct RomDetailView: View {
     @State private var selectedTab: DetailTab = .details
     @State private var dominantColor: Color? = nil
     @State private var isHashesExpanded: Bool = false
+    @State private var showsAllAchievements = false
+    @State private var selectedAchievement: AchievementDetail?
     @State private var showingSFTPUpload = false
     @State private var showingCollectionPicker = false
     @State private var showingFullScreenPDF = false
@@ -78,6 +80,8 @@ struct RomDetailView: View {
             summary: romDetails.summary,
             platformId: romDetails.platformId,
             urlCover: romDetails.urlCover,
+            coverURLSmall: romDetails.coverURLSmall, // Keep the covers from the own server
+            coverURLLarge: romDetails.coverURLLarge,
             releaseYear: rom.releaseYear, // Keep original release year
             isFavourite: romDetails.isFavourite,
             hasRetroAchievements: romDetails.hasRetroAchievements,
@@ -102,7 +106,7 @@ struct RomDetailView: View {
                         defaultHeight: 400
                     ) {
                         ZStack(alignment: .top) {
-                            CachedKFImage(urlString: rom.urlCover) { image in
+                            CachedKFImage(urlString: rom.detailCoverURL, tier: .full) { image in
                                 image
                                     .resizable()
                                     .scaledToFill()
@@ -241,26 +245,7 @@ struct RomDetailView: View {
                     } message: {
                         Text(viewModel.downloadError ?? "")
                     }
-                    // A Play handoff that went onto the pasteboard because the
-                    // target app ignores documents from the "Open in" menu.
-                    .alert(
-                        "ROM Copied",
-                        isPresented: Binding(
-                            get: { viewModel.externalPlay.pasteboardHandoff != nil },
-                            set: { if !$0 { viewModel.externalPlay.dismissPasteboardHandoff() } }
-                        ),
-                        presenting: viewModel.externalPlay.pasteboardHandoff
-                    ) { handoff in
-                        Button("Open \(handoff.appName)") {
-                            viewModel.externalPlay.openPasteboardTarget()
-                        }
-                        Button("Done", role: .cancel) {
-                            viewModel.externalPlay.dismissPasteboardHandoff()
-                        }
-                    } message: { handoff in
-                        Text("\(handoff.romName) is on the clipboard. "
-                            + "Open \(handoff.appName) and tap Paste to import it.")
-                    }
+                    .externalPlayAlerts(viewModel.externalPlay)
                 }
             }
             .overlay(alignment: .top) {
@@ -294,6 +279,7 @@ struct RomDetailView: View {
                     print(scrollOffset)
                 }
             }
+            #if !APP_STORE
             .fullScreenCover(item: $viewModel.launchDecision, onDismiss: {
                 viewModel.emulatorPresentationDidEnd()
                 pendingResumeSlot = nil
@@ -330,6 +316,7 @@ struct RomDetailView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
+            #endif
             .onAppear {
                 Task {
                     await viewModel.loadRomDetails(romId: rom.id)
@@ -343,6 +330,9 @@ struct RomDetailView: View {
                 type: .success,
                 duration: 2.0
             )
+            .sheet(item: $selectedAchievement) { detail in
+                AchievementDetailSheet(detail: detail)
+            }
     }
 
     @ViewBuilder
@@ -473,25 +463,18 @@ struct RomDetailView: View {
             let downloadState = viewModel.downloadButtonState(forRomId: currentSelectedRom.id)
             HStack(spacing: 12) {
                 Button(action: {
-                    // While a download runs this button is the way out of it,
-                    // rather than a second button crowding the row.
-                    switch downloadState {
-                    case .queued, .downloading:
-                        viewModel.cancelDownload(romId: currentSelectedRom.id)
-                        return
-                    case .downloaded:
-                        return
-                    case .idle, .failed:
-                        break
+                    // The view model decides whether this tap cancels, is
+                    // ignored, or starts a download; only the flight animation
+                    // (needs this view's geometry) stays here.
+                    if viewModel.downloadButtonTapped(rom: currentSelectedRom) == .startedDownload {
+                        appData.launchDownloadFlight(
+                            coverURL: currentSelectedRom.listCoverURL,
+                            from: downloadButtonFrame,
+                            // No public API exposes the tab-bar's minimized state, so
+                            // derive it from the live scroll offset (see onScrollGeometryChange).
+                            tabBarMinimized: tabBarMinimized
+                        )
                     }
-                    appData.launchDownloadFlight(
-                        coverURL: currentSelectedRom.urlCover,
-                        from: downloadButtonFrame,
-                        // No public API exposes the tab-bar's minimized state, so
-                        // derive it from the live scroll offset (see onScrollGeometryChange).
-                        tabBarMinimized: tabBarMinimized
-                    )
-                    viewModel.downloadROM(rom: currentSelectedRom)
                 }) {
                     HStack(spacing: 8) {
                         switch downloadState {
@@ -987,8 +970,12 @@ struct RomDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }) { achievement in
+                let achievements = details.retroAchievements.sorted { ($0.displayOrder ?? .max) < ($1.displayOrder ?? .max) }
+                ForEach(showsAllAchievements ? achievements : Array(achievements.prefix(5))) { achievement in
                     let earnedAchievement = retroAchievementsProgress(for: details)?.earnedAchievement(for: achievement)
+                    Button {
+                        selectedAchievement = AchievementDetail(achievement: achievement, earnedAchievement: earnedAchievement)
+                    } label: {
                     HStack(alignment: .top, spacing: 12) {
                         if let badgeURL = earnedAchievement == nil ? achievement.lockedBadgeURL : achievement.badgeURL {
                             CachedKFImage(urlString: badgeURL) { image in
@@ -1027,7 +1014,16 @@ struct RomDetailView: View {
                             }
                         }
                     }
+                    }
+                    .buttonStyle(.plain)
                     .padding(.vertical, 4)
+                }
+
+                if achievements.count > 5 {
+                    Button(showsAllAchievements ? "Show less" : "Show all \(achievements.count) achievements") {
+                        showsAllAchievements.toggle()
+                    }
+                    .font(.subheadline)
                 }
             }
         }
@@ -1053,7 +1049,7 @@ struct RomDetailView: View {
             .foregroundStyle(isEarned ? .green : .secondary)
             .frame(width: 40, height: 40)
     }
-    
+
     @ViewBuilder
     private func summarySection(_ summary: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1537,6 +1533,9 @@ struct ParallaxHeader<Content: View, Space: Hashable>: View {
                     width: proxy.size.width,
                     height: proxy.size.height + heightModifier
                 )
+                // The frame only fixes the layout size, a cover wider than 2:3 would still
+                // paint past it and spill out sideways.
+                .clipped()
                 .offset(y: offset)
                 .onAppear {
                     // Extract dominant color from cover image
@@ -1626,7 +1625,7 @@ struct GameDataCard: View {
             // Screenshot/Preview Area
             ZStack {
                 if let screenshot = screenshot {
-                    CachedKFImage(urlString: screenshot.downloadPath) { image in
+                    CachedKFImage(urlString: screenshot.downloadPath, tier: .full) { image in
                         image
                             .resizable()
                             .scaledToFill()

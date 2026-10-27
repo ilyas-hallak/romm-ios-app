@@ -45,6 +45,7 @@ enum LogCategory: String, CaseIterable, Codable {
     /// the chain you follow when Play does not do what it should, and it spans
     /// several layers.
     case emulator = "Emulator"
+    case sftp = "SFTP"
 }
 
 class LogConfiguration: ObservableObject {
@@ -139,7 +140,7 @@ struct Logger {
     
     // MARK: - Log Levels
 
-    func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    func debug(_ message: String, file: String = #fileID, function: String = #function, line: Int = #line) {
         guard config.shouldLog(.debug, for: category) else { return }
         let formattedMessage = formatMessage(message, level: .debug, file: file, function: function, line: line)
         logger.debug("\(formattedMessage)")
@@ -151,7 +152,7 @@ struct Logger {
         }
     }
     
-    func info(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    func info(_ message: String, file: String = #fileID, function: String = #function, line: Int = #line) {
         guard config.shouldLog(.info, for: category) else { return }
         let formattedMessage = formatMessage(message, level: .info, file: file, function: function, line: line)
         logger.info("\(formattedMessage)")
@@ -163,7 +164,7 @@ struct Logger {
         }
     }
     
-    func notice(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    func notice(_ message: String, file: String = #fileID, function: String = #function, line: Int = #line) {
         guard config.shouldLog(.notice, for: category) else { return }
         let formattedMessage = formatMessage(message, level: .notice, file: file, function: function, line: line)
         logger.notice("\(formattedMessage)")
@@ -175,7 +176,7 @@ struct Logger {
         }
     }
     
-    func warning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    func warning(_ message: String, file: String = #fileID, function: String = #function, line: Int = #line) {
         guard config.shouldLog(.warning, for: category) else { return }
         let formattedMessage = formatMessage(message, level: .warning, file: file, function: function, line: line)
         logger.warning("\(formattedMessage)")
@@ -187,7 +188,7 @@ struct Logger {
         }
     }
     
-    func error(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    func error(_ message: String, file: String = #fileID, function: String = #function, line: Int = #line) {
         guard config.shouldLog(.error, for: category) else { return }
         let formattedMessage = formatMessage(message, level: .error, file: file, function: function, line: line)
         logger.error("\(formattedMessage)")
@@ -199,7 +200,7 @@ struct Logger {
         }
     }
     
-    func critical(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    func critical(_ message: String, file: String = #fileID, function: String = #function, line: Int = #line) {
         guard config.shouldLog(.critical, for: category) else { return }
         let formattedMessage = formatMessage(message, level: .critical, file: file, function: function, line: line)
         logger.critical("\(formattedMessage)")
@@ -274,6 +275,7 @@ extension Logger {
     static let viewModel = Logger(category: .viewModel)
     static let sync = Logger(category: .sync)
     static let emulator = Logger(category: .emulator)
+    static let sftp = Logger(category: .sftp)
 }
 
 // MARK: - Performance Measurement Helper

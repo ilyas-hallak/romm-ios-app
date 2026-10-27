@@ -45,6 +45,26 @@ struct HeartbeatRepositoryTests {
         // "4.8.0-alpha.1" → "4.8.0" → kompatibel
         #expect(repo.isVersionCompatible("4.8.0-alpha.1") == true)
     }
+
+    @Test func laterPatchOfMaxMinorIsCompatible() {
+        let repo = HeartbeatRepository(apiClient: FakeAPIClient())
+        let (major, minor) = Self.majorMinor(of: repo.maxSupportedServerVersion)
+        #expect(repo.isVersionCompatible("\(major).\(minor).1") == true)
+        #expect(repo.isVersionCompatible("\(major).\(minor).9") == true)
+        #expect(repo.isVersionCompatible("\(major).\(minor).0-beta") == true)
+        #expect(repo.isVersionCompatible("\(major).\(minor).5-rc.1") == true)
+    }
+
+    @Test func nextMinorAboveMaxIsNotCompatible() {
+        let repo = HeartbeatRepository(apiClient: FakeAPIClient())
+        let (major, minor) = Self.majorMinor(of: repo.maxSupportedServerVersion)
+        #expect(repo.isVersionCompatible("\(major).\(minor + 1).0") == false)
+    }
+
+    private static func majorMinor(of version: String) -> (Int, Int) {
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return (parts[0], parts[1])
+    }
 }
 
 struct ConnectionLogFormatterTests {

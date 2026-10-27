@@ -154,6 +154,7 @@ struct LoggingConfigurationView: View {
         case .viewModel: return "🔄"
         case .sync: return "🔄"
         case .emulator: return "🎮"
+        case .sftp: return "📡"
         }
     }
 
@@ -169,6 +170,7 @@ struct LoggingConfigurationView: View {
         case .viewModel: return String(localized: "View model layer, state")
         case .sync: return String(localized: "Synchronization operations")
         case .emulator: return String(localized: "Launching games, ROM resolution, external apps")
+        case .sftp: return String(localized: "SFTP connections, file transfers")
         }
     }
 
@@ -361,6 +363,7 @@ struct CategoryDetailView: View {
         case .viewModel: return "🔄"
         case .sync: return "🔄"
         case .emulator: return "🎮"
+        case .sftp: return "📡"
         }
     }
 
@@ -376,6 +379,7 @@ struct CategoryDetailView: View {
         case .viewModel: return String(localized: "View model layer and state")
         case .sync: return String(localized: "Synchronization operations")
         case .emulator: return String(localized: "Launching games, ROM resolution, external apps")
+        case .sftp: return String(localized: "SFTP connections, file transfers")
         }
     }
 

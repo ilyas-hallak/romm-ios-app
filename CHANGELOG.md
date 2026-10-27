@@ -4,6 +4,74 @@ All builds of the RomM iOS app, newest first.
 
 ## Version 1.0
 
+### Build 56 (2026-10-09)
+
+**New**
+- Save sync overhaul: saves survive swiping the app away, web UI saves sync to the device, conflicts can be resolved in the sync sheet.
+- Steer the in-game menu with a controller.
+- Second controller support.
+- Analog sticks for PS1 and PSP.
+- Manic EMU takes PS1 discs as chd or pbp and asks before copying again.
+- Fallback server URL, recommendations on Home, segmented storage bar.
+- Games start right away when the server is unreachable.
+
+**Fixed**
+- Save states only sync when they changed, newest first.
+- A reconnected controller keeps its slot.
+
+### Build 54 (2026-09-25)
+
+**New**
+- With a TV attached, the phone can now act as a pure controller.
+The game shows only on the TV, the phone keeps just the touch controls and stays in landscape.
+It is off by default, turn on Phone as Controller in the in-game menu or in Settings under Play on TV.
+On the DS the touch screen stays on the phone, since that is where you tap.
+- The web emulator can run inside an optional bezel with the platform's icon.
+The switch is in Settings under Emulator.
+- Settings now live behind your avatar on Home.
+The account holds the server, Save Sync, Settings, Server Statistics and Help, and the avatar shows a badge when the last save sync did not work.
+- RomM 5.3 servers are supported.
+
+**Fixed**
+- A 403 from the server signed you out, now only an expired session does.
+- A failed favourite check showed the game as not favourite.
+- The favourite status of one ROM could carry over to another version of the same game.
+
+**Known issues**
+- PS1, PC Engine and Master System can still crash when audio resumes after a call, unplugged headphones, or coming back from the background.
+- N64 can exit on its own in some games.
+- With a physical controller you cannot reach the save and load menu yet.
+- Handing a ROM to Manic EMU or Provenance only works for systems the built-in engines know, and disc based games cannot be handed over at all.
+- Save and state files cannot be downloaded from a server over plain http.
+
+### Build 53 (2026-09-18)
+
+**New**
+- RetroAchievements can now be browsed properly.
+Tap an achievement for its details, expand the list on a game, and see your progress per platform.
+- The sync overview has a Sync Now button, so saves move on demand and not only when a game ends.
+Each external emulator app also reports what the last run did with its saves.
+- Manic EMU and Provenance are available as Play targets, alongside RetroArch and Delta.
+Play now honours that setting in the downloads list as well, where it previously always started the built-in engine.
+- Downloads show a real percentage and the current transfer rate.
+
+**Fixed**
+- Covers load noticeably faster.
+They now come from your own RomM server instead of external CDNs, which is about five times less data per image, and the prefetching that was supposed to load them ahead of time never actually ran.
+- Wide covers no longer break out of their card, and PC Engine, Neo Geo and MAME show their platform icon again.
+- Share on a downloaded game did nothing.
+- A German device showed a mix of German and English labels.
+The app is English only, so the German strings are gone.
+- The picture on an external display was cross fading on every frame, which made it look soft.
+- Searching for a title containing &, + or = searched for the wrong text.
+
+**Known issues**
+- PS1, PC Engine and Master System can still crash when audio resumes after a call, unplugged headphones, or coming back from the background.
+- N64 can exit on its own in some games.
+- With a physical controller you cannot reach the save and load menu yet.
+- Handing a ROM to Manic EMU or Provenance only works for systems the built-in engines know, and disc based games cannot be handed over at all.
+- Save and state files cannot be downloaded from a server over plain http.
+
 ### Build 50 (2026-08-31)
 
 **New**

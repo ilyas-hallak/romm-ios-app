@@ -23,6 +23,12 @@ struct SetupView: View {
     /// Question the help opens on, set by whichever error offered it.
     @State private var helpTopic: HelpTopic?
 
+    #if !APP_STORE
+    /// Joining a game as the second player needs no account, so the way in sits
+    /// here rather than behind the login.
+    @State private var showingRemoteController = false
+    #endif
+
     private var connectionLogger: ConnectionLogger { ConnectionLogger.shared }
 
     init(appViewModel: AppViewModel) {
@@ -105,6 +111,10 @@ struct SetupView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
+
+            #if !APP_STORE
+            playAsControllerButton
+            #endif
         }
         .preferredColorScheme(.dark)
         .tint(SetupTheme.coralLight)
@@ -142,7 +152,37 @@ struct SetupView: View {
         .sheet(item: $helpTopic) { topic in
             HelpView(highlightedQuestion: topic.question)
         }
+        #if !APP_STORE
+        .sheet(isPresented: $showingRemoteController) {
+            RemoteControllerView()
+        }
+        #endif
     }
+
+    #if !APP_STORE
+    // MARK: - Play as Controller
+
+    private var playAsControllerButton: some View {
+        VStack {
+            HStack {
+                Spacer()
+                Button {
+                    showingRemoteController = true
+                } label: {
+                    Image(systemName: "dpad.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .frame(width: 38, height: 38)
+                        .background(.white.opacity(0.12), in: Circle())
+                }
+                .accessibilityLabel("Play as Controller")
+            }
+            Spacer()
+        }
+        .padding(.top, 16)
+        .padding(.trailing, 20)
+    }
+    #endif
 
     // MARK: - Glass Card
 

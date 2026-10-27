@@ -10,6 +10,13 @@ struct SyncPreview {
     let reportedSaveCount: Int
     /// Every operation the server planned, ours and other devices' alike.
     let operations: [SyncPreviewOperation]
+    /// The sync session negotiate opened, closed out via `CompleteSyncSessionUseCase`
+    /// once the plan has actually been run. Nil for a server too old to open one.
+    ///
+    /// `var` rather than `let`: a `let` with an inline default is dropped from
+    /// the synthesized memberwise init entirely, which would make it
+    /// impossible to ever pass a real value in.
+    var sessionId: String? = nil
 
     var uploads: [SyncPreviewOperation] { operations.filter { $0.direction == .upload } }
     var downloads: [SyncPreviewOperation] { operations.filter { $0.direction == .download } }
@@ -44,6 +51,16 @@ struct SyncPreviewOperation: Identifiable, Equatable {
     /// back to it.
     let reason: String?
     let serverUpdatedAt: Date?
+    /// The save row this operation is about. Downloads resolve against this,
+    /// not the file name, since two saves of the same ROM can share a name.
+    ///
+    /// `var` rather than `let`: a `let` with an inline default is dropped from
+    /// the synthesized memberwise init entirely, which would make it
+    /// impossible to ever pass a real value in.
+    var saveId: Int? = nil
+    /// The server's content hash for this save, already known from the plan so
+    /// a download never has to be refetched just to compare it.
+    var serverContentHash: String? = nil
 
     static func == (lhs: SyncPreviewOperation, rhs: SyncPreviewOperation) -> Bool {
         lhs.id == rhs.id

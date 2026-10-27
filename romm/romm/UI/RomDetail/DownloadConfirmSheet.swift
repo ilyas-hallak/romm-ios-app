@@ -19,7 +19,7 @@ struct DownloadConfirmSheet: View {
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
 
-            CachedKFImage(urlString: rom.urlCover) { image in
+            CachedKFImage(urlString: rom.listCoverURL) { image in
                 image
                     .resizable()
                     .scaledToFill()

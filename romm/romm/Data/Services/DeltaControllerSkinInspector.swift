@@ -1,3 +1,4 @@
+#if !APP_STORE
 import Foundation
 import DeltaCore
 
@@ -26,3 +27,4 @@ final class DeltaControllerSkinInspector: PControllerSkinInspector {
         )
     }
 }
+#endif

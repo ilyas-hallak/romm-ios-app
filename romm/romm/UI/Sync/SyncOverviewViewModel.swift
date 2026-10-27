@@ -21,16 +21,22 @@ final class SyncOverviewViewModel {
     /// `state`, since a granted folder is readable whether the server answers.
     private(set) var externalScans: [ExternalEmulatorID: ExternalSaveScan] = [:]
 
+    /// Set once a run finishes, cleared again the next time one starts.
+    private(set) var lastSyncReport: SaveSyncReport?
+    private(set) var isSyncing = false
+
     private let previewUseCase: PSyncPreviewUseCase
     private let getDownloadedROM: PGetDownloadedROMUseCase
     private let scanExternalSaves: PScanExternalSavesUseCase
     private let setupStore: PExternalEmulatorSetupStore
+    private let syncRunner: PSaveSyncRunner
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
         self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
         self.setupStore = factory.externalEmulatorSetupStore
+        self.syncRunner = factory.makeSaveSyncRunner()
     }
 
     /// Starts in a given state, for previews: every state this screen shows
@@ -45,6 +51,7 @@ final class SyncOverviewViewModel {
         self.getDownloadedROM = factory.makeGetDownloadedROMUseCase()
         self.scanExternalSaves = factory.makeScanExternalSavesUseCase()
         self.setupStore = factory.externalEmulatorSetupStore
+        self.syncRunner = factory.makeSaveSyncRunner()
         self.state = state
         self.romNames = romNames
         self.externalScans = externalScans
@@ -66,20 +73,91 @@ final class SyncOverviewViewModel {
         return nil
     }
 
+    /// Whether "Sync Now" has anything to try. A loaded plan is enough on its
+    /// own: `SaveSyncRunner.run` always syncs save states for every ROM this
+    /// device holds anything for regardless of the plan (states are never
+    /// part of it, see `SyncPreviewUseCase`), so a battery-only plan that is
+    /// already up to date with no matching external file can still turn up
+    /// state work. A run that truly finds nothing to do is harmless, the
+    /// report just says so.
+    var canSyncNow: Bool {
+        preview != nil && !isSyncing
+    }
+
+    /// One line describing what the last run did, or nil before any run.
+    var lastSyncSummary: String? { lastSyncReport?.summaryText }
+
+    /// What the last run did with one app's saves, for its row. Empty until a
+    /// run actually had that app's files in hand: whether a file is newer than
+    /// the server's copy is only known once the run has listed them.
+    func lastSyncDetail(for emulator: ExternalEmulatorID) -> String {
+        guard let outcome = lastSyncReport?.externalApps[emulator] else { return "" }
+        if outcome.failed > 0 {
+            return String(localized: "\(outcome.failed) failed")
+        }
+        if outcome.conflicts > 0 {
+            return SaveSyncReport.conflictsLeft(outcome.conflicts)
+        }
+        if outcome.uploaded > 0 {
+            return String(localized: "\(outcome.uploaded) uploaded")
+        }
+        return String(localized: "Up to date")
+    }
+
+    /// Whether the row should read as a warning: something went wrong, or a
+    /// save stayed behind because the server refused it.
+    func lastSyncNeedsAttention(for emulator: ExternalEmulatorID) -> Bool {
+        guard let outcome = lastSyncReport?.externalApps[emulator] else { return false }
+        return outcome.failed > 0 || outcome.conflicts > 0
+    }
+
+    /// The last run's failure messages, capped so one bad run cannot flood the
+    /// screen. Empty when the last run had no failures, or there was no run yet.
+    var lastSyncErrors: [String] { lastSyncReport?.cappedErrors ?? [] }
+
+    /// Asks for a fresh plan first, then runs that one and reloads, so the
+    /// screen reflects the new state rather than the one it was computed
+    /// against.
+    ///
+    /// The plan on screen survives leaving and returning, so it can be hours
+    /// old, and an upload now overrides the server's conflict guard (see
+    /// `SaveSyncRunner`). Acting on a stale plan could therefore overwrite a
+    /// save another device wrote in the meantime. Negotiating right before the
+    /// run narrows that window to the run itself.
+    func syncNow() async {
+        guard preview != nil, !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+
+        // No plan, nothing to act on: the failure is already on screen.
+        guard let fresh = await negotiate() else { return }
+
+        lastSyncReport = await syncRunner.run(preview: fresh, externalScans: externalScans, stateRomIds: nil)
+        await load()
+    }
+
     func load() async {
         // Local and quick, and still meaningful when the request below fails.
         rescanExternalFolders()
 
         state = .loading
+        _ = await negotiate()
+    }
+
+    /// Asks the server what would change and puts the answer on screen.
+    /// Returns nil when that failed, in which case `state` says why.
+    private func negotiate() async -> SyncPreview? {
         do {
-            let preview = try await previewUseCase.execute()
+            let preview = try await previewUseCase.execute(romIds: nil)
             romNames = resolveNames(for: preview)
             state = .loaded(preview)
+            return preview
         } catch let error as SyncPreviewError {
             state = .failed(error)
         } catch {
             state = .failed(.negotiationFailed(error.localizedDescription))
         }
+        return nil
     }
 
     func rescanExternalFolders() {

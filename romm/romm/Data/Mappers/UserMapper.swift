@@ -9,7 +9,7 @@ import Foundation
 
 struct UserMapper {
     static func mapFromAPI(_ apiUser: UserSchema) -> User {
-        let role = UserRole(rawValue: apiUser.role.rawValue) ?? .viewer
+        let role = UserRole(rawValue: apiUser.role.rawValue) ?? .user
         
         return User(
             id: apiUser.id,
@@ -21,6 +21,7 @@ struct UserMapper {
             lastLogin: apiUser.lastLogin,
             lastActive: apiUser.lastActive,
             createdAt: apiUser.createdAt,
+            updatedAt: apiUser.updatedAt,
             retroAchievementsUsername: apiUser.raUsername,
             retroAchievementsProgression: (apiUser.raProgression?.results ?? []).compactMap { progression in
                 guard let gameId = progression.romRaId else { return nil }

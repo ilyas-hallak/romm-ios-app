@@ -9,14 +9,18 @@ import Foundation
 
 enum LaunchDecision: Identifiable {
     case web(rom: Rom)
+    #if !APP_STORE
     case native(rom: Rom, gameType: DeltaGameType)
     case libretro(rom: Rom, core: LibretroCore)
+    #endif
 
     var id: String {
         switch self {
         case .web(let rom): return "web-\(rom.id)"
+        #if !APP_STORE
         case .native(let rom, _): return "native-\(rom.id)"
         case .libretro(let rom, _): return "libretro-\(rom.id)"
+        #endif
         }
     }
 
@@ -25,7 +29,9 @@ enum LaunchDecision: Identifiable {
     var supportsSaveStates: Bool {
         switch self {
         case .web: return false
+        #if !APP_STORE
         case .native, .libretro: return true
+        #endif
         }
     }
 }
@@ -103,8 +109,16 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             + "supported=\(supported.map { $0.rawValue })")
         let chosen: EmulatorEngine = {
             switch pref {
-            case .web: return supported.contains(.web) ? .web : .native
+            case .web:
+                if supported.contains(.web) { return .web }
+                #if !APP_STORE
+                return .native
+                #else
+                return .auto
+                #endif
+            #if !APP_STORE
             case .native: return supported.contains(.native) ? .native : .web
+            #endif
             case .auto: return platformSupport.preferred(for: platformSlug)
             }
         }()
@@ -113,6 +127,7 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
         switch chosen {
         case .web:
             return .success(.web(rom: rom))
+        #if !APP_STORE
         case .native:
             if let gameType = PlatformSlugToGameType.map(platformSlug) {
                 return .success(.native(rom: rom, gameType: gameType))
@@ -128,6 +143,16 @@ final class LaunchEmulatorUseCase: PLaunchEmulatorUseCase {
             return .failure(.unsupportedPlatform(platformSlug))
         case .auto:
             return .success(.web(rom: rom))
+        #else
+        case .auto:
+            // No on-device engine ships in this build. Play always hands the
+            // ROM to an external app before this point is reached (see
+            // ExternalPlayCoordinator); this is just the inert fallback.
+            if AppFeatures.webEmulatorEnabled {
+                return .success(.web(rom: rom))
+            }
+            return .failure(.unsupportedPlatform(platformSlug))
+        #endif
         }
     }
 }

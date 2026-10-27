@@ -125,6 +125,31 @@ struct ResolveExternalGameIdentifierUseCaseTests {
         #expect(resolver.requestedGameType == .gba)
     }
 
+    /// Provenance addresses a game by MD5 rather than SHA-1, over the same file
+    /// it is handed. A hash of the archive would point the deep link at something
+    /// Provenance never imported.
+    @Test func provenanceGetsTheMD5OfTheResolvedFile() async throws {
+        let romURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ResolveIdentifierTests-\(UUID().uuidString).gba")
+        try Data("abc".utf8).write(to: romURL)
+        defer { try? FileManager.default.removeItem(at: romURL) }
+
+        let resolver = FakeROMFileResolver()
+        resolver.resolvedURL = romURL
+        let useCase = ResolveExternalGameIdentifierUseCase(resolver: resolver)
+
+        let handoff = try await useCase.execute(
+            rom: makeROM(),
+            baseURL: baseURL,
+            emulator: ProvenanceExternalEmulator()
+        )
+
+        #expect(handoff.gameIdentifier == "900150983cd24fb0d6963f7d28e17f72")
+        // Provenance has to receive exactly the file that was hashed.
+        #expect(handoff.unpackedROMURL == romURL)
+        #expect(resolver.requestedGameType == .gba)
+    }
+
     /// Delta only runs the systems DeltaGameType covers. Saying so beats handing
     /// the ROM over and having Delta silently refuse the deep link later.
     @Test func rejectsAPlatformTheEmulatorCannotPlay() async {
@@ -153,5 +178,44 @@ struct ResolveExternalGameIdentifierUseCaseTests {
                 emulator: DeltaExternalEmulator()
             )
         }
+    }
+
+    // MARK: - PS1 (no DeltaGameType, falls back to the emulator's own extensions)
+
+    /// PSX has no `DeltaGameType`, so a PS1 ROM only resolves through Manic's own
+    /// `romExtensions`. RomM mostly ships PS1 as a single `.chd` or `.pbp` file,
+    /// both of which are one self-contained disc image, so hashing that one file
+    /// is exactly what Manic itself hashes on import. Uses the real resolver and
+    /// real files on disk, since the point is the extension lookup, not a stub.
+    @Test(arguments: ["chd", "pbp"])
+    func manicResolvesASingleFilePS1Disc(fileExtension: String) async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ResolveIdentifierTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let romURL = directory.appendingPathComponent("Game.\(fileExtension)")
+        try Data("disc image bytes".utf8).write(to: romURL)
+
+        let rom = DownloadedROM(
+            id: 1,
+            name: "Game",
+            platformName: "PlayStation",
+            platformSlug: "psx",
+            downloadedAt: Date(timeIntervalSince1970: 0),
+            totalSizeBytes: 0,
+            localDirectory: "",
+            files: [DownloadedROMFile(fileName: "Game.\(fileExtension)", fileSizeBytes: 0)],
+            urlCover: nil
+        )
+        let useCase = ResolveExternalGameIdentifierUseCase(
+            resolver: ROMFileResolver(fileSystem: DefaultFileSystemService())
+        )
+
+        let handoff = try await useCase.execute(rom: rom, baseURL: directory, emulator: ManicEmuExternalEmulator())
+
+        #expect(!handoff.gameIdentifier.isEmpty)
+        // Manic has to receive exactly the file it hashed.
+        #expect(handoff.unpackedROMURL == romURL)
     }
 }

@@ -2,7 +2,9 @@ import Foundation
 
 enum EmulatorEngine: String, CaseIterable, Codable, Sendable {
     case web
+    #if !APP_STORE
     case native
+    #endif
     case auto
 }
 
@@ -10,14 +12,18 @@ enum EmulatorEngine: String, CaseIterable, Codable, Sendable {
 enum AppFeatures {
     /// Server-hosted EmulatorJS (the `.web` engine) is available in local
     /// development (DEBUG) and in TestFlight builds, where we still test it, but
-    /// is disabled in the real App Store release — there it does not work and
-    /// would not pass App Review. Native on-device cores (DeltaCore / libretro)
-    /// remain available in every build.
+    /// is disabled in the real App Store release, there it does not work and
+    /// would not pass App Review.
     ///
-    /// TestFlight and App Store ship the *same* Release binary, so this cannot be
-    /// a compile-time flag — it must be decided at runtime via the receipt type.
+    /// The App Store build never bundles `emulator.html` at all, so this is
+    /// unconditionally false there regardless of receipt type. Elsewhere it
+    /// stays a runtime check on the receipt type rather than keying off
+    /// `APP_STORE`, so a Release build of the `romm` target behaves the same
+    /// when it is installed from TestFlight.
     static var webEmulatorEnabled: Bool {
-        #if DEBUG
+        #if APP_STORE
+        return false
+        #elseif DEBUG
         return true
         #else
         return isTestFlightBuild

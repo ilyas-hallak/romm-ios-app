@@ -68,13 +68,13 @@ final class DownloadJobCoordinator: PBackgroundDownloadEventSink, PDownloadDesti
 
     /// Dependencies are resolved in the body rather than as default arguments,
     /// because default arguments are evaluated outside this type's actor
-    /// isolation. The transfer client has no default: it owns the background
-    /// session identifier and is wired up once at app start.
+    /// isolation. The transfer client and the API client have no default:
+    /// the caller that builds this coordinator owns wiring them up.
     init(
         transferClient: PBackgroundTransferClient,
         store: PDownloadJobStore? = nil,
         finalizer: PROMDownloadFinalizer? = nil,
-        apiClient: PRommAPIClient? = nil,
+        apiClient: PRommAPIClient,
         romRepository: PLocalROMRepository? = nil
     ) {
         let romRepository = romRepository ?? LocalROMRepository()
@@ -83,7 +83,7 @@ final class DownloadJobCoordinator: PBackgroundDownloadEventSink, PDownloadDesti
         // Built from the same repository, because the finalizer decides where a
         // download goes and this type has to resolve the very same directory.
         self.finalizer = finalizer ?? ROMDownloadFinalizer(repository: romRepository)
-        self.apiClient = apiClient ?? DefaultDependencyFactory.shared.apiClient
+        self.apiClient = apiClient
         self.romRepository = romRepository
         transferClient.eventSink = self
         transferClient.destinationResolver = self

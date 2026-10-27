@@ -32,7 +32,8 @@ final class DeviceAuthService {
         "roms.user.read",
         "roms.user.write",
         "collections.read",
-        "firmware.read"
+        "firmware.read",
+        "roms.write"
     ]
 
     private let deviceIdentifierKey = "auth.clientDeviceIdentifier"
@@ -61,7 +62,7 @@ final class DeviceAuthService {
 
     private func makeSession() -> URLSession {
         URLSession(
-            configuration: .default,
+            configuration: .default.withoutCookies(),
             delegate: PrivateNetworkURLSessionDelegate(),
             delegateQueue: nil
         )

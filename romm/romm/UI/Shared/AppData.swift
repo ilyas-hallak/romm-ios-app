@@ -33,6 +33,7 @@ struct DownloadFlight: Identifiable, Equatable {
 class AppData: ObservableObject {
     @Published var currentUser: User?
     @Published var isAuthenticated: Bool = false
+    /// Shown once as an alert at the root level (`AppView`), then cleared.
     @Published var errorMessage: String?
     @Published var currentConfiguration: AppConfiguration?
     @Published var isLoading: Bool = false
@@ -41,6 +42,12 @@ class AppData: ObservableObject {
     @Published var downloadFlight: DownloadFlight?
 
     init() {}
+
+    /// The name to show for the signed in account. `/api/users/me` and the
+    /// stored setup config carry the same login, so either one will do.
+    var displayUsername: String {
+        currentUser?.username ?? currentConfiguration?.username ?? String(localized: "Signed in")
+    }
 
     /// Kick off the cover-fly animation from the given global source frame.
     func launchDownloadFlight(coverURL: String?, from start: CGRect, tabBarMinimized: Bool) {

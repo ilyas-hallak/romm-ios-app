@@ -46,3 +46,13 @@ struct Platform: Identifiable, Equatable, Hashable {
         self.manufacturer = manufacturer
     }
 }
+
+extension Platform {
+    /// Servers spell PSP several ways, depending on where the slug came from.
+    static func isPSP(slug: String) -> Bool {
+        let s = slug.lowercased()
+        return s == "psp" || s == "sony-psp" || s == "psportable"
+            || s == "playstation-portable" || s == "playstationportable"
+            || s.contains("playstation portable") || s.contains("playstation-portable")
+    }
+}

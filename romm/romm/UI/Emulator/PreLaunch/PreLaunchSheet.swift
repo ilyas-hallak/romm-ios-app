@@ -53,9 +53,12 @@ struct PreLaunchSheet: View {
             onLaunch(entry.slot)
         } label: {
             VStack(alignment: .leading, spacing: 12) {
-                thumbnail(for: entry.slot)
+                // Same reason as the covers, a `.scaledToFill()` thumbnail would otherwise
+                // report its own width to the layout and widen the card.
+                Color.clear
                     .frame(maxWidth: .infinity)
                     .frame(height: 180)
+                    .overlay { thumbnail(for: entry.slot) }
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 HStack {

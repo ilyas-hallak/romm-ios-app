@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+/// What logging out needs from the download queue.
+protocol PDownloadCancelling {
+    func cancelAll()
+}
+
 /// The app-wide download queue as the screens see it: a flat list of ROMs with
 /// a status each.
 ///
@@ -15,8 +20,8 @@ import Observation
 /// derived from the coordinator.
 @Observable
 @MainActor
-final class DownloadQueueManager {
-    static let shared = DownloadQueueManager()
+final class DownloadQueueManager: PDownloadCancelling {
+    static let shared = DownloadQueueManager(apiClient: DefaultDependencyFactory.shared.apiClient)
 
     /// Rows for ROMs whose file list is still being fetched. They have no job
     /// yet, and without them a tapped Download button would spring back to
@@ -63,19 +68,23 @@ final class DownloadQueueManager {
     /// Dependencies are resolved in the body rather than as default arguments,
     /// because default arguments are evaluated outside this type's actor
     /// isolation. A test that hands in its own coordinator has to hand in the
-    /// same transfer client, or the real background session gets built.
+    /// same transfer client, or the real background session gets built. The
+    /// API client has no default: it only feeds the coordinator and the file
+    /// list provider this initializer may build on its own, and the caller
+    /// that builds this manager owns wiring it up.
     init(
+        apiClient: PRommAPIClient,
         transferClient: PBackgroundTransferClient? = nil,
         coordinator: DownloadJobCoordinator? = nil,
         fileListProvider: PROMFileListProvider? = nil,
         continuedTaskController: PDownloadContinuedTaskController? = nil
     ) {
         let client = transferClient ?? BackgroundDownloadSession.shared
-        let jobCoordinator = coordinator ?? DownloadJobCoordinator(transferClient: client)
+        let jobCoordinator = coordinator ?? DownloadJobCoordinator(transferClient: client, apiClient: apiClient)
         self.transferClient = client
         self.coordinator = jobCoordinator
         self.fileListProvider = fileListProvider
-            ?? ROMDetailsFileListProvider(apiClient: DefaultDependencyFactory.shared.apiClient)
+            ?? ROMDetailsFileListProvider(apiClient: apiClient)
         self.continuedTaskController = continuedTaskController ?? DownloadContinuedTaskController()
 
         // A coordinator built here wires itself up, an injected one may have been
@@ -182,6 +191,12 @@ final class DownloadQueueManager {
         disposals[id] = entry.state == .queued ? .drop : .markCancelled
         coordinator.cancel(romId: id)
         reconcile()
+    }
+
+    /// Stops every download that has not settled yet, each as its Cancel button would.
+    func cancelAll() {
+        let ids = Set(pendingTasks.map(\.id) + coordinator.jobs.map(\.romId) + startTasks.keys)
+        ids.forEach(cancel(id:))
     }
 
     /// Removes a queued, finished, failed or cancelled row. A queued one is

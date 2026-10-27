@@ -13,6 +13,10 @@ struct CollectionView: View {
 
     @State private var searchText = ""
 
+    /// Start loading the next page while this many collections are still ahead. The rows are
+    /// tall, so a smaller lead than in the ROM lists is enough.
+    private static let loadMoreThreshold = 5
+
     var body: some View {
         VStack {
             switch collectionsViewModel.viewState {
@@ -124,6 +128,12 @@ struct CollectionView: View {
         return collectionsViewModel.collections.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
+    /// IDs of the trailing collections that start the next page. Loading only on the very last
+    /// row leaves a visible gap at the bottom of the list.
+    private var loadMoreTriggerCollectionIDs: Set<Int> {
+        Set(collectionsViewModel.collections.suffix(Self.loadMoreThreshold).map { $0.id })
+    }
+
     @ViewBuilder
     private var virtualCollectionsSection: some View {
         if !filteredVirtual.isEmpty {
@@ -151,7 +161,7 @@ struct CollectionView: View {
                     }
                     .onAppear {
                         // Load more when approaching the end (only while not filtering)
-                        if searchText.isEmpty && collection == collectionsViewModel.collections.last {
+                        if searchText.isEmpty && loadMoreTriggerCollectionIDs.contains(collection.id) {
                             Task {
                                 await collectionsViewModel.loadMoreCollectionsIfNeeded()
                             }

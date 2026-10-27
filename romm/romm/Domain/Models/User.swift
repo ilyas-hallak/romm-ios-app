@@ -17,8 +17,13 @@ struct User: Identifiable, Equatable {
     let lastLogin: Date?
     let lastActive: Date?
     let createdAt: Date?
+    /// When the account last changed, used to get a new avatar past the image
+    /// cache after it was swapped on the server.
+    let updatedAt: Date?
     let retroAchievementsUsername: String?
     let retroAchievementsProgression: [RetroAchievementsProgression]
+    /// The account role's OAuth scopes, as reported by `GET /api/users/me`.
+    /// Independent of the current sign-in's token scopes (see `PTokenProvider`).
     let oauthScopes: [String]
 
     init(
@@ -31,6 +36,7 @@ struct User: Identifiable, Equatable {
         lastLogin: Date? = nil,
         lastActive: Date? = nil,
         createdAt: Date? = nil,
+        updatedAt: Date? = nil,
         retroAchievementsUsername: String? = nil,
         retroAchievementsProgression: [RetroAchievementsProgression] = [],
         oauthScopes: [String] = []
@@ -44,9 +50,15 @@ struct User: Identifiable, Equatable {
         self.lastLogin = lastLogin
         self.lastActive = lastActive
         self.createdAt = createdAt
+        self.updatedAt = updatedAt
         self.retroAchievementsUsername = retroAchievementsUsername
         self.retroAchievementsProgression = retroAchievementsProgression
         self.oauthScopes = oauthScopes
+    }
+
+    func retroAchievementsProgression(for gameId: Int?) -> RetroAchievementsProgression? {
+        guard let gameId else { return nil }
+        return retroAchievementsProgression.first { $0.gameId == gameId }
     }
 }
 
@@ -67,6 +79,17 @@ extension User {
         guard let name = retroAchievementsUsername?.trimmingCharacters(in: .whitespacesAndNewlines),
               !name.isEmpty else { return nil }
         return name
+    }
+
+    /// Where the avatar sits on the RomM server, relative to its root, or nil
+    /// when the account has none.
+    ///
+    /// RomM serves avatars through the API rather than from the asset root, and
+    /// the timestamp is what gets a swapped avatar past the image cache.
+    var avatarRelativePath: String? {
+        guard let avatarPath, !avatarPath.isEmpty else { return nil }
+        let timestamp = Int(updatedAt?.timeIntervalSince1970 ?? 0)
+        return "api/raw/assets/\(avatarPath)?ts=\(timestamp)"
     }
 
     /// Totals across every game the server reports progress for, for the
@@ -147,13 +170,18 @@ struct EarnedRetroAchievement: Equatable {
 
 enum UserRole: String, CaseIterable {
     case admin = "admin"
+    // Server 5.2+ only distinguishes user/admin; viewer/editor are legacy
+    // roles from servers older than 5.2.
+    case user = "user"
     case editor = "editor"
     case viewer = "viewer"
-    
+
     var displayName: String {
         switch self {
         case .admin:
             return "Administrator"
+        case .user:
+            return "User"
         case .editor:
             return "Editor"
         case .viewer:

@@ -1,3 +1,4 @@
+#if !APP_STORE
 import SwiftUI
 import DeltaCore
 
@@ -6,6 +7,11 @@ struct NativeEmulatorView: View {
     @SwiftUI.State private var showMenu = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+
+    /// Observed only to react to Phone as Controller's inputs (display
+    /// connection, the preference toggle); `.playOnTV` below owns the rest of
+    /// the external-display wiring.
+    @ObservedObject private var externalDisplay = ExternalDisplayManager.shared
 
     private let resumeSlot: Int?
 
@@ -47,13 +53,20 @@ struct NativeEmulatorView: View {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.bootstrap(resumeSlot: resumeSlot)
             viewModel.session?.onMenuRequested = { showMenu = true }
+            // Set the starting state outright. The `onChange` handlers below
+            // only fire on a real transition, so a display that is already
+            // active when the game starts would otherwise go unnoticed.
+            viewModel.session?.updatePhoneVideoVisibility()
         }
         .onDisappear {
             viewModel.teardown()
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active: viewModel.session?.resume()
+            case .active:
+                viewModel.session?.resume()
+                // Re-assert the hidden state, a background trip can drop it.
+                viewModel.session?.updatePhoneVideoVisibility()
             case .inactive, .background: viewModel.session?.pause()
             @unknown default: break
             }
@@ -61,10 +74,14 @@ struct NativeEmulatorView: View {
         .onChange(of: showMenu) { _, presented in
             if presented {
                 viewModel.session?.pause()
+                viewModel.session?.beginMenuNavigation()
             } else {
+                viewModel.session?.endMenuNavigation()
                 viewModel.session?.resume()
             }
         }
+        .onChange(of: externalDisplay.isActive) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }
+        .onChange(of: externalDisplay.isPhoneControllerOnlyEnabled) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }
         .sheet(isPresented: $showMenu) {
             EmulatorMenuSheet(
                 session: viewModel.session,
@@ -86,30 +103,4 @@ private struct NativeGameViewControllerHost: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> GameViewController { controller }
     func updateUIViewController(_ uiViewController: GameViewController, context: Context) {}
 }
-
-/// Standalone menu button shown in the top-trailing corner when the on-screen
-/// touch controls are hidden (physical controller / Controller Mode "On"), so
-/// the player can still reach the pause/save/quit menu.
-struct EmulatorMenuButtonOverlay: View {
-    let action: () -> Void
-
-    var body: some View {
-        VStack {
-            HStack {
-                Spacer()
-                Button(action: action) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 1))
-                }
-                .accessibilityLabel("Menu")
-                .padding(.top, 6)
-                .padding(.trailing, 12)
-            }
-            Spacer()
-        }
-    }
-}
+#endif

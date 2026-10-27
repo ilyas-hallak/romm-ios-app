@@ -3,8 +3,10 @@ import Foundation
 @testable import romm
 
 /// The file names in here are the ones reported in issue #144, from a real
-/// device. They are the contract: if a layout stops recognising them, saves made
-/// in that app stop being found and the sync silently has nothing to offer.
+/// device, except the Provenance ones, which come from the app's own folder
+/// layout. They are the contract: if a layout stops recognising them, saves
+/// made in that app stop being found and the sync silently has nothing to
+/// offer.
 struct ExternalSaveLayoutTests {
 
     // MARK: - RetroArch
@@ -66,6 +68,30 @@ struct ExternalSaveLayoutTests {
         #expect(!layout.isBatterySave(fileName: "\(sha1).png", matching: sha1))
     }
 
+    // MARK: - Provenance
+
+    /// `…/Battery States/<ROM name>/ROMNAME.srm`, with `sav` alongside because
+    /// Provenance runs both libretro cores and its own.
+    @Test func provenanceRecognisesTheGameFolderNaming() {
+        let layout = ProvenanceExternalEmulator().saveLayout!
+        #expect(layout.naming == .romBaseName)
+        #expect(layout.isBatterySave(fileName: "Final Fantasy VII.srm", matching: "Final Fantasy VII"))
+        #expect(layout.isBatterySave(fileName: "Final Fantasy VII.sav", matching: "Final Fantasy VII"))
+    }
+
+    /// The hint stops above the per-game directory, which is not one value.
+    @Test func provenanceHintsAtTheBatteryFolderOnly() {
+        let layout = ProvenanceExternalEmulator().saveLayout!
+        #expect(layout.searchHints == ["Battery States"])
+    }
+
+    /// Save states sit in a sibling `Save States` folder and are not battery
+    /// saves, so they must not be offered as one.
+    @Test func provenanceExcludesSaveStates() {
+        let layout = ProvenanceExternalEmulator().saveLayout!
+        #expect(!layout.isBatterySave(fileName: "Final Fantasy VII.svs", matching: "Final Fantasy VII"))
+    }
+
     // MARK: - Shared behaviour
 
     /// Case folding differs across the file providers these folders come from,
@@ -96,6 +122,7 @@ struct ExternalSaveLayoutTests {
         #expect(RetroArchExternalEmulator().saveLayout != nil)
         #expect(DeltaExternalEmulator().saveLayout != nil)
         #expect(ManicEmuExternalEmulator().saveLayout != nil)
+        #expect(ProvenanceExternalEmulator().saveLayout != nil)
     }
 
     /// Every layout has to bound its own search: these folders can sit next to a

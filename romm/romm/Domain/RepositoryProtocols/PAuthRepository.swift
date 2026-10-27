@@ -12,7 +12,6 @@ protocol PAuthRepository {
     var currentUser: User? { get }
     
     func login(username: String, password: String) async throws -> User
-    func logout() async throws
     func getCurrentUser() async throws -> User?
     /// Has the server pull fresh RetroAchievements progress, then returns the
     /// reloaded user. `incremental` keeps the games whose tallies are unchanged

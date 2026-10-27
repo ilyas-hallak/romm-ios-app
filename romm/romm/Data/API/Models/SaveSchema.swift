@@ -25,8 +25,20 @@ public struct SaveSchema: Codable, JSONEncodable, Hashable {
     public var updatedAt: Date
     public var emulator: String?
     public var screenshot: ScreenshotSchema?
+    /// Filed server-side since RomM 4.7.0 (backend/models/assets.py); a save
+    /// without a slot is a legacy/archival entry that never pairs with a
+    /// client slot (see `SaveSlot`).
+    public var slot: String?
+    /// MD5 hex the server stores for the save's content (`content_hash`).
+    /// Lets a client tell a byte-identical duplicate apart from a genuinely
+    /// different save without downloading it first.
+    public var contentHash: String?
+    /// The device that first uploaded this save (`origin_device_id`).
+    public var originDeviceId: String?
+    /// Per-device download bookkeeping for this save (`device_syncs`).
+    public var deviceSyncs: [DeviceSyncSchema]?
 
-    public init(id: Int, romId: Int, userId: Int, fileName: String, fileNameNoTags: String, fileNameNoExt: String, fileExtension: String, filePath: String, fileSizeBytes: Int, fullPath: String, downloadPath: String, missingFromFs: Bool, createdAt: Date, updatedAt: Date, emulator: String?, screenshot: ScreenshotSchema?) {
+    public init(id: Int, romId: Int, userId: Int, fileName: String, fileNameNoTags: String, fileNameNoExt: String, fileExtension: String, filePath: String, fileSizeBytes: Int, fullPath: String, downloadPath: String, missingFromFs: Bool, createdAt: Date, updatedAt: Date, emulator: String?, screenshot: ScreenshotSchema?, slot: String? = nil, contentHash: String? = nil, originDeviceId: String? = nil, deviceSyncs: [DeviceSyncSchema]? = nil) {
         self.id = id
         self.romId = romId
         self.userId = userId
@@ -43,6 +55,10 @@ public struct SaveSchema: Codable, JSONEncodable, Hashable {
         self.updatedAt = updatedAt
         self.emulator = emulator
         self.screenshot = screenshot
+        self.slot = slot
+        self.contentHash = contentHash
+        self.originDeviceId = originDeviceId
+        self.deviceSyncs = deviceSyncs
     }
 
     public enum CodingKeys: String, CodingKey, CaseIterable {
@@ -62,6 +78,10 @@ public struct SaveSchema: Codable, JSONEncodable, Hashable {
         case updatedAt = "updated_at"
         case emulator
         case screenshot
+        case slot
+        case contentHash = "content_hash"
+        case originDeviceId = "origin_device_id"
+        case deviceSyncs = "device_syncs"
     }
 
     // Decodable protocol methods
@@ -83,6 +103,10 @@ public struct SaveSchema: Codable, JSONEncodable, Hashable {
         updatedAt = try container.decodeFlexibleDate(forKey: .updatedAt)
         emulator = try container.decodeIfPresent(String.self, forKey: .emulator)
         screenshot = try container.decodeIfPresent(ScreenshotSchema.self, forKey: .screenshot)
+        slot = try container.decodeIfPresent(String.self, forKey: .slot)
+        contentHash = try container.decodeIfPresent(String.self, forKey: .contentHash)
+        originDeviceId = try container.decodeIfPresent(String.self, forKey: .originDeviceId)
+        deviceSyncs = try container.decodeIfPresent([DeviceSyncSchema].self, forKey: .deviceSyncs)
     }
 
     // Encodable protocol methods
@@ -105,9 +129,48 @@ public struct SaveSchema: Codable, JSONEncodable, Hashable {
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encode(emulator, forKey: .emulator)
         try container.encode(screenshot, forKey: .screenshot)
+        try container.encode(slot, forKey: .slot)
+        try container.encode(contentHash, forKey: .contentHash)
+        try container.encode(originDeviceId, forKey: .originDeviceId)
+        try container.encode(deviceSyncs, forKey: .deviceSyncs)
     }
 }
 
 
 @available(iOS 13, tvOS 13, watchOS 6, macOS 10.15, *)
 extension SaveSchema: Identifiable {}
+
+/// Per-device download bookkeeping for one save (`DeviceSyncSchema`), the row
+/// `POST /api/saves/{id}/downloaded` writes.
+public struct DeviceSyncSchema: Codable, Hashable {
+    public var deviceId: String
+    public var deviceName: String?
+    public var lastSyncedAt: Date?
+    public var isUntracked: Bool
+    public var isCurrent: Bool
+
+    public init(deviceId: String, deviceName: String? = nil, lastSyncedAt: Date? = nil, isUntracked: Bool = false, isCurrent: Bool = false) {
+        self.deviceId = deviceId
+        self.deviceName = deviceName
+        self.lastSyncedAt = lastSyncedAt
+        self.isUntracked = isUntracked
+        self.isCurrent = isCurrent
+    }
+
+    public enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case deviceName = "device_name"
+        case lastSyncedAt = "last_synced_at"
+        case isUntracked = "is_untracked"
+        case isCurrent = "is_current"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        deviceId = try container.decode(String.self, forKey: .deviceId)
+        deviceName = try container.decodeIfPresent(String.self, forKey: .deviceName)
+        lastSyncedAt = try container.decodeFlexibleDate(forKey: .lastSyncedAt)
+        isUntracked = try container.decodeIfPresent(Bool.self, forKey: .isUntracked) ?? false
+        isCurrent = try container.decodeIfPresent(Bool.self, forKey: .isCurrent) ?? false
+    }
+}

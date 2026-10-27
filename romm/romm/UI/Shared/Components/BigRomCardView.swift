@@ -33,11 +33,6 @@ struct BigRomCardView: View {
     let rom: Rom
     let platform: Platform?
 
-    // N64 covers are typically taller/narrower, so we use .fit to prevent overflow
-    private var coverContentMode: ContentMode {
-        rom.platformSlug?.lowercased() == "n64" ? .fit : .fill
-    }
-
     init(rom: Rom, platform: Platform? = nil) {
         self.rom = rom
         self.platform = platform
@@ -47,34 +42,41 @@ struct BigRomCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Cover Image Section
             ZStack(alignment: .topTrailing) {
-                CachedKFImage(urlString: rom.urlCover) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: coverContentMode)
-                } placeholder: {
-                    Rectangle()
-                        .fill(LinearGradient(
-                            colors: [Color.blue.opacity(0.1), Color.purple.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .overlay(
-                            VStack(spacing: 8) {
-                                Image(systemName: "gamecontroller")
-                                    .foregroundColor(.secondary)
-                                    .font(.title)
-                                Text("No Cover")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        )
-                }
-                .frame(height: 180)
-                .frame(maxWidth: .infinity)
-                // Clip wide covers to the card bounds so a `.fill` cover can't
-                // overflow its frame and bleed into neighbouring grid cards.
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // The box is sized on its own and the cover only paints into it. A `.fill`
+                // image reports the size it scaled to, and a flexible frame never shrinks
+                // below its child, so a landscape cover used to widen the whole card and
+                // push it out of its grid column. Covers are not normalised on the server,
+                // for some platforms more than half of them are 4:3 screenshots rather
+                // than 2:3 box art.
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .overlay {
+                        CachedKFImage(urlString: rom.listCoverURL) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Rectangle()
+                                .fill(LinearGradient(
+                                    colors: [Color.blue.opacity(0.1), Color.purple.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ))
+                                .overlay(
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "gamecontroller")
+                                            .foregroundColor(.secondary)
+                                            .font(.title)
+                                        Text("No Cover")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                )
+                        }
+                    }
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 
                 // Favorite badge - top right
                 if rom.isFavourite {

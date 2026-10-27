@@ -26,6 +26,12 @@ final class LocalSaveStoreRepository: PSaveStore {
         return entries.compactMap { Int($0.lastPathComponent) }.sorted()
     }
 
+    func deleteSaves(romId: Int) throws {
+        let url = SaveStorePaths.romDir(root: rootDirectory, romId: romId)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.removeItem(at: url)
+    }
+
     // MARK: - Battery
 
     func readBattery(romId: Int) throws -> Data? {
@@ -52,6 +58,23 @@ final class LocalSaveStoreRepository: PSaveStore {
         try fileManager.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
     }
 
+    func backupBattery(romId: Int, data: Data, origin: BatteryBackupOrigin) throws {
+        let dir = SaveStorePaths.backupsDir(root: rootDirectory, romId: romId)
+        try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        let name = BatteryBackupNaming.fileName(at: Date(), origin: origin)
+        try data.write(to: dir.appendingPathComponent(name), options: .atomic)
+        try pruneBackups(romId: romId)
+    }
+
+    private func pruneBackups(romId: Int) throws {
+        let dir = SaveStorePaths.backupsDir(root: rootDirectory, romId: romId)
+        guard fileManager.fileExists(atPath: dir.path) else { return }
+        let names = try fileManager.contentsOfDirectory(atPath: dir.path)
+        for name in BatteryBackupNaming.namesToPrune(existing: names) {
+            removeIfExists(dir.appendingPathComponent(name))
+        }
+    }
+
     // MARK: - State
 
     func listStates(romId: Int) throws -> [SaveStateEntry] {
@@ -65,7 +88,11 @@ final class LocalSaveStoreRepository: PSaveStore {
             let name = url.deletingPathExtension().lastPathComponent
             guard url.pathExtension == SaveStorePaths.stateFileExtension, let slot = Int(name) else { return nil }
             let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey])
-            return SaveStateEntry(slot: slot, modifiedAt: attrs?.contentModificationDate ?? Date())
+            // An unreadable timestamp must lose any newer-than comparison, not win it.
+            return SaveStateEntry(
+                slot: slot,
+                modifiedAt: attrs?.contentModificationDate ?? Date(timeIntervalSince1970: 0)
+            )
         }
     }
 
@@ -91,6 +118,7 @@ final class LocalSaveStoreRepository: PSaveStore {
         if fileManager.fileExists(atPath: thumb.path) {
             try fileManager.removeItem(at: thumb)
         }
+        removeIfExists(SaveStorePaths.stateBaselineURL(root: rootDirectory, romId: romId, slot: slot))
     }
 
     func stateModifiedAt(romId: Int, slot: Int) -> Date? {
@@ -121,6 +149,28 @@ final class LocalSaveStoreRepository: PSaveStore {
             withIntermediateDirectories: true
         )
         try data.write(to: SaveStorePaths.thumbURL(root: rootDirectory, romId: romId, slot: slot), options: .atomic)
+    }
+
+    func deleteThumbnail(romId: Int, slot: Int) throws {
+        removeIfExists(SaveStorePaths.thumbURL(root: rootDirectory, romId: romId, slot: slot))
+    }
+
+    // MARK: - Sync baseline
+
+    func readStateBaseline(romId: Int, slot: Int) throws -> StateSyncBaseline? {
+        let url = SaveStorePaths.stateBaselineURL(root: rootDirectory, romId: romId, slot: slot)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(StateSyncBaseline.self, from: data)
+    }
+
+    func writeStateBaseline(romId: Int, slot: Int, baseline: StateSyncBaseline) throws {
+        try fileManager.createDirectory(
+            at: SaveStorePaths.statesDir(root: rootDirectory, romId: romId),
+            withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(baseline)
+        try data.write(to: SaveStorePaths.stateBaselineURL(root: rootDirectory, romId: romId, slot: slot), options: .atomic)
     }
 
     // MARK: - Undo Save

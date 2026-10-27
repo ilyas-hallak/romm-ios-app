@@ -1,6 +1,9 @@
 # Claude Code MCP config (contains secrets)
 .mcp.json
 
+# Per-developer code signing (team ID + bundle prefix), never commit
+romm/Config/Signing.xcconfig
+
 # Logs (may contain usernames, hostnames, tokens)
 *.log
 log.txt
@@ -136,7 +139,12 @@ Temporary Items
 
 # Documentation
 documentation/features/
-.claude
+
+# Claude Code: shared commands and agreements are tracked,
+# per-developer state and the device command (team id, device udid) are not
+.claude/*
+!.claude/commands/
+.claude/commands/device.md
 
 # Git worktrees
 .worktrees/

@@ -22,23 +22,25 @@ protocol PDependencyFactory {
     var heartbeatRepository: PHeartbeatRepository { get }
     var tasksRepository: PTasksRepository { get }
     var scanRepository: PScanRepository { get }
+    var romUploadRepository: PRomUploadRepository { get }
+    var incomingRomFileRepository: PIncomingRomFileRepository { get }
 
     // Services
     var sftpKeychainService: PSFTPKeychainService { get }
     var sftpService: PSFTPService { get }
-    var sftpConnectionManager: SFTPConnectionManager { get }
+    var sftpConnectionManager: PSFTPConnectionManager { get }
     var apiClient: PRommAPIClient { get }
     var fileValidationService: PFileValidationService { get }
     var tokenProvider: PTokenProvider { get }
     var saveStore: PSaveStore { get }
     
     // Use Cases
-    func makeLogoutUseCase() -> LogoutUseCase
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase
     func makeRefreshRetroAchievementsUseCase() -> RefreshRetroAchievementsUseCase
     func makeSetRetroAchievementsUsernameUseCase() -> SetRetroAchievementsUsernameUseCase
     func makeGetRomsUseCase() -> GetRomsUseCase
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase
     func makeToggleRomFavoriteUseCase() -> ToggleRomFavoriteUseCase
     func makeCheckRomFavoriteStatusUseCase() -> CheckRomFavoriteStatusUseCase
@@ -59,12 +61,21 @@ protocol PDependencyFactory {
     func makeCreateCollectionUseCase() -> CreateCollectionUseCase
     func makeUpdateCollectionUseCase() -> UpdateCollectionUseCase
     func makeDeleteCollectionUseCase() -> DeleteCollectionUseCase
-    
+
+    // ROM Upload Use Cases
+    func makeGetRomUploadAvailabilityUseCase() -> GetRomUploadAvailabilityUseCase
+    func makeStageIncomingRomUseCase() -> StageIncomingRomUseCase
+    func makeSuggestPlatformForFileUseCase() -> SuggestPlatformForFileUseCase
+    func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase
+
     // Setup Use Cases
     func makeSaveSetupConfigurationUseCase() -> PSaveSetupConfigurationUseCase
     func makeGetSetupConfigurationUseCase() -> PGetSetupConfigurationUseCase
     func makeCheckSetupStatusUseCase() -> PCheckSetupStatusUseCase
     func makeClearSetupConfigurationUseCase() -> PClearSetupConfigurationUseCase
+    func makeGetServerConnectionUseCase() -> PGetServerConnectionUseCase
+    func makeSaveAlternativeServerURLUseCase() -> PSaveAlternativeServerURLUseCase
+    func makeResolveServerEndpointUseCase() -> PResolveServerEndpointUseCase
     
     // SFTP Use Cases
     func makeGetAllConnectionsUseCase() -> GetAllConnectionsUseCase
@@ -101,8 +112,14 @@ protocol PDependencyFactory {
     func makeUpdateSaveUseCase() -> PUpdateSaveUseCase
     func makeUploadStateUseCase() -> PUploadStateUseCase
     func makeUpdateStateUseCase() -> PUpdateStateUseCase
+    func makeConfirmSaveDownloadUseCase() -> PConfirmSaveDownloadUseCase
+    func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase
     func makeRecordSyncUseCase() -> PRecordSyncUseCase
     func makeGetLastSyncUseCase() -> PGetLastSyncUseCase
+    func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase
+    func makeDeleteLocalGameDataUseCase() -> PDeleteLocalGameDataUseCase
+    func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase
+    func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase
 
     // Local ROM Use Cases
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
@@ -118,29 +135,46 @@ protocol PDependencyFactory {
     func makeCheckEmulatorSupportUseCase() -> PCheckEmulatorSupportUseCase
     func makeLaunchEmulatorUseCase() -> PLaunchEmulatorUseCase
     func makeGetDownloadedROMUseCase() -> PGetDownloadedROMUseCase
+    #if !APP_STORE
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase
+    func makeFindROMsByFileStemUseCase() -> PFindROMsByFileStemUseCase
+    #endif
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase
+    #if !APP_STORE
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase
+    #endif
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase
     func makeScanExternalSavesUseCase() -> PScanExternalSavesUseCase
     var externalSaveFolderStore: PExternalSaveFolderStore { get }
     var externalEmulatorSetupStore: PExternalEmulatorSetupStore { get }
+    #if !APP_STORE
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService
+    #endif
+    @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner
+    #if !APP_STORE
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel
+    #endif
 
     // Emulator Engine
     var enginePreference: PEmulatorEnginePreference { get }
+    #if !APP_STORE
     var libretroAspectRatioPreference: PLibretroAspectRatioPreference { get }
     var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference { get }
     var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference { get }
     var gamepadFaceButtonPreference: PGamepadFaceButtonPreference { get }
+    var analogSticksPreference: PAnalogSticksPreference { get }
     var rumblePreference: PRumblePreference { get }
+    var emulatorBezelPreference: PEmulatorBezelPreference { get }
     var externalDisplayPreference: PExternalDisplayPreference { get }
+    var externalDisplayDiagnostics: PExternalDisplayDiagnostics { get }
     var screenBrightness: PScreenBrightness { get }
+    #endif
 
     func makePlatformEngineSupport() -> PPlatformEngineSupport
+    #if !APP_STORE
     func makeControllerSkinsUseCase() -> PControllerSkinsUseCase
+    #endif
 
     // External emulator apps
     var playTargetPreference: PPlayTargetPreference { get }
@@ -155,7 +189,11 @@ protocol PDependencyFactory {
 
     // Local ROM ViewModels
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel
-    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel
+    @MainActor func makeShareROMViewModel() -> ShareROMViewModel
+
+    // Battery conflict resolution
+    @MainActor func makeBatteryConflictResolver() -> PBatteryConflictResolver
+    @MainActor func makeBatteryConflictViewModel(romId: Int, saveId: Int, onResolved: @escaping () async -> Void) -> BatteryConflictViewModel
 }
 
 class DefaultDependencyFactory: PDependencyFactory {
@@ -168,7 +206,7 @@ class DefaultDependencyFactory: PDependencyFactory {
     // MARK: - Repositories (Singletons)
     
     lazy var authRepository: PAuthRepository = AuthRepository(apiClient: apiClient)
-    lazy var romsRepository: PRomsRepository = RomsRepository(apiClient: apiClient)
+    lazy var romsRepository: PRomsRepository = RomsRepository(apiClient: apiClient, tokenProvider: tokenProvider)
     lazy var platformsRepository: PPlatformsRepository = PlatformsRepository(apiClient: apiClient)
     lazy var collectionsRepository: PCollectionsRepository = CollectionsRepository(apiClient: apiClient)
     lazy var setupRepository: PSetupRepository = SetupRepository()
@@ -179,7 +217,15 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
     lazy var tasksRepository: PTasksRepository = TasksRepository(apiClient: apiClient)
     lazy var scanRepository: PScanRepository = ScanRepository(apiClient: apiClient)
+    lazy var romUploadRepository: PRomUploadRepository = RomUploadRepository(
+        apiClient: apiClient,
+        tokenProvider: tokenProvider,
+        heartbeat: heartbeatRepository,
+        authRepository: authRepository
+    )
+    lazy var incomingRomFileRepository: PIncomingRomFileRepository = IncomingRomFileRepository()
     lazy var manualRepository: PManualRepository = ManualRepository(apiClient: apiClient)
+    lazy var serverEndpointRepository: PServerEndpointRepository = ServerEndpointRepository()
     
     // MARK: - Services (Singletons)
     
@@ -189,8 +235,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     
     lazy var sftpKeychainService: PSFTPKeychainService = SFTPKeychainService()
     lazy var sftpRepository: PSFTPRepository = SFTPRepository(keychainService: sftpKeychainService)
-    lazy var sftpService: PSFTPService = SFTPService(repository: sftpRepository)
-    lazy var sftpConnectionManager: SFTPConnectionManager = {
+    lazy var sftpService: PSFTPService = SFTPService(
+        repository: sftpRepository,
+        makeClient: { MFTSFTPClient(endpoint: $0) }
+    )
+    lazy var sftpConnectionManager: PSFTPConnectionManager = {
         let manager = SFTPConnectionManager.shared
         manager.configure(with: sftpService)
         return manager
@@ -201,10 +250,6 @@ class DefaultDependencyFactory: PDependencyFactory {
     private init() {}
     
     // MARK: - Auth Use Cases
-    
-    func makeLogoutUseCase() -> LogoutUseCase {
-        LogoutUseCase(authRepository: authRepository)
-    }
     
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase {
         GetCurrentUserUseCase(authRepository: authRepository)
@@ -227,7 +272,11 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeGetRomsWithFiltersUseCase() -> GetRomsWithFiltersUseCase {
         GetRomsWithFiltersUseCase(romsRepository: romsRepository)
     }
-    
+
+    func makeGetRecommendationsUseCase() -> GetRecommendationsUseCase {
+        GetRecommendationsUseCase(romsRepository: romsRepository)
+    }
+
     func makeGetRomDetailsUseCase() -> GetRomDetailsUseCase {
         GetRomDetailsUseCase(romsRepository: romsRepository)
     }
@@ -313,7 +362,25 @@ class DefaultDependencyFactory: PDependencyFactory {
     func makeDeleteCollectionUseCase() -> DeleteCollectionUseCase {
         DeleteCollectionUseCase(collectionsRepository: collectionsRepository)
     }
-    
+
+    // MARK: - ROM Upload
+
+    func makeGetRomUploadAvailabilityUseCase() -> GetRomUploadAvailabilityUseCase {
+        GetRomUploadAvailabilityUseCase(repository: romUploadRepository)
+    }
+
+    func makeStageIncomingRomUseCase() -> StageIncomingRomUseCase {
+        StageIncomingRomUseCase(repository: incomingRomFileRepository)
+    }
+
+    func makeSuggestPlatformForFileUseCase() -> SuggestPlatformForFileUseCase {
+        SuggestPlatformForFileUseCase()
+    }
+
+    func makeDiscardStagedRomUseCase() -> DiscardStagedRomUseCase {
+        DiscardStagedRomUseCase(repository: incomingRomFileRepository)
+    }
+
     // MARK: - Setup Use Cases
     
     func makeSaveSetupConfigurationUseCase() -> PSaveSetupConfigurationUseCase {
@@ -335,6 +402,18 @@ class DefaultDependencyFactory: PDependencyFactory {
             setupRepository: setupRepository,
             configurationService: DefaultConfigurationService.shared
         )
+    }
+
+    func makeGetServerConnectionUseCase() -> PGetServerConnectionUseCase {
+        GetServerConnectionUseCase(setupRepository: setupRepository, endpointRepository: serverEndpointRepository)
+    }
+
+    func makeSaveAlternativeServerURLUseCase() -> PSaveAlternativeServerURLUseCase {
+        SaveAlternativeServerURLUseCase(setupRepository: setupRepository)
+    }
+
+    func makeResolveServerEndpointUseCase() -> PResolveServerEndpointUseCase {
+        ResolveServerEndpointUseCase(setupRepository: setupRepository, endpointRepository: serverEndpointRepository)
     }
     
     // MARK: - SFTP Use Cases
@@ -441,13 +520,18 @@ class DefaultDependencyFactory: PDependencyFactory {
     }
 
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
+    #if !APP_STORE
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = UserDefaultsLibretroAspectRatioPreferenceStore()
     lazy var emulatorScreenPositionPreference: PEmulatorScreenPositionPreference = UserDefaultsEmulatorScreenPositionPreferenceStore()
     lazy var emulatorMenuShortcutPreference: PEmulatorMenuShortcutPreference = UserDefaultsEmulatorMenuShortcutPreferenceStore()
     lazy var gamepadFaceButtonPreference: PGamepadFaceButtonPreference = UserDefaultsGamepadFaceButtonPreferenceStore()
+    lazy var analogSticksPreference: PAnalogSticksPreference = UserDefaultsAnalogSticksPreferenceStore()
     lazy var rumblePreference: PRumblePreference = UserDefaultsRumblePreferenceStore()
+    lazy var emulatorBezelPreference: PEmulatorBezelPreference = UserDefaultsEmulatorBezelPreferenceStore()
     lazy var externalDisplayPreference: PExternalDisplayPreference = UserDefaultsExternalDisplayPreferenceStore()
+    lazy var externalDisplayDiagnostics: PExternalDisplayDiagnostics = ExternalDisplayDiagnostics()
     lazy var screenBrightness: PScreenBrightness = UIScreenBrightness()
+    #endif
 
     // MARK: - External Emulator Apps
 
@@ -457,6 +541,9 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     // MARK: - Controller Skins
 
+    // No screen to pick one from and nothing left that reads a .deltaskin file,
+    // so the whole subsystem is unreachable once Play only hands ROMs to another app.
+    #if !APP_STORE
     private lazy var controllerSkinInspector: PControllerSkinInspector = DeltaControllerSkinInspector()
     private lazy var controllerSkinRepository: PControllerSkinRepository = ControllerSkinRepository(inspector: controllerSkinInspector)
     private lazy var controllerSkinDownloader: PControllerSkinDownloader = ControllerSkinDownloadService()
@@ -471,6 +558,7 @@ class DefaultDependencyFactory: PDependencyFactory {
             linkParser: controllerSkinLinkParser
         )
     }
+    #endif
 
     func makePlatformEngineSupport() -> PPlatformEngineSupport {
         PlatformEngineSupport()
@@ -487,6 +575,7 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     lazy var saveStore: PSaveStore = LocalSaveStoreRepository()
     lazy var cloudSaveSyncStore: PCloudSaveSyncStore = CloudSaveSyncSettings.shared
+    lazy var saveSyncOutcomeStore: PSaveSyncOutcomeStore = CloudSaveSyncSettings.shared
     lazy var savesRepository: PSavesRepository = SavesRepository(apiClient: apiClient)
     lazy var statesRepository: PStatesRepository = StatesRepository(apiClient: apiClient)
     lazy var fileSystemService: PFileSystemService = DefaultFileSystemService()
@@ -500,17 +589,25 @@ class DefaultDependencyFactory: PDependencyFactory {
         GetDownloadedROMUseCase(localROMRepository: localROMRepository)
     }
 
+    #if !APP_STORE
+    func makeFindROMsByFileStemUseCase() -> PFindROMsByFileStemUseCase {
+        FindROMsByFileStemUseCase(localROMRepository: localROMRepository)
+    }
+
     func makeResolveROMFileUseCase() -> PResolveROMFileUseCase {
         ResolveROMFileUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
+    #endif
 
     func makeResolveExternalGameIdentifierUseCase() -> PResolveExternalGameIdentifierUseCase {
         ResolveExternalGameIdentifierUseCase(resolver: ROMFileResolver(fileSystem: fileSystemService))
     }
 
+    #if !APP_STORE
     func makeEmulatorSaveStatesUseCase() -> PEmulatorSaveStatesUseCase {
         EmulatorSaveStatesUseCase(saveStore: saveStore)
     }
+    #endif
 
     func makeSyncPreviewUseCase() -> PSyncPreviewUseCase {
         SyncPreviewUseCase(
@@ -535,18 +632,20 @@ class DefaultDependencyFactory: PDependencyFactory {
         )
     }
 
+    #if !APP_STORE
     func makeBIOSSyncUseCase() -> PBIOSSyncUseCase {
         BIOSSyncUseCase(apiClient: apiClient, fileSystem: fileSystemService)
     }
 
-    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String) -> CloudSaveSyncService {
+    @MainActor func makeCloudSaveSyncService(romId: Int, emulator: String, batteryFileName: String, platformSlug: String?) -> CloudSaveSyncService {
         CloudSaveSyncService(
-            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName),
+            config: .init(romId: romId, emulator: emulator, batteryFileName: batteryFileName, platformSlug: platformSlug),
             saveStore: saveStore,
             listSavesUseCase: ListServerSavesUseCase(repository: savesRepository),
             uploadSaveUseCase: UploadSaveUseCase(repository: savesRepository),
             updateSaveUseCase: UpdateSaveUseCase(repository: savesRepository),
             downloadSaveUseCase: DownloadSaveUseCase(repository: savesRepository),
+            confirmSaveDownloadUseCase: ConfirmSaveDownloadUseCase(repository: savesRepository),
             listStatesUseCase: ListServerStatesUseCase(repository: statesRepository),
             uploadStateUseCase: UploadStateUseCase(repository: statesRepository),
             updateStateUseCase: UpdateStateUseCase(repository: statesRepository),
@@ -554,6 +653,45 @@ class DefaultDependencyFactory: PDependencyFactory {
             apiClient: apiClient,
             syncDevice: syncDeviceRepository
         )
+    }
+    #endif
+
+    @MainActor func makeSaveSyncRunner() -> PSaveSyncRunner {
+        SaveSyncRunner(
+            saveStore: saveStore,
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
+            listServerSavesUseCase: makeListServerSavesUseCase(),
+            listServerStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase(),
+            completeSyncSessionUseCase: makeCompleteSyncSessionUseCase(),
+            externalSaveFolderStore: externalSaveFolderStore,
+            recordRunUseCase: makeRecordSaveSyncRunUseCase(),
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
+        )
+    }
+
+    /// Same construction `SaveSyncRunner` builds internally for its own
+    /// acting path, for the read-only status peek `SyncSaveViewModel` needs.
+    private func makeStateSyncCoordinator() -> StateSyncCoordinator {
+        StateSyncCoordinator(
+            saveStore: saveStore,
+            listStatesUseCase: makeListServerStatesUseCase(),
+            uploadStateUseCase: makeUploadStateUseCase(),
+            updateStateUseCase: makeUpdateStateUseCase(),
+            downloadStateUseCase: makeDownloadStateUseCase()
+        )
+    }
+
+    func makeRecordSaveSyncRunUseCase() -> PRecordSaveSyncRunUseCase {
+        RecordSaveSyncRunUseCase(store: saveSyncOutcomeStore)
+    }
+
+    func makeGetLastSaveSyncRunUseCase() -> PGetLastSaveSyncRunUseCase {
+        GetLastSaveSyncRunUseCase(store: saveSyncOutcomeStore)
     }
 
     // MARK: - Save/State Sync Use Cases
@@ -590,6 +728,14 @@ class DefaultDependencyFactory: PDependencyFactory {
         UpdateStateUseCase(repository: statesRepository)
     }
 
+    func makeConfirmSaveDownloadUseCase() -> PConfirmSaveDownloadUseCase {
+        ConfirmSaveDownloadUseCase(repository: savesRepository)
+    }
+
+    func makeCompleteSyncSessionUseCase() -> PCompleteSyncSessionUseCase {
+        CompleteSyncSessionUseCase(repository: syncDeviceRepository)
+    }
+
     func makeRecordSyncUseCase() -> PRecordSyncUseCase {
         RecordSyncUseCase(store: cloudSaveSyncStore)
     }
@@ -600,6 +746,18 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     // MARK: - Local ROM Use Cases
 
+    func makeGetLocalDataSummaryUseCase() -> PGetLocalDataSummaryUseCase {
+        GetLocalDataSummaryUseCase(
+            localROMRepository: localROMRepository,
+            saveStore: saveStore,
+            syncStore: cloudSaveSyncStore
+        )
+    }
+
+    func makeDeleteLocalGameDataUseCase() -> PDeleteLocalGameDataUseCase {
+        DeleteLocalGameDataUseCase(localROMRepository: localROMRepository, saveStore: saveStore)
+    }
+
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
         GetROMShareFilesUseCase(localROMRepository: localROMRepository)
     }
@@ -609,30 +767,52 @@ class DefaultDependencyFactory: PDependencyFactory {
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {
         SyncSaveViewModel(
             rom: rom,
+            previewUseCase: makeSyncPreviewUseCase(),
+            syncRunner: makeSaveSyncRunner(),
+            stateSyncCoordinator: makeStateSyncCoordinator(),
             listSavesUseCase: makeListServerSavesUseCase(),
-            listStatesUseCase: makeListServerStatesUseCase(),
             downloadSaveUseCase: makeDownloadSaveUseCase(),
-            downloadStateUseCase: makeDownloadStateUseCase(),
-            uploadSaveUseCase: makeUploadSaveUseCase(),
-            updateSaveUseCase: makeUpdateSaveUseCase(),
-            uploadStateUseCase: makeUploadStateUseCase(),
-            updateStateUseCase: makeUpdateStateUseCase(),
             saveStore: saveStore,
+            syncDevice: syncDeviceRepository,
             recordSyncUseCase: makeRecordSyncUseCase(),
             getLastSyncUseCase: makeGetLastSyncUseCase()
         )
     }
 
-    @MainActor func makeShareROMViewModel(rom: DownloadedROM) -> ShareROMViewModel {
-        ShareROMViewModel(rom: rom, getShareFilesUseCase: makeGetROMShareFilesUseCase())
+    @MainActor func makeShareROMViewModel() -> ShareROMViewModel {
+        ShareROMViewModel(getShareFilesUseCase: makeGetROMShareFilesUseCase())
     }
 
+    @MainActor func makeBatteryConflictResolver() -> PBatteryConflictResolver {
+        BatteryConflictResolver(
+            saveStore: saveStore,
+            uploadSaveUseCase: makeUploadSaveUseCase(),
+            downloadSaveUseCase: makeDownloadSaveUseCase(),
+            confirmSaveDownloadUseCase: makeConfirmSaveDownloadUseCase(),
+            syncDevice: syncDeviceRepository,
+            getDownloadedROMUseCase: makeGetDownloadedROMUseCase()
+        )
+    }
+
+    @MainActor func makeBatteryConflictViewModel(romId: Int, saveId: Int, onResolved: @escaping () async -> Void) -> BatteryConflictViewModel {
+        BatteryConflictViewModel(
+            romId: romId,
+            saveId: saveId,
+            saveStore: saveStore,
+            listSavesUseCase: makeListServerSavesUseCase(),
+            resolver: makeBatteryConflictResolver(),
+            onResolved: onResolved
+        )
+    }
+
+    #if !APP_STORE
     @MainActor func makeLibretroEmulatorViewModel(rom: Rom, core: LibretroCore) -> LibretroEmulatorViewModel {
         LibretroEmulatorViewModel(
             rom: rom,
             core: core,
             getDownloadedROM: makeGetDownloadedROMUseCase(),
             resolveROMFile: makeResolveROMFileUseCase(),
+            findROMsByFileStem: makeFindROMsByFileStemUseCase(),
             saveStates: makeEmulatorSaveStatesUseCase(),
             biosSync: makeBIOSSyncUseCase(),
             aspectRatioPreference: libretroAspectRatioPreference,
@@ -641,6 +821,7 @@ class DefaultDependencyFactory: PDependencyFactory {
             factory: self
         )
     }
+    #endif
 
     // MARK: - SFTP ViewModels
     

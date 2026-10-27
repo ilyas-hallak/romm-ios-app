@@ -44,7 +44,7 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
     }
 
     private func availability(for version: String) -> SyncAPIAvailability {
-        Self.compareVersions(version, minSyncVersion) >= 0
+        ServerVersion.compare(version, minSyncVersion) >= 0
             ? .available
             : .serverTooOld(version: version)
     }
@@ -84,23 +84,16 @@ final class SyncDeviceRepository: PSyncDeviceRepository {
         return result
     }
 
-    // MARK: - Version compare
+    func forgetDevice() {
+        userDefaults.removeObject(forKey: deviceIdKey)
+        logger.info("Dropped the stored sync device id, will register again")
+    }
 
-    /// Minimal semantic-version compare, kept here so this repository stays
-    /// self-contained.
-    private static func compareVersions(_ a: String, _ b: String) -> Int {
-        if a == "development" { return 1 }
-        if b == "development" { return -1 }
-        let baseA = a.split(separator: "-").first.map(String.init) ?? a
-        let baseB = b.split(separator: "-").first.map(String.init) ?? b
-        let pa = baseA.split(separator: ".").compactMap { Int($0) }
-        let pb = baseB.split(separator: ".").compactMap { Int($0) }
-        for i in 0..<max(pa.count, pb.count) {
-            let x = i < pa.count ? pa[i] : 0
-            let y = i < pb.count ? pb[i] : 0
-            if x < y { return -1 }
-            if x > y { return 1 }
-        }
-        return 0
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {
+        try await apiClient.completeSyncSession(
+            sessionId: sessionId,
+            operationsCompleted: operationsCompleted,
+            operationsFailed: operationsFailed
+        )
     }
 }

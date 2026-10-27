@@ -28,6 +28,7 @@ class StubRommAPIClient: PRommAPIClient {
     func getRoms( searchTerm: String?, platformId: Int?, limit: Int ) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("getRoms not stubbed") }
     func getRomsWithFilters( searchTerm: String?, platformId: Int?, collectionId: Int?, limit: Int, offset: Int?, withCharIndex: Bool?, orderBy: String?, orderDir: String?, filters: RomFilters ) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("getRomsWithFilters not stubbed") }
     func searchRomsWithOpenAPI(query: String) async throws -> CustomLimitOffsetPageSimpleRomSchema { fatalError("searchRomsWithOpenAPI not stubbed") }
+    func getRecommendations(limit: Int) async throws -> [RecommendedRomSchema] { fatalError("getRecommendations not stubbed") }
     func getCollections(limit: Int?, offset: Int?) async throws -> [CollectionSchema] { fatalError("getCollections not stubbed") }
     func getCollection(id: Int) async throws -> CollectionSchema { fatalError("getCollection not stubbed") }
     func getVirtualCollections(type: String, limit: Int?) async throws -> [VirtualCollectionSchema] { fatalError("getVirtualCollections not stubbed") }
@@ -46,6 +47,8 @@ class StubRommAPIClient: PRommAPIClient {
     func downloadFirmwareContent(id: Int, fileName: String) async throws -> Data { fatalError("downloadFirmwareContent not stubbed") }
     func getHeartbeat() async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
     func getHeartbeat(from serverURL: String) async throws -> HeartbeatResponse { fatalError("getHeartbeat not stubbed") }
+    var isReachable = true
+    func isServerReachable() async -> Bool { isReachable }
     func updateRomLastPlayed(id: Int) async throws -> RomUserSchema { fatalError("updateRomLastPlayed not stubbed") }
     func makeDownloadRequest(path: String) throws -> URLRequest { fatalError("makeDownloadRequest not stubbed") }
 
@@ -66,16 +69,22 @@ class StubRommAPIClient: PRommAPIClient {
     func getStats() async throws -> StatsReturn { fatalError("getStats not stubbed") }
     func getSaves(romId: Int) async throws -> [SaveSchema] { fatalError("getSaves not stubbed") }
     func getStates(romId: Int) async throws -> [StateSchema] { fatalError("getStates not stubbed") }
-    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("uploadSave not stubbed") }
-    func updateSave(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("updateSave not stubbed") }
-    func downloadSave(id: Int, deviceId: String?) async throws -> Data { fatalError("downloadSave not stubbed") }
+    func uploadSave(romId: Int, emulator: String?, slot: String?, deviceId: String?, sessionId: String?, autocleanup: Bool?, overwrite: Bool?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("uploadSave not stubbed") }
+    func updateSave(id: Int, emulator: String?, deviceId: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> SaveSchema { fatalError("updateSave not stubbed") }
+    func downloadSave(id: Int, deviceId: String?, sessionId: String?) async throws -> Data { fatalError("downloadSave not stubbed") }
     func deleteSaves(ids: [Int]) async throws { fatalError("deleteSaves not stubbed") }
+    func confirmSaveDownloaded(id: Int, deviceId: String) async throws -> SaveSchema { fatalError("confirmSaveDownloaded not stubbed") }
     func uploadState(romId: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("uploadState not stubbed") }
     func updateState(id: Int, emulator: String?, fileName: String, fileData: Data, screenshotData: Data?) async throws -> StateSchema { fatalError("updateState not stubbed") }
     func downloadState(id: Int) async throws -> Data { fatalError("downloadState not stubbed") }
     func deleteStates(ids: [Int]) async throws { fatalError("deleteStates not stubbed") }
+    func startRomUpload(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String { fatalError("startRomUpload not stubbed") }
+    func uploadRomChunk(uploadId: String, index: Int, fileURL: URL, progressHandler: ((Double) -> Void)?) async throws { fatalError("uploadRomChunk not stubbed") }
+    func completeRomUpload(uploadId: String) async throws { fatalError("completeRomUpload not stubbed") }
+    func cancelRomUpload(uploadId: String) async throws { fatalError("cancelRomUpload not stubbed") }
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("registerDevice not stubbed") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("negotiateSync not stubbed") }
     func getTasksStatus() async throws -> [TaskStatusSchema] { fatalError("getTasksStatus not stubbed") }
     func startLibraryScan(_ request: ScanStartRequest) async throws { fatalError("startLibraryScan not stubbed") }
+    func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws { fatalError("completeSyncSession not stubbed") }
 }

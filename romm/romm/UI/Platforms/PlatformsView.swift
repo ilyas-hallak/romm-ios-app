@@ -105,7 +105,7 @@ struct PlatformRowView: View {
     var body: some View {
         HStack {
             // Platform Logo
-            Image(platform.slug)
+            Image(PlatformIcon.assetName(for: platform.slug))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 60, height: 60)

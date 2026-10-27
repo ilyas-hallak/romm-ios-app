@@ -1,31 +1,18 @@
 import SwiftUI
 
+/// The Share entry in a downloaded ROM's leading swipe actions.
+///
+/// Deliberately holds no presentation of its own. A swipe action's button is
+/// torn out of the hierarchy the moment the row snaps shut, so a `.sheet`
+/// attached to it is dismissed in the same run loop it was asked to appear in,
+/// and nothing ever shows. The list owns the sheet instead.
 struct ShareSwipeButton: View {
-    @State private var viewModel: ShareROMViewModel
-
-    init(rom: DownloadedROM, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
-        _viewModel = State(initialValue: factory.makeShareROMViewModel(rom: rom))
-    }
+    let action: () -> Void
 
     var body: some View {
-        Button {
-            viewModel.prepareShare()
-        } label: {
+        Button(action: action) {
             Label("Share", systemImage: "square.and.arrow.up")
         }
         .tint(.blue)
-        .sheet(item: $viewModel.shareSheetItem, onDismiss: viewModel.cleanupTemporaryFiles) { item in
-            ShareSheet(activityItems: item.urls)
-        }
-        .alert("Files Not Found", isPresented: $viewModel.showFileNotFoundAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The ROM files could not be found on this device. They may have been deleted or moved.")
-        }
     }
-}
-
-struct ShareSheetItem: Identifiable {
-    let id = UUID()
-    let urls: [URL]
 }

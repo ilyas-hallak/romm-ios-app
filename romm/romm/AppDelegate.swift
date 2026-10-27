@@ -13,15 +13,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         AppBootstrap.run()
+        #if !APP_STORE
         // A previous run may have been killed while the screen was blanked for
         // TV play, which would leave the panel dark at brightness 0.
         PhoneScreenBlanker.shared.recoverIfNeeded()
+        // A phone set up once keeps taking a second pad, without the player
+        // having to walk back into Settings for it.
+        SecondControllerManager.shared.startIfEnabled()
+        #endif
         // Downloads keep transferring while the app is gone, so the queue has to
         // be reconciled with what the session actually still holds. This also
         // runs when the app was only relaunched to be handed session events,
         // which is exactly when the queue would otherwise be empty.
         Task { @MainActor in
             await DownloadQueueManager.shared.resumeInterruptedJobs()
+        }
+        // A ROM upload interrupted by the app being killed resumes from its
+        // last acknowledged chunk rather than starting over.
+        Task { @MainActor in
+            RomUploadQueueManager.shared.resumeInterruptedJobs()
         }
         return true
     }
@@ -63,47 +73,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
+        #if !APP_STORE
         if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
             let config = UISceneConfiguration(name: "External Display", sessionRole: connectingSceneSession.role)
             config.delegateClass = ExternalDisplaySceneDelegate.self
             return config
         }
+        #endif
         return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
     }
-
-    // Handle URL callbacks (client token pairing)
-    func application(
-        _ app: UIApplication,
-        open url: URL,
-        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-    ) -> Bool {
-        Logger.auth.info("App received URL: \(url.absoluteString)")
-
-        guard url.scheme == "romm" else {
-            Logger.auth.warning("Unknown URL scheme: \(url.scheme ?? "none")")
-            return false
-        }
-
-        switch url.host {
-        case "pair":
-            Logger.auth.info("Pairing deep link received")
-            let service = ClientTokenAuthService()
-            if let code = service.handleDeepLink(url: url) {
-                NotificationCenter.default.post(
-                    name: .clientTokenPairingCode,
-                    object: nil,
-                    userInfo: ["code": code]
-                )
-            }
-            return true
-
-        default:
-            Logger.auth.warning("Unknown URL host: \(url.host ?? "none")")
-            return false
-        }
-    }
-}
-
-extension Notification.Name {
-    static let clientTokenPairingCode = Notification.Name("clientTokenPairingCode")
 }

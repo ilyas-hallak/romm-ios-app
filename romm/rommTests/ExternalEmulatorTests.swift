@@ -66,6 +66,7 @@ struct ExternalEmulatorIDTests {
         // Spelled out because the case name and the key differ here, and the
         // default synthesised value would be "manicEmu".
         #expect(ExternalEmulatorID.manicEmu.rawValue == "manicemu")
+        #expect(ExternalEmulatorID.provenance.rawValue == "provenance")
     }
 
     /// Catches a `switch` branch wired to the wrong implementation.
@@ -78,5 +79,14 @@ struct ExternalEmulatorIDTests {
     @Test func everyEmulatorHasADistinctScheme() {
         let schemes = ExternalEmulatorID.allCases.map { $0.emulator.urlScheme }
         #expect(Set(schemes).count == schemes.count)
+    }
+
+    /// Only Manic overrides the pasteboard type for `chd`/`pbp`. Every other app
+    /// has to fall through to the default, so the system's own type guess decides.
+    @Test func onlyManicOverridesThePasteboardType() {
+        for id in ExternalEmulatorID.allCases where id != .manicEmu {
+            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "chd", platformSlug: "ps") == nil)
+            #expect(id.emulator.pasteboardTypeIdentifier(forROMExtension: "pbp", platformSlug: "ps") == nil)
+        }
     }
 }

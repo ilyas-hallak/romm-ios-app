@@ -117,6 +117,8 @@ final class ResolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifier
                 identifier = try FileHashing.sha1(ofFileAt: romURL)
             case .manicGameID:
                 identifier = try FileHashing.manicGameID(ofFileAt: romURL)
+            case .md5OfROMData:
+                identifier = try FileHashing.md5(ofFileAt: romURL)
             }
             return ExternalGameHandoff(
                 gameIdentifier: identifier,

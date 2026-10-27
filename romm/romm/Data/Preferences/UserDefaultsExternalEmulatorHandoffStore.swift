@@ -8,6 +8,7 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
     /// Deliberately a second key rather than a richer value under the first one,
     /// so installations from before the identifier cache keep their handoff state.
     private let identifierKeyPrefix = "externalEmulator.gameIdentifier."
+    private let pasteboardCopyKeyPrefix = "externalEmulator.pasteboardCopy."
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
@@ -15,20 +16,17 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
     }
 
     func hasHandedOff(romId: Int, to target: ExternalEmulatorID) -> Bool {
-        romIds(for: target).contains(romId)
+        romIds(forKey: key(for: target)).contains(romId)
     }
 
     func markHandedOff(romId: Int, to target: ExternalEmulatorID) {
-        var ids = romIds(for: target)
-        guard ids.insert(romId).inserted else { return }
-        userDefaults.set(Array(ids), forKey: key(for: target))
+        insert(romId: romId, intoKey: key(for: target))
     }
 
     func forget(romId: Int) {
         for target in ExternalEmulatorID.allCases {
-            var ids = romIds(for: target)
-            guard ids.remove(romId) != nil else { continue }
-            userDefaults.set(Array(ids), forKey: key(for: target))
+            remove(romId: romId, fromKey: key(for: target))
+            remove(romId: romId, fromKey: pasteboardCopyKey(for: target))
         }
         // The ROM may have been replaced by a different dump under the same id,
         // so a cached content hash is no longer trustworthy either.
@@ -37,6 +35,14 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
             guard identifiers.removeValue(forKey: String(romId)) != nil else { continue }
             userDefaults.set(identifiers, forKey: identifierKey(for: kind))
         }
+    }
+
+    func hasCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID) -> Bool {
+        romIds(forKey: pasteboardCopyKey(for: target)).contains(romId)
+    }
+
+    func markCopiedToPasteboard(romId: Int, to target: ExternalEmulatorID) {
+        insert(romId: romId, intoKey: pasteboardCopyKey(for: target))
     }
 
     func cachedGameIdentifier(romId: Int, kind: ExternalGameIdentifierKind) -> String? {
@@ -58,8 +64,8 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
         keyPrefix + target.rawValue
     }
 
-    private func romIds(for target: ExternalEmulatorID) -> Set<Int> {
-        Set(userDefaults.array(forKey: key(for: target)) as? [Int] ?? [])
+    private func pasteboardCopyKey(for target: ExternalEmulatorID) -> String {
+        pasteboardCopyKeyPrefix + target.rawValue
     }
 
     private func identifierKey(for kind: ExternalGameIdentifierKind) -> String {
@@ -68,5 +74,21 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
 
     private func gameIdentifiers(for kind: ExternalGameIdentifierKind) -> [String: String] {
         userDefaults.dictionary(forKey: identifierKey(for: kind)) as? [String: String] ?? [:]
+    }
+
+    private func romIds(forKey key: String) -> Set<Int> {
+        Set(userDefaults.array(forKey: key) as? [Int] ?? [])
+    }
+
+    private func insert(romId: Int, intoKey key: String) {
+        var ids = romIds(forKey: key)
+        guard ids.insert(romId).inserted else { return }
+        userDefaults.set(Array(ids), forKey: key)
+    }
+
+    private func remove(romId: Int, fromKey key: String) {
+        var ids = romIds(forKey: key)
+        guard ids.remove(romId) != nil else { return }
+        userDefaults.set(Array(ids), forKey: key)
     }
 }

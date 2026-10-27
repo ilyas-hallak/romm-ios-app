@@ -4,33 +4,72 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct HomeView: View {
     @State private var viewModel = HomeViewModel()
+    @State private var accountViewModel = AccountViewModel()
     @EnvironmentObject var appData: AppData
+
+    @State private var showingAccount = false
+    /// What the sheet picked, pushed once it has closed so the push animates
+    /// instead of happening behind the sheet.
+    @State private var pendingDestination: AccountDestination?
+    @State private var destination: AccountDestination?
+    /// Set by "Add ROM" while the account sheet is still closing, so the file
+    /// importer opens only once it is out of the way, the same way a pushed
+    /// destination waits for `pendingDestination`.
+    @State private var pendingRomImport = false
+    @State private var showingRomImporter = false
 
     var body: some View {
         contentView
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Home")
             .toolbar {
-                // Its own button for now. The plan is a menu on the user name
-                // that gathers this and settings, which needs the account UI
-                // from issue #98 first.
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        SyncOverviewView()
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
+                    AccountButton(
+                        username: appData.displayUsername,
+                        avatarURLString: accountViewModel.avatarURL(for: appData.currentUser),
+                        syncStatus: accountViewModel.syncStatus
+                    ) {
+                        showingAccount = true
                     }
-                    .accessibilityLabel("Save Sync")
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gear")
+            }
+            .sheet(isPresented: $showingAccount, onDismiss: handleAccountSheetDismissed) {
+                AccountSheet(
+                    avatarURLString: accountViewModel.avatarURL(for: appData.currentUser),
+                    syncStatus: accountViewModel.syncStatus,
+                    canCheckSync: accountViewModel.reportsSyncStatus,
+                    isChecking: accountViewModel.isChecking,
+                    changelog: { accountViewModel.changelog },
+                    onSelect: { pendingDestination = $0 },
+                    onAddRom: { pendingRomImport = true },
+                    onCheckSync: { Task { await accountViewModel.checkNow() } }
+                )
+            }
+            .navigationDestination(item: $destination) { destination in
+                switch destination {
+                case .saveSync: SyncOverviewView()
+                case .settings: SettingsView()
+                case .statistics: StatsView()
+                case .retroAchievements: RetroAchievementsSettingsView()
+                case .uploads: RomUploadsView()
+                }
+            }
+            .fileImporter(
+                isPresented: $showingRomImporter,
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        IncomingURLRouter.shared.handle(url)
                     }
+                case .failure(let error):
+                    Logger.data.error("ROM import failed: \(error.localizedDescription)")
                 }
             }
             .refreshable {
@@ -41,6 +80,26 @@ struct HomeView: View {
                     await viewModel.load()
                 }
             }
+            // Local and free, so it can run on every appearance and pick up a
+            // sync that finished on the Save Sync screen. The badge never
+            // negotiates on its own, see AccountViewModel.
+            .onAppear {
+                accountViewModel.loadRecordedStatus()
+            }
+    }
+
+    private func handleAccountSheetDismissed() {
+        pushPendingDestination()
+        if pendingRomImport {
+            pendingRomImport = false
+            showingRomImporter = true
+        }
+    }
+
+    private func pushPendingDestination() {
+        guard let pending = pendingDestination else { return }
+        pendingDestination = nil
+        destination = pending
     }
 
     @ViewBuilder
@@ -50,13 +109,20 @@ struct HomeView: View {
                 UpdateAvailableBanner()
                 HomeRomSection(
                     title: "Continue Playing",
-                    roms: viewModel.continuePlaying,
+                    items: viewModel.continuePlaying,
                     isLoading: viewModel.isLoadingContinuePlaying
                 )
                 HomeRomSection(
                     title: "Recently Added",
-                    roms: viewModel.recentlyAdded,
+                    items: viewModel.recentlyAdded,
                     isLoading: viewModel.isLoadingRecentlyAdded
+                )
+                HomeRomSection(
+                    title: "Recommended for You",
+                    items: viewModel.recommendations,
+                    isLoading: viewModel.isLoadingRecommendations,
+                    rom: { $0.rom },
+                    caption: { $0.seedRomName.map { "Because you played \($0)" } }
                 )
                 HomePlatformSection(
                     platforms: viewModel.platforms,
@@ -112,13 +178,18 @@ private struct HomeSectionHeader: View {
     }
 }
 
-private struct HomeRomSection: View {
+/// Carousel of `BigRomCardView`s, generic over the item type so it can show
+/// plain roms (Continue Playing, Recently Added) or roms annotated with a
+/// caption (Recommended for You) without duplicating the layout.
+private struct HomeRomSection<Item: Identifiable>: View {
     let title: String
-    let roms: [Rom]
+    let items: [Item]
     let isLoading: Bool
+    let rom: (Item) -> Rom
+    var caption: ((Item) -> String?)? = nil
 
     var body: some View {
-        if isLoading || !roms.isEmpty {
+        if isLoading || !items.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 HomeSectionHeader(title: title)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -132,12 +203,24 @@ private struct HomeRomSection: View {
                                 }
                             }
                         } else {
-                            ForEach(roms) { rom in
-                                NavigationLink(destination: RomDetailView(rom: rom)) {
-                                    BigRomCardView(rom: rom)
-                                        .frame(width: 200)
+                            ForEach(items) { item in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    NavigationLink(destination: RomDetailView(rom: rom(item))) {
+                                        BigRomCardView(rom: rom(item))
+                                            .frame(width: 200)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    if let text = caption?(item) {
+                                        Text(text)
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                            .frame(width: 200, alignment: .leading)
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -146,6 +229,12 @@ private struct HomeRomSection: View {
                 }
             }
         }
+    }
+}
+
+private extension HomeRomSection where Item == Rom {
+    init(title: String, items: [Rom], isLoading: Bool) {
+        self.init(title: title, items: items, isLoading: isLoading, rom: { $0 })
     }
 }
 
@@ -190,7 +279,7 @@ private struct HomePlatformCard: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(platform.slug)
+            Image(PlatformIcon.assetName(for: platform.slug))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 100, height: 100)

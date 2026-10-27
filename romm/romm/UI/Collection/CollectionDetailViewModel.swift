@@ -63,6 +63,7 @@ class CollectionDetailViewModel {
             currentOffset = response.roms.count
             canLoadMore = response.hasMore
             charIndex = response.charIndex
+            prefetchCovers(for: response.roms)
             
             if response.roms.isEmpty {
                 viewState = .empty("This collection contains no ROMs")
@@ -106,6 +107,7 @@ class CollectionDetailViewModel {
             self.currentRoms = allRoms
             self.currentOffset = allRoms.count
             self.canLoadMore = response.hasMore
+            prefetchCovers(for: response.roms)
             
             viewState = .loaded(allRoms)
             
@@ -137,6 +139,7 @@ class CollectionDetailViewModel {
             currentRoms = response.roms
             currentOffset = response.roms.count
             canLoadMore = response.hasMore
+            prefetchCovers(for: response.roms)
             
             if response.roms.isEmpty {
                 let message = char != nil ? "No ROMs found starting with '\(char!)'" : "This collection contains no ROMs"
@@ -174,6 +177,7 @@ class CollectionDetailViewModel {
             currentRoms = response.roms
             currentOffset = response.roms.count
             canLoadMore = response.hasMore
+            prefetchCovers(for: response.roms)
             
             if response.roms.isEmpty {
                 viewState = .empty("This collection contains no ROMs")
@@ -186,5 +190,10 @@ class CollectionDetailViewModel {
             viewState = .error(error.localizedDescription)
             logger.error("Error sorting ROMs: \(error)")
         }
+    }
+
+    private func prefetchCovers(for roms: [Rom]) {
+        let urls = roms.compactMap { $0.listCoverURL }.compactMap { URL(string: $0) }
+        KingfisherCacheManager.shared.preloadImages(urls: urls)
     }
 }
