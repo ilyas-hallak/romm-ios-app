@@ -44,11 +44,21 @@ class ScanRepository: PScanRepository {
     /// What the socket used to answer with `scan:done_ko` for: a scan already
     /// queued or running, or no worker listening. Any other API error is a
     /// real failure and propagates instead.
+    ///
+    /// A 409 arrives as `.conflict`, the client's own dedicated case for that
+    /// status code, not as `.invalidResponse(409, _)`. `.invalidResponse(409, _)`
+    /// is kept as a fallback match in case that ever changes again.
     static func refusalMessage(for error: APIClientError) -> String? {
-        guard case .invalidResponse(let statusCode, let body) = error,
-              statusCode == 409 || statusCode == 503 else { return nil }
-        let fallback = statusCode == 409 ? "A scan is already in progress." : "No scan worker is available."
-        return detail(from: body) ?? fallback
+        switch error {
+        case .conflict(let body):
+            return detail(from: body) ?? "A scan is already in progress."
+        case .invalidResponse(409, let body):
+            return detail(from: body) ?? "A scan is already in progress."
+        case .invalidResponse(503, let body):
+            return detail(from: body) ?? "No scan worker is available."
+        default:
+            return nil
+        }
     }
 
     /// FastAPI's error body is `{"detail": "..."}`.

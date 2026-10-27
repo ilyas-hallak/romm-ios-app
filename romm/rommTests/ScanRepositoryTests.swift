@@ -23,6 +23,15 @@ struct ScanRepositoryTests {
     }
 
     @Test func aConflictBecomesARefusalWithTheServersDetail() {
+        // The real client throws `.conflict` for a 409, its own dedicated case,
+        // not `.invalidResponse(409, _)`.
+        let error = APIClientError.conflict(#"{"detail": "A library scan is already running"}"#)
+
+        #expect(ScanRepository.refusalMessage(for: error) == "A library scan is already running")
+    }
+
+    @Test func aLegacyInvalidResponse409IsStillARefusal() {
+        // Kept as a fallback in case the client ever stops special-casing 409.
         let error = APIClientError.invalidResponse(409, #"{"detail": "A library scan is already running"}"#)
 
         #expect(ScanRepository.refusalMessage(for: error) == "A library scan is already running")
@@ -35,7 +44,7 @@ struct ScanRepositoryTests {
     }
 
     @Test func aConflictWithoutADecodableDetailFallsBackToAGenericMessage() {
-        let error = APIClientError.invalidResponse(409, "not json")
+        let error = APIClientError.conflict("not json")
 
         #expect(ScanRepository.refusalMessage(for: error) == "A scan is already in progress.")
     }
@@ -61,9 +70,11 @@ struct ScanRepositoryTests {
     }
 
     @Test func aConflictFromStartScanThrowsARefusal() async {
+        // This is the real shape `RommAPIClient` throws for a 409, and the one
+        // that matters end to end: a second scan while one is already running.
         let apiClient = FakeAPIClient()
         apiClient.heartbeatToReturn = Self.heartbeat()
-        apiClient.startLibraryScanError = APIClientError.invalidResponse(409, #"{"detail": "A scan is already running"}"#)
+        apiClient.startLibraryScanError = APIClientError.conflict(#"{"detail": "A scan is already running"}"#)
         let repository = ScanRepository(apiClient: apiClient)
 
         await #expect(throws: ScanStartError.refused("A scan is already running")) {

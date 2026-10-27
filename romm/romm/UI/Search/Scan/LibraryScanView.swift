@@ -273,7 +273,7 @@ struct LibraryScanView: View {
                 .foregroundColor(.orange)
 
             VStack(spacing: 8) {
-                Text("Could Not Load Scan Status")
+                Text(viewModel.errorTitle)
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)

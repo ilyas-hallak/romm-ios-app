@@ -15,6 +15,9 @@ class LibraryScanViewModel {
     var scan: LibraryScanStatus?
     var isLoading = false
     var errorMessage: String?
+    /// Loading and starting share `errorMessage`, so the title says which one
+    /// actually failed instead of always reading as a load failure.
+    var errorTitle = "Could Not Load Scan Status"
     /// False for a permission error: retrying would fail identically until the
     /// account reconnects, so the error view skips the dead-end Retry button.
     var canRetryError = true
@@ -68,6 +71,7 @@ class LibraryScanViewModel {
         } catch {
             if !Task.isCancelled {
                 isLoading = false
+                errorTitle = "Could Not Load Scan Status"
                 errorMessage = error.localizedDescription
                 canRetryError = !(error is LibraryScanAccessError)
             }
@@ -158,6 +162,7 @@ class LibraryScanViewModel {
             await load()
         } catch {
             isStarting = false
+            errorTitle = "Could Not Start Scan"
             errorMessage = error.localizedDescription
             canRetryError = !(error is LibraryScanAccessError)
         }
