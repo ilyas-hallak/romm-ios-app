@@ -9,6 +9,7 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
     /// so installations from before the identifier cache keep their handoff state.
     private let identifierKeyPrefix = "externalEmulator.gameIdentifier."
     private let pasteboardCopyKeyPrefix = "externalEmulator.pasteboardCopy."
+    private let handoffIntroKeyPrefix = "externalEmulator.handoffIntroSeen."
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
@@ -58,14 +59,28 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
         userDefaults.set(identifiers, forKey: identifierKey(for: kind))
     }
 
+    func hasSeenHandoffIntro(for target: ExternalEmulatorID) -> Bool {
+        userDefaults.bool(forKey: handoffIntroKey(for: target))
+    }
+
+    func markHandoffIntroSeen(for target: ExternalEmulatorID) {
+        userDefaults.set(true, forKey: handoffIntroKey(for: target))
+    }
+
     // MARK: - Private
 
+    /// RetroArch handoffs before #229 were reported as sent but never reached
+    /// its library, so its state starts over under a new key.
     private func key(for target: ExternalEmulatorID) -> String {
-        keyPrefix + target.rawValue
+        target == .retroarch ? keyPrefix + target.rawValue + ".v2" : keyPrefix + target.rawValue
     }
 
     private func pasteboardCopyKey(for target: ExternalEmulatorID) -> String {
         pasteboardCopyKeyPrefix + target.rawValue
+    }
+
+    private func handoffIntroKey(for target: ExternalEmulatorID) -> String {
+        handoffIntroKeyPrefix + target.rawValue
     }
 
     private func identifierKey(for kind: ExternalGameIdentifierKind) -> String {

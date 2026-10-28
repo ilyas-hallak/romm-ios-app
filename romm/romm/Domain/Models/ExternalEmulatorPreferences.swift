@@ -29,4 +29,9 @@ protocol PExternalEmulatorHandoffStore: AnyObject {
     /// rather than by emulator: the SHA-1 of a ROM is the same no matter who asks.
     func cachedGameIdentifier(romId: Int, kind: ExternalGameIdentifierKind) -> String?
     func cacheGameIdentifier(_ identifier: String, romId: Int, kind: ExternalGameIdentifierKind)
+
+    /// Whether the user was already told, once per target, that the first Play
+    /// only copies a game over and the next one starts it.
+    func hasSeenHandoffIntro(for target: ExternalEmulatorID) -> Bool
+    func markHandoffIntroSeen(for target: ExternalEmulatorID)
 }

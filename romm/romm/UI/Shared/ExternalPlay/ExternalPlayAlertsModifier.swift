@@ -1,12 +1,29 @@
 import SwiftUI
 
-/// The alerts a Play tap can end in: the pasteboard hint, the question whether
-/// a ROM copied earlier is already in the target, and the error alert.
+/// The alerts a Play tap can end in: the intro before the first handoff, the
+/// pasteboard hint, the question whether a ROM copied earlier is already in the
+/// target, and the error alert.
 struct ExternalPlayAlertsModifier: ViewModifier {
     let coordinator: ExternalPlayCoordinator
 
     func body(content: Content) -> some View {
         content
+            .alert(
+                "First Time in \(coordinator.handoffIntro?.appName ?? "the emulator")",
+                isPresented: Binding(
+                    get: { coordinator.handoffIntro != nil },
+                    set: { if !$0 { coordinator.cancelHandoffIntro() } }
+                ),
+                presenting: coordinator.handoffIntro
+            ) { _ in
+                Button("Continue") { coordinator.continueAfterHandoffIntro() }
+                    .keyboardShortcut(.defaultAction)
+                Button("Cancel", role: .cancel) { coordinator.cancelHandoffIntro() }
+            } message: { intro in
+                Text("Pick \(intro.appName) in the menu that opens next. "
+                    + "This copies the game over. Tap Play again to start it, "
+                    + "from then on it opens straight away.")
+            }
             .alert(
                 "ROM Copied",
                 isPresented: Binding(

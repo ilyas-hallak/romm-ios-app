@@ -95,6 +95,11 @@ class MockDependencyFactory: PDependencyFactory {
     // second concurrent `syncNow()`.
     private let _injectedSaveSyncRunner: PSaveSyncRunner?
 
+    /// Share copies go to a temp folder of their own instead of the test
+    /// host's Documents, where parallel tests would purge each other's copies.
+    lazy var shareRootDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("ROMShareTests-\(UUID().uuidString)", isDirectory: true)
+
     // Emulator engine
     lazy var enginePreference: PEmulatorEnginePreference = UserDefaultsEmulatorEnginePreferenceStore()
     lazy var libretroAspectRatioPreference: PLibretroAspectRatioPreference = InMemoryLibretroAspectRatioPreference()
@@ -598,7 +603,7 @@ class MockDependencyFactory: PDependencyFactory {
     }
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
-        GetROMShareFilesUseCase(localROMRepository: localROMRepository)
+        GetROMShareFilesUseCase(localROMRepository: localROMRepository, shareRootDirectory: shareRootDirectory)
     }
 
     @MainActor func makeSyncSaveViewModel(rom: DownloadedROM) -> SyncSaveViewModel {

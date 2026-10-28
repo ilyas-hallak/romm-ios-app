@@ -9,6 +9,7 @@ final class FakeHandoffStore: PExternalEmulatorHandoffStore, @unchecked Sendable
     private(set) var pasteboardCopied: Set<Int> = []
     private(set) var forgottenRomIds: [Int] = []
     var identifiers: [Int: String] = [:]
+    private(set) var seenHandoffIntros: Set<ExternalEmulatorID> = []
 
     func hasHandedOff(romId: Int, to target: ExternalEmulatorID) -> Bool {
         handedOff.contains(romId)
@@ -38,5 +39,13 @@ final class FakeHandoffStore: PExternalEmulatorHandoffStore, @unchecked Sendable
 
     func cacheGameIdentifier(_ identifier: String, romId: Int, kind: ExternalGameIdentifierKind) {
         identifiers[romId] = identifier
+    }
+
+    func hasSeenHandoffIntro(for target: ExternalEmulatorID) -> Bool {
+        seenHandoffIntros.contains(target)
+    }
+
+    func markHandoffIntroSeen(for target: ExternalEmulatorID) {
+        seenHandoffIntros.insert(target)
     }
 }

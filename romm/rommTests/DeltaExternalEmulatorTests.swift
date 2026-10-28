@@ -10,11 +10,11 @@ struct DeltaExternalEmulatorTests {
     /// up as `Game.identifier`, which is the ROM's SHA-1.
     @Test func launchURLUsesTheSHA1() {
         let sha1 = "a9993e364706816aba3e25717850c26c9cd0d89d"
-        #expect(delta.launchURL(gameIdentifier: sha1)?.absoluteString == "delta://game/\(sha1)")
+        #expect(delta.launchURL(gameIdentifier: sha1, platformSlug: "gba")?.absoluteString == "delta://game/\(sha1)")
     }
 
     @Test func launchURLIsNilWithoutAnIdentifier() {
-        #expect(delta.launchURL(gameIdentifier: "") == nil)
+        #expect(delta.launchURL(gameIdentifier: "", platformSlug: "gba") == nil)
     }
 
     @Test func probeURLIsTheBareScheme() {

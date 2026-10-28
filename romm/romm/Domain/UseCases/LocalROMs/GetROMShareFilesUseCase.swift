@@ -8,14 +8,24 @@ protocol PGetROMShareFilesUseCase {
 }
 
 final class GetROMShareFilesUseCase: PGetROMShareFilesUseCase {
-    static let shareDirectoryPrefix = "ROMShare-"
+    /// The leading dot keeps the copies out of the Files app.
+    static let shareDirectoryPrefix = ".ROMShare-"
     /// How long a share copy is kept around before the next share may delete it.
     static let shareDirectoryLifetime: TimeInterval = 60 * 60
 
     private let localROMRepository: PLocalROMRepository
+    private let shareRootDirectory: URL
 
-    init(localROMRepository: PLocalROMRepository) {
+    /// The copies have to live in Documents, not in the temp directory: only from
+    /// there iOS lets the receiving app open the file in place. From tmp it drops
+    /// a copy into the receiver's `Documents/Inbox` instead, which RetroArch
+    /// never imports.
+    init(
+        localROMRepository: PLocalROMRepository,
+        shareRootDirectory: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    ) {
         self.localROMRepository = localROMRepository
+        self.shareRootDirectory = shareRootDirectory
     }
 
     func execute(rom: DownloadedROM) -> (files: [URL], tempDirectory: URL?) {
@@ -49,9 +59,12 @@ final class GetROMShareFilesUseCase: PGetROMShareFilesUseCase {
 
     private func makeShareDirectory(fileManager: FileManager) -> URL {
         purgeStaleShareDirectories(fileManager: fileManager)
-        let shareDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+        var shareDirectory = shareRootDirectory
             .appendingPathComponent("\(Self.shareDirectoryPrefix)\(UUID().uuidString)")
         try? fileManager.createDirectory(at: shareDirectory, withIntermediateDirectories: true)
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try? shareDirectory.setResourceValues(resourceValues)
         return shareDirectory
     }
 
@@ -76,11 +89,9 @@ final class GetROMShareFilesUseCase: PGetROMShareFilesUseCase {
     /// importing. So the cleanup is deferred to the next share instead, and only
     /// touches directories old enough that no import can still be running.
     private func purgeStaleShareDirectories(fileManager: FileManager) {
-        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
         guard let entries = try? fileManager.contentsOfDirectory(
-            at: temporaryDirectory,
-            includingPropertiesForKeys: [.creationDateKey],
-            options: [.skipsHiddenFiles]
+            at: shareRootDirectory,
+            includingPropertiesForKeys: [.creationDateKey]
         ) else { return }
 
         let cutoff = Date().addingTimeInterval(-Self.shareDirectoryLifetime)

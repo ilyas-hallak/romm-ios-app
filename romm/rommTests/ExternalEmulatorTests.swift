@@ -6,30 +6,89 @@ struct RetroArchExternalEmulatorTests {
 
     private let retroarch = RetroArchExternalEmulator()
 
-    @Test func launchURLUsesTheFileName() {
-        let url = retroarch.launchURL(gameIdentifier: "Sonic.md")
-        #expect(url?.absoluteString == "retroarch://game/Sonic.md")
+    /// Started by path alone, RetroArch takes the first core that claims the
+    /// extension, and a DS core claims `gba`. The `topshelf` link names the
+    /// core instead (#229).
+    @Test func launchURLNamesTheCoreForAKnownSystem() throws {
+        let url = try #require(retroarch.launchURL(gameIdentifier: "Game.gba", platformSlug: "gba"))
+        #expect(url.absoluteString == "retroarch://topshelf"
+                + "?path=~/Documents/RetroArch/downloads/Game.gba"
+                + "&core_path=:/Frameworks/mgba.libretro.framework/mgba.libretro")
     }
 
-    /// File names routinely contain spaces, brackets and hashes, all of which
-    /// break a URL that is glued together as a string.
-    @Test func launchURLEscapesSpecialCharacters() {
-        let url = retroarch.launchURL(gameIdentifier: "Super Mario 64 (USA) #1.z64")
-        #expect(url?.absoluteString == "retroarch://game/Super%20Mario%2064%20(USA)%20%231.z64")
+    /// Every system the built-in engines know gets the core RetroArch ships for it.
+    @Test(arguments: [
+        ("gba", "mgba"),
+        ("snes", "snes9x"),
+        ("nes", "fceumm"),
+        ("gbc", "gambatte"),
+        ("n64", "mupen64plus_next"),
+        ("nds", "melondsds"),
+        ("genesis", "genesis_plus_gx")
+    ])
+    func coreNameForEachBuiltInSystem(platformSlug: String, core: String) {
+        #expect(RetroArchExternalEmulator.coreName(forPlatformSlug: platformSlug) == core)
+    }
+
+    /// RetroArch turns `_` into `.` when it packs a core into a framework.
+    @Test func coreFrameworkNameFollowsRetroArchsPackaging() throws {
+        let url = try #require(retroarch.launchURL(gameIdentifier: "Game.z64", platformSlug: "n64"))
+        #expect(queryValue("core_path", in: url)
+                == ":/Frameworks/mupen64plus.next.libretro.framework/mupen64plus.next.libretro")
+    }
+
+    /// File names routinely contain spaces, brackets, `&` and `+`, which must
+    /// come back out of the query unchanged.
+    @Test func launchURLKeepsSpecialCharactersInTheFileName() throws {
+        let name = "Mario & Luigi + (USA) #1.gba"
+        let url = try #require(retroarch.launchURL(gameIdentifier: name, platformSlug: "gba"))
+        #expect(queryValue("path", in: url) == "~/Documents/RetroArch/downloads/\(name)")
+    }
+
+    /// Disc systems have no built-in engine, and a dozen cores claim `chd` or
+    /// `cue`, the Amiga one first.
+    @Test(arguments: [
+        ("ps", "pcsx.rearmed.libretro"),
+        ("psx", "pcsx.rearmed.libretro"),
+        ("segacd", "genesis.plus.gx.libretro"),
+        ("saturn", "yabause.libretro"),
+        ("pc-engine-cd", "mednafen.pce.fast.libretro")
+    ])
+    func launchURLNamesTheCoreForADiscSystem(platformSlug: String, framework: String) throws {
+        let url = try #require(retroarch.launchURL(gameIdentifier: "Game.chd", platformSlug: platformSlug))
+        #expect(queryValue("core_path", in: url) == ":/Frameworks/\(framework).framework/\(framework)")
+    }
+
+    /// Without a known core RetroArch has to pick one itself, from the file it
+    /// finds at the path.
+    @Test func launchURLFallsBackToThePathForOtherSystems() {
+        let url = retroarch.launchURL(gameIdentifier: "sf2 (World).zip", platformSlug: "arcade")
+        #expect(url?.absoluteString == "retroarch://game/~/Documents/RetroArch/downloads/sf2%20(World).zip")
+    }
+
+    /// `#` would start a fragment and cut the path short.
+    @Test func launchURLFallbackEscapesAHash() {
+        let url = retroarch.launchURL(gameIdentifier: "sf2 #1.zip", platformSlug: "arcade")
+        #expect(url?.absoluteString == "retroarch://game/~/Documents/RetroArch/downloads/sf2%20%231.zip")
     }
 
     @Test func launchURLIsNilWithoutAnIdentifier() {
-        #expect(retroarch.launchURL(gameIdentifier: "") == nil)
+        #expect(retroarch.launchURL(gameIdentifier: "", platformSlug: "gba") == nil)
+    }
+
+    private func queryValue(_ name: String, in url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == name }?.value
     }
 
     @Test func probeURLIsTheBareScheme() {
         #expect(retroarch.probeURL?.absoluteString == "retroarch://")
     }
 
-    /// RetroArch opens archives itself, so the handoff can pass a ROM along
-    /// exactly as it is stored.
-    @Test func takesROMsAsTheyAreStored() {
-        #expect(retroarch.wantsUnpackedROM == false)
+    /// The unpacked ROM's extension is what makes RetroArch pick a matching
+    /// core when it starts the file by path.
+    @Test func wantsTheUnpackedROM() {
+        #expect(retroarch.wantsUnpackedROM)
         #expect(retroarch.identifierKind == .fileName)
     }
 
