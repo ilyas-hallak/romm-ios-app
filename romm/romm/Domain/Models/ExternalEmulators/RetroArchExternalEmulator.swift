@@ -2,14 +2,16 @@ import Foundation
 
 /// RetroArch is identified by the plain file name, so nothing has to be hashed.
 ///
-/// It opens archives itself, so a ROM can be passed exactly as it is stored.
+/// It gets the unpacked ROM wherever the built-in engines know the platform:
+/// started by path, RetroArch takes the first core that claims the extension,
+/// and for `zip` that is an Amiga or Amstrad core.
 struct RetroArchExternalEmulator: PExternalEmulator {
     var id: ExternalEmulatorID { .retroarch }
     var displayName: String { "RetroArch" }
     var urlScheme: String { "retroarch" }
     var appStoreURL: URL? { URL(string: "https://apps.apple.com/app/id6499539433") }
     var identifierKind: ExternalGameIdentifierKind { .fileName }
-    var wantsUnpackedROM: Bool { false }
+    var wantsUnpackedROM: Bool { true }
 
     /// Saves sit under `RetroArch/saves/<core>/`, so the hint stops above the
     /// per-core level. It matters more here than elsewhere, because a RetroArch

@@ -66,15 +66,6 @@ final class ResolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifier
     ) async throws -> ExternalGameHandoff {
         let kind = emulator.identifierKind
 
-        // RetroArch finds the game by its file name, so nothing has to be read
-        // off disk at all.
-        if kind == .fileName && !emulator.wantsUnpackedROM {
-            guard let fileName = Self.primaryFileName(of: rom) else {
-                throw ExternalGameIdentifierError.noROMFile
-            }
-            return ExternalGameHandoff(gameIdentifier: fileName, unpackedROMURL: nil)
-        }
-
         let unsupported = ExternalGameIdentifierError.unsupportedPlatform(
             platformName: rom.platformName,
             emulatorName: emulator.displayName
@@ -85,6 +76,11 @@ final class ResolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifier
             lookup = .gameType(gameType)
         } else if let romExtensions = emulator.romExtensions {
             lookup = .extensions(romExtensions)
+        } else if kind == .fileName {
+            // Nothing is known about this platform's files, but a target that
+            // finds games by name takes them as stored. Arcade cores even need
+            // the zip itself.
+            return try Self.handoffAsStored(rom)
         } else {
             throw unsupported
         }
@@ -128,6 +124,13 @@ final class ResolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifier
     }
 
     // MARK: - Private
+
+    private static func handoffAsStored(_ rom: DownloadedROM) throws -> ExternalGameHandoff {
+        guard let fileName = primaryFileName(of: rom) else {
+            throw ExternalGameIdentifierError.noROMFile
+        }
+        return ExternalGameHandoff(gameIdentifier: fileName, unpackedROMURL: nil)
+    }
 
     /// The file an external emulator should be pointed at.
     ///

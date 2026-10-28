@@ -32,10 +32,10 @@ struct RetroArchExternalEmulatorTests {
         #expect(retroarch.probeURL?.absoluteString == "retroarch://")
     }
 
-    /// RetroArch opens archives itself, so the handoff can pass a ROM along
-    /// exactly as it is stored.
-    @Test func takesROMsAsTheyAreStored() {
-        #expect(retroarch.wantsUnpackedROM == false)
+    /// The unpacked ROM's extension is what makes RetroArch pick a matching
+    /// core when it starts the file by path.
+    @Test func wantsTheUnpackedROM() {
+        #expect(retroarch.wantsUnpackedROM)
         #expect(retroarch.identifierKind == .fileName)
     }
 

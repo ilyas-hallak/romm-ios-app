@@ -46,19 +46,39 @@ struct ResolveExternalGameIdentifierUseCaseTests {
 
     // MARK: - File name targets
 
-    @Test func retroArchGetsThePlainFileNameWithoutTouchingDisk() async throws {
+    /// RetroArch starts a file by path with the first core that claims its
+    /// extension, and a dozen cores claim `zip`. The unpacked ROM's own
+    /// extension leads it to the right one (#229).
+    @Test func retroArchGetsTheUnpackedROMForAPlatformTheBuiltInEnginesKnow() async throws {
         let resolver = FakeROMFileResolver()
+        resolver.resolvedURL = URL(fileURLWithPath: "/tmp/unzipped/Game.gba")
         let useCase = ResolveExternalGameIdentifierUseCase(resolver: resolver)
 
         let handoff = try await useCase.execute(
-            rom: makeROM(),
+            rom: makeROM(fileNames: ["Game.zip"]),
             baseURL: baseURL,
             emulator: RetroArchExternalEmulator()
         )
 
         #expect(handoff.gameIdentifier == "Game.gba")
+        #expect(handoff.unpackedROMURL == resolver.resolvedURL)
+        #expect(resolver.requestedGameType == .gba)
+    }
+
+    /// Arcade cores need the zip itself, and nothing is known about other
+    /// platforms' files, so those go over exactly as stored.
+    @Test func retroArchGetsOtherPlatformsAsStoredWithoutTouchingDisk() async throws {
+        let resolver = FakeROMFileResolver()
+        let useCase = ResolveExternalGameIdentifierUseCase(resolver: resolver)
+
+        let handoff = try await useCase.execute(
+            rom: makeROM(platformSlug: "arcade", fileNames: ["sf2.zip"]),
+            baseURL: baseURL,
+            emulator: RetroArchExternalEmulator()
+        )
+
+        #expect(handoff.gameIdentifier == "sf2.zip")
         #expect(handoff.unpackedROMURL == nil)
-        // Nothing was resolved, so nothing was read or unpacked.
         #expect(resolver.requestedGameType == nil)
     }
 
@@ -68,25 +88,25 @@ struct ResolveExternalGameIdentifierUseCaseTests {
         let useCase = ResolveExternalGameIdentifierUseCase(resolver: FakeROMFileResolver())
 
         let withPlaylist = try await useCase.execute(
-            rom: makeROM(fileNames: ["Game (Disc 1).bin", "Game.cue", "Game.m3u"]),
+            rom: makeROM(platformSlug: "ps", fileNames: ["Game (Disc 1).bin", "Game.cue", "Game.m3u"]),
             baseURL: baseURL,
             emulator: RetroArchExternalEmulator()
         )
         #expect(withPlaylist.gameIdentifier == "Game.m3u")
 
         let withSheet = try await useCase.execute(
-            rom: makeROM(fileNames: ["Game (Disc 1).bin", "Game.cue"]),
+            rom: makeROM(platformSlug: "ps", fileNames: ["Game (Disc 1).bin", "Game.cue"]),
             baseURL: baseURL,
             emulator: RetroArchExternalEmulator()
         )
         #expect(withSheet.gameIdentifier == "Game.cue")
 
         let plain = try await useCase.execute(
-            rom: makeROM(fileNames: ["Game.gba"]),
+            rom: makeROM(platformSlug: "ps", fileNames: ["Game.chd"]),
             baseURL: baseURL,
             emulator: RetroArchExternalEmulator()
         )
-        #expect(plain.gameIdentifier == "Game.gba")
+        #expect(plain.gameIdentifier == "Game.chd")
     }
 
     @Test func reportsAROMWithoutAnyFiles() async {
@@ -94,7 +114,7 @@ struct ResolveExternalGameIdentifierUseCaseTests {
 
         await #expect(throws: ExternalGameIdentifierError.self) {
             try await useCase.execute(
-                rom: makeROM(fileNames: []),
+                rom: makeROM(platformSlug: "ps", fileNames: []),
                 baseURL: baseURL,
                 emulator: RetroArchExternalEmulator()
             )
