@@ -5,8 +5,11 @@ import DeltaCore
 import MelonDSDeltaCore
 import GBADeltaCore
 
-/// These tests use the frameworks' bundled archives so missing Git LFS assets
-/// fail here even when the core source itself compiles successfully.
+/// These integration tests need the frameworks' actual bundled skin archives.
+@Suite(.enabled(if: BundledControllerSkinTestSupport.shouldRunRealAssetTests(for: [
+    MelonDS.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin"),
+    GBA.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin")
+]), "Fetch the submodules' Git LFS skin assets to run the real Duo skin checks."))
 @MainActor
 struct DuoControllerSkinTests {
     @Test(arguments: ["inner", "outer"], ["portrait", "landscape"])

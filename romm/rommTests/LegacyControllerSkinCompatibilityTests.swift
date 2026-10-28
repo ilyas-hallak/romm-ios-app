@@ -12,6 +12,15 @@ import MelonDSDeltaCore
 
 /// Exercises the actual bundled skins on conventional iPhone and iPad traits.
 /// Core registration and UIKit fixtures stay on the main actor, matching the app.
+@Suite(.enabled(if: BundledControllerSkinTestSupport.shouldRunRealAssetTests(for: [
+    GBA.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin"),
+    GBC.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin"),
+    NES.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin"),
+    SNES.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin"),
+    N64.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin"),
+    GPGX.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin"),
+    MelonDS.core.resourceBundle.url(forResource: "Standard", withExtension: "deltaskin")
+]), "Fetch the submodules' Git LFS skin assets to run the real compatibility checks."))
 @MainActor
 struct LegacyControllerSkinCompatibilityTests {
     nonisolated private static let configurations = [

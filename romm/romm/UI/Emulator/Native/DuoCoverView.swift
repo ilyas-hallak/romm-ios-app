@@ -1,178 +1,148 @@
 #if !APP_STORE
-// Adapted from Delta's CoverView.swift, created by Riley Testut on 10/10/26.
-// Copyright © 2026 Riley Testut. All rights reserved.
-// RomM integration keeps emulation and pause ownership in NativeEmulatorSession.
-
 import UIKit
 import DeltaCore
 
-/// Presents the controller skin's closed-console artwork without forwarding
-/// touches to the game. The session removes this view after `onDismiss` fires.
+/// An accessible dismissal surface for a skin's cover artwork.
 @available(iOS 27.1, *)
 final class DuoCoverView: UIView {
     let controllerSkin: any ControllerSkinProtocol
     var onDismiss: (() -> Void)?
-
     private(set) var isCoverHidden = true
 
-    private let coverContentView = UIView()
-    private let imageView = UIImageView()
-    private let openButton = UIButton(type: .system)
-    private var animator: UIViewPropertyAnimator?
-    private var previousBatteryMonitoringState: Bool?
+    private let contentView = UIView()
+    private let artwork = UIImageView()
+    private let dismissButton = UIButton(type: .system)
+    private var visibilityRevision = 0
+    private var previousBatteryMonitoring: Bool?
 
     init(controllerSkin: any ControllerSkinProtocol) {
         self.controllerSkin = controllerSkin
         super.init(frame: .zero)
-
-        backgroundColor = .black
-        isOpaque = true
+        backgroundColor = .clear
         clipsToBounds = true
         accessibilityViewIsModal = true
+        isHidden = true
+        contentView.backgroundColor = .black
+        contentView.alpha = 0
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(contentView)
 
-        imageView.contentMode = .scaleAspectFit
-        imageView.isAccessibilityElement = false
-        coverContentView.addSubview(imageView)
-        addSubview(coverContentView)
+        artwork.contentMode = .scaleAspectFit
+        artwork.isAccessibilityElement = false
+        artwork.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(artwork)
 
-        var configuration = UIButton.Configuration.filled()
-        configuration.title = String(localized: "Open console")
-        configuration.image = UIImage(systemName: "chevron.up")
-        configuration.imagePlacement = .top
-        configuration.imagePadding = 6
-        configuration.baseForegroundColor = .white
-        configuration.baseBackgroundColor = UIColor.black.withAlphaComponent(0.65)
-        configuration.cornerStyle = .capsule
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20)
-        openButton.configuration = configuration
-        openButton.accessibilityHint = String(localized: "Dismisses the closed-console cover.")
-        openButton.addTarget(self, action: #selector(openCover), for: .touchUpInside)
-        coverContentView.addSubview(openButton)
+        var style = UIButton.Configuration.filled()
+        style.title = String(localized: "Open console")
+        style.image = UIImage(systemName: "chevron.up")
+        style.imagePlacement = .top
+        style.imagePadding = 6
+        style.cornerStyle = .capsule
+        style.baseForegroundColor = .white
+        style.baseBackgroundColor = .black.withAlphaComponent(0.65)
+        style.contentInsets = .init(top: 10, leading: 20, bottom: 10, trailing: 20)
+        dismissButton.configuration = style
+        dismissButton.accessibilityHint = String(localized: "Dismisses the closed-console cover.")
+        dismissButton.addTarget(self, action: #selector(dismissCover), for: .touchUpInside)
+        dismissButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(dismissButton)
 
-        let tap = UITapGestureRecognizer(target: self, action: #selector(openCover))
-        // Keep the explicit button's highlight and accessibility behavior.
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            artwork.leadingAnchor.constraint(equalTo: leadingAnchor),
+            artwork.trailingAnchor.constraint(equalTo: trailingAnchor),
+            artwork.topAnchor.constraint(equalTo: topAnchor),
+            artwork.bottomAnchor.constraint(equalTo: bottomAnchor),
+            dismissButton.centerXAnchor.constraint(equalTo: safeAreaLayoutGuide.centerXAnchor),
+            dismissButton.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            dismissButton.leadingAnchor.constraint(greaterThanOrEqualTo: safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            dismissButton.trailingAnchor.constraint(lessThanOrEqualTo: safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            dismissButton.topAnchor.constraint(greaterThanOrEqualTo: safeAreaLayoutGuide.topAnchor),
+            dismissButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+        ])
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(dismissCover))
         tap.cancelsTouchesInView = false
-        coverContentView.addGestureRecognizer(tap)
-
-        let swipe = UISwipeGestureRecognizer(target: self, action: #selector(openCover))
+        addGestureRecognizer(tap)
+        let swipe = UISwipeGestureRecognizer(target: self, action: #selector(dismissCover))
         swipe.direction = .up
-        coverContentView.addGestureRecognizer(swipe)
-
+        addGestureRecognizer(swipe)
         NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(batteryStateDidChange(_:)),
-            name: UIDevice.batteryStateDidChangeNotification,
-            object: nil
+            self, selector: #selector(refreshArtwork),
+            name: UIDevice.batteryStateDidChangeNotification, object: nil
         )
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    required init?(coder: NSCoder) { fatalError("Use init(controllerSkin:)") }
 
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-
-        coverContentView.frame = bounds.offsetBy(dx: 0, dy: isCoverHidden ? -bounds.height : 0)
-        imageView.frame = coverContentView.bounds
-
-        let availableWidth = max(0, bounds.width - safeAreaInsets.left - safeAreaInsets.right - 32)
-        let size = openButton.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
-        let buttonWidth = min(availableWidth, size.width)
-        let buttonHeight = max(44, size.height)
-        openButton.frame = CGRect(
-            x: safeAreaInsets.left + (availableWidth + 32 - buttonWidth) / 2,
-            y: max(safeAreaInsets.top, bounds.height - safeAreaInsets.bottom - buttonHeight - 16),
-            width: buttonWidth,
-            height: buttonHeight
-        )
-    }
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-
-        if window != nil {
-            if previousBatteryMonitoringState == nil {
-                previousBatteryMonitoringState = UIDevice.current.isBatteryMonitoringEnabled
+        if window == nil {
+            if let previousBatteryMonitoring {
+                UIDevice.current.isBatteryMonitoringEnabled = previousBatteryMonitoring
+                self.previousBatteryMonitoring = nil
+            }
+        } else {
+            if previousBatteryMonitoring == nil {
+                previousBatteryMonitoring = UIDevice.current.isBatteryMonitoringEnabled
                 UIDevice.current.isBatteryMonitoringEnabled = true
             }
-            updateImage()
-        } else if let previousBatteryMonitoringState {
-            UIDevice.current.isBatteryMonitoringEnabled = previousBatteryMonitoringState
-            self.previousBatteryMonitoringState = nil
+            refreshArtwork()
         }
     }
 
     func showCover(animated: Bool = true) {
         guard isCoverHidden else { return }
-        updateCover(isHidden: false, animated: animated)
+        visibilityRevision += 1
+        let revision = visibilityRevision
+        isCoverHidden = false
+        isHidden = false
+        refreshArtwork()
+        setVisibility(alpha: 1, animated: animated) { [weak self] in
+            guard let self, self.visibilityRevision == revision, !self.isCoverHidden else { return }
+            UIAccessibility.post(notification: .screenChanged, argument: self.dismissButton)
+        }
     }
 
-    private func hideCover(animated: Bool = true) {
+    @objc private func dismissCover() {
         guard !isCoverHidden else { return }
-        updateCover(isHidden: true, animated: animated)
+        visibilityRevision += 1
+        let revision = visibilityRevision
+        isCoverHidden = true
+        setVisibility(alpha: 0, animated: true) { [weak self] in
+            guard let self, self.visibilityRevision == revision, self.isCoverHidden else { return }
+            self.isHidden = true
+            self.onDismiss?()
+        }
     }
 
-    private func updateCover(isHidden: Bool, animated: Bool) {
-        animator?.stopAnimation(true)
-        animator = nil
-        layoutIfNeeded()
-        isCoverHidden = isHidden
-        setNeedsLayout()
-
+    private func setVisibility(alpha: CGFloat, animated: Bool, completion: @escaping () -> Void) {
         guard animated, !UIAccessibility.isReduceMotionEnabled else {
-            layoutIfNeeded()
-            if isHidden { onDismiss?() }
-            else { UIAccessibility.post(notification: .screenChanged, argument: openButton) }
+            contentView.alpha = alpha
+            completion()
             return
         }
-
-        let animator = UIViewPropertyAnimator(duration: 0.35, dampingRatio: 0.9) { [weak self] in
-            self?.layoutIfNeeded()
-        }
-        animator.addCompletion { [weak self] _ in
-            guard let self else { return }
-            self.animator = nil
-            if isHidden, self.isCoverHidden {
-                self.onDismiss?()
-            } else if !self.isCoverHidden {
-                UIAccessibility.post(notification: .screenChanged, argument: self.openButton)
-            }
-        }
-        self.animator = animator
-        animator.startAnimation()
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+            self.contentView.alpha = alpha
+        } completion: { _ in completion() }
     }
 
-    private func updateImage() {
+    @objc private func refreshArtwork() {
         guard let window else { return }
-
-        // Delta's cover artwork is a landscape representation on both displays.
         var traits = ControllerSkin.Traits.defaults(for: window)
         traits.displayType = .cover
         traits.orientation = .landscape
-
-        switch UIDevice.current.batteryState {
-        case .charging, .full:
-            imageView.image = controllerSkin.pressedImage(for: traits, preferredSize: .large)
-                ?? controllerSkin.image(for: traits, preferredSize: .large)
-        case .unknown, .unplugged:
-            imageView.image = controllerSkin.image(for: traits, preferredSize: .large)
-        @unknown default:
-            imageView.image = controllerSkin.image(for: traits, preferredSize: .large)
-        }
-    }
-
-    @objc private func openCover() {
-        hideCover()
-    }
-
-    @objc private func batteryStateDidChange(_ notification: Notification) {
-        updateImage()
+        let charging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        let normal = controllerSkin.image(for: traits, preferredSize: .large)
+        artwork.image = charging
+            ? controllerSkin.pressedImage(for: traits, preferredSize: .large) ?? normal
+            : normal
     }
 }
 #endif

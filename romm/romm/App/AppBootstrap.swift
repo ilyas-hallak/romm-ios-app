@@ -14,6 +14,8 @@ enum AppBootstrap {
     static func run() {
         unbufferStandardOutput()
         #if !APP_STORE
+        // Resolve the install default before onboarding writes its preferences.
+        _ = UserDefaultsEmulatorEnginePreferenceStore()
         registerNativeCores()
         // DeltaCore's own MFi/keyboard controller tracking, which
         // NativeEmulatorSession reads from. The libretro engine tracks

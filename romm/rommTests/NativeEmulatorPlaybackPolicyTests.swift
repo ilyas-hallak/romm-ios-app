@@ -1,3 +1,4 @@
+#if !APP_STORE
 import Testing
 @testable import romm
 
@@ -40,3 +41,4 @@ struct NativeEmulatorPlaybackPolicyTests {
         #expect(policy.shouldRun)
     }
 }
+#endif

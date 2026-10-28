@@ -228,20 +228,10 @@ private struct LibretroMenuSheet: View {
             )
         }
         .onAppear {
-            alwaysShowTouchControls = EmulatorControllerState.alwaysShowTouchControls
             session?.onMenuCommand = { handle($0) }
         }
         .onDisappear {
             session?.onMenuCommand = nil
-        }
-        .onChange(of: alwaysShowTouchControls) { _, newValue in
-            EmulatorControllerState.alwaysShowTouchControls = newValue
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .emulatorTouchControlsVisibilityChanged)) { _ in
-            let current = EmulatorControllerState.alwaysShowTouchControls
-            if alwaysShowTouchControls != current {
-                alwaysShowTouchControls = current
-            }
         }
     }
 
@@ -352,7 +342,7 @@ private struct LibretroMenuSheet: View {
                 analogSticksControl
             }
             ExternalDisplayControls(onRequestDismiss: onResume)
-            touchControls
+            EmulatorTouchControlsToggle(alwaysShowTouchControls: $alwaysShowTouchControls)
             hapticsControls
             if EmulatorControllerState.isConnected {
                 EmulatorControllerControls(
@@ -363,7 +353,10 @@ private struct LibretroMenuSheet: View {
                 }
             }
             if let preference = session?.screenPositionPreference,
-               EmulatorControllerState.isConnected && !alwaysShowTouchControls {
+               EmulatorControllerState.shouldHideTouchControls(
+                   isConnected: EmulatorControllerState.isConnected,
+                   alwaysShowTouchControls: alwaysShowTouchControls
+               ) {
                 EmulatorScreenControls(preference: preference) {
                     session?.reloadAspectRatio()
                 }
@@ -371,20 +364,6 @@ private struct LibretroMenuSheet: View {
             #if DEBUG
             EmulatorControllerDebugToggle()
             #endif
-        }
-    }
-
-    private var touchControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle(isOn: $alwaysShowTouchControls) {
-                Label("Always show touch controls", systemImage: "hand.tap")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-            .accessibilityIdentifier("emulator.alwaysShowTouchControls")
-            Text("Touch controls hide automatically when a controller is connected. Turn this on to keep them visible.")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
         }
     }
 

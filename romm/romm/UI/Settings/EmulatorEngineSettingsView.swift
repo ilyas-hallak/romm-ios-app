@@ -111,8 +111,7 @@ struct EmulatorEngineSettingsView: View {
                 header: Text("Controller"),
                 footer: Text("Optional button combination that opens the in-game menu from a physical controller. The on-screen menu button stays available either way.")
             ) {
-                Toggle("Always show touch controls", isOn: $alwaysShowTouchControls)
-                    .accessibilityIdentifier("emulator.alwaysShowTouchControls")
+                EmulatorTouchControlsToggle(alwaysShowTouchControls: $alwaysShowTouchControls, style: .settings)
                 Picker("Menu shortcut", selection: $menuShortcut) {
                     Text("Off").tag(EmulatorMenuShortcut.none)
                     Text("L3 + R3").tag(EmulatorMenuShortcut.l3r3)
@@ -150,7 +149,6 @@ struct EmulatorEngineSettingsView: View {
             // The in-game menu writes these preferences as well, so re-read them.
             menuShortcut = menuShortcutPreference.current
             swapFaceButtons = faceButtonPreference.isSwapped
-            alwaysShowTouchControls = EmulatorControllerState.alwaysShowTouchControls
             #if DEBUG
             refreshRumbleDiagnostics()
             #endif
@@ -164,15 +162,6 @@ struct EmulatorEngineSettingsView: View {
         .onChange(of: swapFaceButtons) { _, new in faceButtonPreference.isSwapped = new }
         .onChange(of: rumbleEnabled) { _, new in rumblePreference.isEnabled = new }
         .onChange(of: bezelEnabled) { _, new in bezelPreference.isEnabled = new }
-        .onChange(of: alwaysShowTouchControls) { _, new in
-            EmulatorControllerState.alwaysShowTouchControls = new
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .emulatorTouchControlsVisibilityChanged)) { _ in
-            let current = EmulatorControllerState.alwaysShowTouchControls
-            if alwaysShowTouchControls != current {
-                alwaysShowTouchControls = current
-            }
-        }
         #endif
         .onChange(of: playChoice) { _, new in apply(new) }
         .sheet(isPresented: $isAddingEmulator) {

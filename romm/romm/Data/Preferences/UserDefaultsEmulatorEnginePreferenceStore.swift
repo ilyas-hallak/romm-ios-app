@@ -6,14 +6,30 @@ final class UserDefaultsEmulatorEnginePreferenceStore: PEmulatorEnginePreference
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        #if !APP_STORE
+        persistInitialDefaultIfNeeded()
+        #endif
     }
+
+    #if !APP_STORE
+    private func persistInitialDefaultIfNeeded() {
+        guard userDefaults.object(forKey: key) == nil else { return }
+        // These keys predate the Native default. Bootstrap checks them before
+        // onboarding or the changelog can create a fresh install's footprint.
+        let existingInstallKeys = [
+            "setup_configuration_json", "setup_auth_method",
+            "lastSeenChangelogBuild", "auth.clientDeviceIdentifier"
+        ]
+        let isExistingInstall = existingInstallKeys.contains { userDefaults.object(forKey: $0) != nil }
+        let engine: EmulatorEngine = isExistingInstall ? .web : .native
+        userDefaults.set(engine.rawValue, forKey: key)
+    }
+    #endif
 
     var current: EmulatorEngine {
         get {
-            // Prefer on-device emulation for new and invalid preferences.
-            // Native uses DeltaCore first, then libretro for other platforms.
-            // The App Store target excludes DeltaCore and uses auto instead.
-            // Stored web choices are coerced when that engine is unavailable.
+            // Invalid values retain the on-device fallback. Stored Web choices
+            // are coerced when that engine is unavailable in this build.
             #if !APP_STORE
             let fallback: EmulatorEngine = .native
             #else

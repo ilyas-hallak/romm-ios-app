@@ -11,16 +11,30 @@ enum EmulatorControllerState {
 
     /// Lets touch input remain available alongside a detected gamepad.
     static var alwaysShowTouchControls: Bool {
-        get { UserDefaults.standard.bool(forKey: alwaysShowTouchControlsKey) }
-        set {
-            guard newValue != alwaysShowTouchControls else { return }
-            UserDefaults.standard.set(newValue, forKey: alwaysShowTouchControlsKey)
-            NotificationCenter.default.post(name: .emulatorTouchControlsVisibilityChanged, object: nil)
-        }
+        get { alwaysShowTouchControls(in: .standard) }
+        set { setAlwaysShowTouchControls(newValue) }
     }
 
     static var shouldHideTouchControls: Bool {
+        shouldHideTouchControls(isConnected: isConnected, alwaysShowTouchControls: alwaysShowTouchControls)
+    }
+
+    static func shouldHideTouchControls(isConnected: Bool, alwaysShowTouchControls: Bool) -> Bool {
         isConnected && !alwaysShowTouchControls
+    }
+
+    static func alwaysShowTouchControls(in userDefaults: UserDefaults) -> Bool {
+        userDefaults.bool(forKey: alwaysShowTouchControlsKey)
+    }
+
+    static func setAlwaysShowTouchControls(
+        _ value: Bool,
+        userDefaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default
+    ) {
+        guard value != alwaysShowTouchControls(in: userDefaults) else { return }
+        userDefaults.set(value, forKey: alwaysShowTouchControlsKey)
+        notificationCenter.post(name: .emulatorTouchControlsVisibilityChanged, object: nil)
     }
 
     static var isConnected: Bool {

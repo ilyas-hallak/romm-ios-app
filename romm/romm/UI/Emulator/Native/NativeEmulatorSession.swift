@@ -22,11 +22,14 @@ enum NativeEmulatorPlaybackRate {
 /// controller renders as a centered portrait-aspect block.
 final class RommGameViewController: GameViewController {
     private var previousControllerSkinTraits: ControllerSkin.Traits?
-    private var previousHingeStatus: Int?
-    private var duoCoverView: UIView?
+    private lazy var duoCover = DuoCoverCoordinator(controller: self)
 
-    var onDuoLidChanged: ((Bool) -> Void)?
-    var onDuoCoverVisibilityChanged: ((Bool) -> Void)?
+    var onDuoLidChanged: ((Bool) -> Void)? {
+        didSet { duoCover.onLidChanged = onDuoLidChanged }
+    }
+    var onDuoCoverVisibilityChanged: ((Bool) -> Void)? {
+        didSet { duoCover.onVisibilityChanged = onDuoCoverVisibilityChanged }
+    }
 
     /// Screen placement preference (drag-to-move + height). Set before `loadViewIfNeeded()`.
     var screenPositionPreference: PEmulatorScreenPositionPreference?
@@ -109,20 +112,12 @@ final class RommGameViewController: GameViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.addGestureRecognizer(screenPanRecognizer)
-        if #available(iOS 27.1, *) {
-            view.addInteraction(UIHingeInteraction { [weak self] _, update in
-                self?.hingeDidUpdate(update)
-            })
-        }
+        duoCover.install()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        if #available(iOS 27.1, *), previousHingeStatus == nil {
-            // Starting a game on the outer display should leave its controls usable.
-            previousHingeStatus = traitCollection.horizontalSizeClass == .compact
-                ? UIHinge.Status.closed.rawValue : UIHinge.Status.partiallyOpen.rawValue
-        }
+        duoCover.appeared()
     }
 
     override func viewWillTransition(
@@ -149,7 +144,7 @@ final class RommGameViewController: GameViewController {
         // DeltaCore has just positioned `gameViews`; nudge them to the user's
         // custom placement before the frame is committed.
         applyCustomScreenPlacement()
-        layoutDuoCover()
+        duoCover.layout()
     }
 
     /// Whether the custom placement applies right now: only while a physical
@@ -251,84 +246,11 @@ final class RommGameViewController: GameViewController {
     }
 
     override var shouldAutorotate: Bool {
-        duoCoverView == nil && super.shouldAutorotate
+        !duoCover.isVisible && super.shouldAutorotate
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        guard duoCoverView != nil, let orientation = view.window?.windowScene?.interfaceOrientation else {
-            return super.supportedInterfaceOrientations
-        }
-        switch orientation {
-        case .portrait: return .portrait
-        case .portraitUpsideDown: return .portraitUpsideDown
-        case .landscapeLeft: return .landscapeLeft
-        case .landscapeRight: return .landscapeRight
-        case .unknown: return super.supportedInterfaceOrientations
-        @unknown default: return super.supportedInterfaceOrientations
-        }
-    }
-
-    @available(iOS 27.1, *)
-    private func hingeDidUpdate(_ update: UIHingeInteraction.Update) {
-        guard game != nil, let hinge = update.hinge, hinge.status != .unknown,
-              previousHingeStatus != hinge.status.rawValue else { return }
-        previousHingeStatus = hinge.status.rawValue
-        if hinge.status == .closed {
-            onDuoLidChanged?(true)
-            showDuoCover()
-        } else {
-            dismissDuoCover()
-        }
-    }
-
-    @available(iOS 27.1, *)
-    private func showDuoCover() {
-        guard duoCoverView == nil, let game else { return }
-        let traits = ControllerSkin.Traits(device: .iphone, displayType: .cover, orientation: .landscape)
-        let skin: (any ControllerSkinProtocol)?
-        if let current = controllerView?.controllerSkin, current.supports(traits) {
-            skin = current
-        } else if let standard = ControllerSkin.standardControllerSkin(for: game.type), standard.supports(traits) {
-            skin = standard
-        } else {
-            skin = nil
-        }
-        guard let skin else { return }
-        let cover = DuoCoverView(controllerSkin: skin)
-        cover.onDismiss = { [weak self] in self?.dismissDuoCover() }
-        duoCoverView = cover
-        view.addSubview(cover)
-        layoutDuoCover()
-        cover.showCover(animated: false)
-        setNeedsUpdateOfSupportedInterfaceOrientations()
-        parent?.setNeedsUpdateOfSupportedInterfaceOrientations()
-        onDuoCoverVisibilityChanged?(true)
-    }
-
-    private func dismissDuoCover() {
-        onDuoLidChanged?(false)
-        let wasShowing = duoCoverView != nil
-        duoCoverView?.removeFromSuperview()
-        duoCoverView = nil
-        if wasShowing {
-            setNeedsUpdateOfSupportedInterfaceOrientations()
-            parent?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            onDuoCoverVisibilityChanged?(false)
-        }
-    }
-
-    private func layoutDuoCover() {
-        guard let cover = duoCoverView, let scene = view.window?.windowScene else { return }
-        switch scene.interfaceOrientation {
-        case .landscapeLeft: cover.transform = .identity
-        case .landscapeRight: cover.transform = CGAffineTransform(rotationAngle: .pi)
-        case .portrait: cover.transform = CGAffineTransform(rotationAngle: 3 * .pi / 2)
-        case .portraitUpsideDown: cover.transform = CGAffineTransform(rotationAngle: .pi / 2)
-        case .unknown: cover.transform = .identity
-        @unknown default: cover.transform = .identity
-        }
-        cover.frame = view.bounds
-        view.bringSubviewToFront(cover)
+        duoCover.orientationLock ?? super.supportedInterfaceOrientations
     }
 }
 
@@ -349,6 +271,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private let menuInput: NativeMenuInput
 
     var onMenuRequested: (() -> Void)?
+    var onError: ((String) -> Void)?
     /// Controller steps for the open in-game menu, see `beginMenuNavigation()`.
     var onMenuCommand: ((EmulatorMenuCommand) -> Void)?
     /// While the menu is open the controllers drive it instead of the game.
@@ -364,6 +287,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private var audioObservers: [any NSObjectProtocol] = []
 
     let viewController: GameViewController
+    private let startEmulation: () -> Bool
 
     private enum Phase { case launching, running, stopped }
     /// The pull before launch can take a while. Until `start()` has set the
@@ -376,9 +300,13 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     private var pendingResumeSlot: Int?
     private var startupTask: Task<Void, Never>?
     private var stateRestoreTask: Task<Void, Never>?
-    private var coverPauseTask: Task<Void, Never>?
-    private var isDuoCovered = false
-    private var isDuoLidClosed = false
+    private lazy var duoEmulation = DuoEmulationCoordinator(
+        gameType: gameType,
+        isSessionRunning: { [weak self] in self?.phase == .running },
+        isCoreRunning: { [weak self] in self?.emulatorCore?.state == .running },
+        sendLidInput: { [weak self] in self?.sendDuoLidInput(closed: $0) },
+        setCoverPaused: { [weak self] in self?.setPaused($0, for: .cover) }
+    )
 
     /// Owned here so the display manager can hold it weakly: the target must not
     /// outlive the core it renders from.
@@ -419,7 +347,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         viewController.emulatorCore
     }
 
-    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, controllerSkinURL: URL? = nil, faceButtonPreference: PGamepadFaceButtonPreference? = nil, menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil, cloudSync: CloudSaveSyncService? = nil) {
+    init(gameURL: URL, gameType: GameType, romId: Int, saveStates: PEmulatorSaveStatesUseCase, screenPositionPreference: PEmulatorScreenPositionPreference, controllerSkinURL: URL? = nil, faceButtonPreference: PGamepadFaceButtonPreference? = nil, menuShortcutPreference: PEmulatorMenuShortcutPreference? = nil, cloudSync: CloudSaveSyncService? = nil, startEmulation: (() -> Bool)? = nil) {
         self.gameURL = gameURL
         self.gameType = gameType
         self.romId = romId
@@ -440,14 +368,15 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         // controller instead of assigned here, so it survives that call and gets
         // re-validated against the current traits on every layout and rotation.
         self.viewController = vc
+        self.startEmulation = startEmulation ?? { [weak vc] in vc?.startEmulation() ?? false }
         super.init()
         // Delta asks the delegate for rendering options while assigning game.
         vc.delegate = self
         vc.game = Game(fileURL: gameURL, type: gameType)
         vc.controllerView?.playerIndex = 0
         vc.customControllerSkin = Self.loadControllerSkin(at: controllerSkinURL, gameType: gameType)
-        vc.onDuoLidChanged = { [weak self] closed in self?.setDuoLidClosed(closed) }
-        vc.onDuoCoverVisibilityChanged = { [weak self] visible in self?.setDuoCovered(visible) }
+        vc.onDuoLidChanged = { [weak self] closed in self?.duoEmulation.setLidClosed(closed) }
+        vc.onDuoCoverVisibilityChanged = { [weak self] visible in self?.duoEmulation.setCovered(visible) }
         // Routed through the same entry point as DeltaCore's own `.menu` input
         // below, so the menu opens the same way whichever path got there.
         menuInput.onMenuRequested = { [weak self] in
@@ -502,8 +431,9 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     /// - Parameter resumeSlot: Save-state slot to auto-load once emulation is
     ///   live, or `nil` to start fresh. Sequenced after `startEmulation()` and
     ///   loaded while paused, mirroring the in-game menu's load path.
-    func start(resumeSlot: Int? = nil) {
-        guard startupTask == nil, phase == .launching else { return }
+    @discardableResult
+    func start(resumeSlot: Int? = nil) -> Task<Void, Never>? {
+        guard startupTask == nil, phase == .launching else { return nil }
         pendingResumeSlot = resumeSlot
         startupTask = Task { [weak self] in
             guard let self else { return }
@@ -514,6 +444,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
             self.startupIsReady = true
             self.synchronizePlayback()
         }
+        return startupTask
     }
 
     func pause() {
@@ -550,7 +481,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         }
         guard phase == .running, let core = emulatorCore else { return }
         if playbackPolicy.shouldRun {
-            applyDuoLidState()
+            duoEmulation.applyLidState()
             if core.state == .paused {
                 viewController.resumeEmulation()
             }
@@ -568,13 +499,21 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         EmulatorAudioSession.activate()
         // Permit only this explicit start until battery and controller setup is complete.
         resumeGate.isAllowed = true
-        let started = viewController.startEmulation()
+        let started = startEmulation()
         resumeGate.isAllowed = false
-        guard started else { return }
+        guard started else {
+            duoEmulation.stop()
+            EmulatorAudioSession.deactivate()
+            phase = .stopped
+            startupIsReady = false
+            pendingResumeSlot = nil
+            onError?(String(localized: "Unable to start this game."))
+            return
+        }
         emulatorCore?.rate = NativeEmulatorPlaybackRate.normal
         emulatorCore?.audioManager.respectsSilentMode = false
         phase = .running
-        applyDuoLidState()
+        duoEmulation.applyLidState()
         attachExternalControllers()
         SecondControllerManager.shared.setInput(self)
         observeControllerConnections()
@@ -599,39 +538,14 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         }
     }
 
-    private func setDuoLidClosed(_ closed: Bool) {
-        isDuoLidClosed = closed
-        applyDuoLidState()
-    }
-
-    private func applyDuoLidState() {
+    private func sendDuoLidInput(closed: Bool) {
         guard gameType == .ds, phase == .running, let core = emulatorCore, core.state != .stopped else { return }
         // Fold transitions can lose keyboard focus before the input arrives.
         let bridge = core.deltaCore.emulatorBridge
-        if isDuoLidClosed {
+        if closed {
             bridge.activateInput(MelonDSGameInput.lid.rawValue, value: 1, playerIndex: 0)
         } else {
             bridge.deactivateInput(MelonDSGameInput.lid.rawValue, playerIndex: 0)
-        }
-    }
-
-    private func setDuoCovered(_ covered: Bool) {
-        isDuoCovered = covered
-        coverPauseTask?.cancel()
-        coverPauseTask = nil
-        if covered, gameType == .ds, emulatorCore?.state == .running {
-            // Let the DS observe its lid input before suspending emulation.
-            coverPauseTask = Task { [weak self] in
-                do {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
-                } catch {
-                    return
-                }
-                guard let self, self.phase == .running, self.isDuoCovered else { return }
-                self.setPaused(true, for: .cover)
-            }
-        } else {
-            setPaused(covered, for: .cover)
         }
     }
 
@@ -641,21 +555,17 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     func stop() {
+        duoEmulation.stop()
         phase = .stopped
         resumeGate.isAllowed = false
         startupTask?.cancel()
         stateRestoreTask?.cancel()
-        coverPauseTask?.cancel()
         setFastForwarding(false)
         // Pause the render thread before flushing battery — DeltaCore expects
         // the emulator to be paused around save(), otherwise the save can race
         // with an in-flight frame and crash.
         viewController.pauseEmulation()
         flushBattery(pushesUnchanged: true)
-        if gameType == .ds {
-            emulatorCore?.deltaCore.emulatorBridge.deactivateInput(MelonDSGameInput.lid.rawValue, playerIndex: 0)
-        }
-        isDuoLidClosed = false
         SecondControllerManager.shared.setInput(nil)
         detachExternalControllers()
         // Before `core.stop()`: the core must not be torn down while a view of
@@ -976,7 +886,7 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
         try core.load(SaveState(fileURL: tmp, gameType: gameType))
-        applyDuoLidState()
+        duoEmulation.applyLidState()
     }
 
     func undoSave(slot: Int) throws {
@@ -984,14 +894,14 @@ final class NativeEmulatorSession: NSObject, GameViewControllerDelegate {
     }
 
     func undoLoad() throws {
-        guard let core = emulatorCore else { return }
+        guard phase == .running, let core = emulatorCore else { return }
         guard let data = try saveStates.readUndoLoadState(romId: romId) else { return }
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("state-\(UUID().uuidString).dltastate")
         try data.write(to: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
         try core.load(SaveState(fileURL: tmp, gameType: gameType))
-        applyDuoLidState()
-        try? FileManager.default.removeItem(at: tmp)
+        duoEmulation.applyLidState()
         try saveStates.clearUndoLoad(romId: romId)
     }
 
