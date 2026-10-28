@@ -66,8 +66,8 @@ final class ResolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifier
     ) async throws -> ExternalGameHandoff {
         let kind = emulator.identifierKind
 
-        // RetroArch resolves by name against its own library, so nothing has to
-        // be read off disk at all.
+        // RetroArch finds the game by its file name, so nothing has to be read
+        // off disk at all.
         if kind == .fileName && !emulator.wantsUnpackedROM {
             guard let fileName = Self.primaryFileName(of: rom) else {
                 throw ExternalGameIdentifierError.noROMFile

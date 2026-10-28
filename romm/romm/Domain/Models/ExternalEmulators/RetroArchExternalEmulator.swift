@@ -1,7 +1,6 @@
 import Foundation
 
-/// RetroArch resolves `retroarch://game/<name.ext>` against its own library, so
-/// the plain file name is the identifier and nothing has to be hashed.
+/// RetroArch is identified by the plain file name, so nothing has to be hashed.
 ///
 /// It opens archives itself, so a ROM can be passed exactly as it is stored.
 struct RetroArchExternalEmulator: PExternalEmulator {
@@ -21,6 +20,20 @@ struct RetroArchExternalEmulator: PExternalEmulator {
             batteryExtensions: ["srm", "sav"],
             searchHints: ["RetroArch/saves", "saves"]
         )
+    }
+
+    /// Points the deep link at the file the import copied into RetroArch's
+    /// downloads folder. A bare name only resolves against its playlists, and
+    /// the import only lands there when RetroArch has a content database that
+    /// knows the ROM, which the App Store build does not ship. `~` is expanded
+    /// to RetroArch's home directory.
+    func launchURL(gameIdentifier: String) -> URL? {
+        guard !gameIdentifier.isEmpty else { return nil }
+        var components = URLComponents()
+        components.scheme = urlScheme
+        components.host = "game"
+        components.path = "/~/Documents/RetroArch/downloads/\(gameIdentifier)"
+        return components.url
     }
 
     /// RetroArch ships under several identifiers (`com.libretro.RetroArch`,

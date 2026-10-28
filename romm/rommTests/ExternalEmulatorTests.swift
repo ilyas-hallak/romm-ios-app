@@ -6,16 +6,22 @@ struct RetroArchExternalEmulatorTests {
 
     private let retroarch = RetroArchExternalEmulator()
 
-    @Test func launchURLUsesTheFileName() {
+    /// A bare file name only resolves against RetroArch's playlists, and the App
+    /// Store build has no content database to put an import there. A path
+    /// starting with `~` is resolved against its home directory instead, where
+    /// the import always lands (#229).
+    @Test func launchURLPointsAtTheImportedFile() {
         let url = retroarch.launchURL(gameIdentifier: "Sonic.md")
-        #expect(url?.absoluteString == "retroarch://game/Sonic.md")
+        #expect(url?.absoluteString == "retroarch://game/~/Documents/RetroArch/downloads/Sonic.md")
     }
 
     /// File names routinely contain spaces, brackets and hashes, all of which
     /// break a URL that is glued together as a string.
     @Test func launchURLEscapesSpecialCharacters() {
         let url = retroarch.launchURL(gameIdentifier: "Super Mario 64 (USA) #1.z64")
-        #expect(url?.absoluteString == "retroarch://game/Super%20Mario%2064%20(USA)%20%231.z64")
+        #expect(url?.absoluteString
+                == "retroarch://game/~/Documents/RetroArch/downloads/Super%20Mario%2064%20(USA)%20%231.z64")
+        #expect(url?.path == "/~/Documents/RetroArch/downloads/Super Mario 64 (USA) #1.z64")
     }
 
     @Test func launchURLIsNilWithoutAnIdentifier() {
