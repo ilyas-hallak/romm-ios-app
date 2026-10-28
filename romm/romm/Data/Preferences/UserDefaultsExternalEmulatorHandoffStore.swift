@@ -60,11 +60,11 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
     }
 
     func hasSeenHandoffIntro(for target: ExternalEmulatorID) -> Bool {
-        userDefaults.bool(forKey: handoffIntroKeyPrefix + target.rawValue)
+        userDefaults.bool(forKey: handoffIntroKey(for: target))
     }
 
     func markHandoffIntroSeen(for target: ExternalEmulatorID) {
-        userDefaults.set(true, forKey: handoffIntroKeyPrefix + target.rawValue)
+        userDefaults.set(true, forKey: handoffIntroKey(for: target))
     }
 
     // MARK: - Private
@@ -77,6 +77,10 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
 
     private func pasteboardCopyKey(for target: ExternalEmulatorID) -> String {
         pasteboardCopyKeyPrefix + target.rawValue
+    }
+
+    private func handoffIntroKey(for target: ExternalEmulatorID) -> String {
+        handoffIntroKeyPrefix + target.rawValue
     }
 
     private func identifierKey(for kind: ExternalGameIdentifierKind) -> String {

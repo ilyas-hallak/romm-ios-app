@@ -9,7 +9,7 @@ struct ExternalPlayAlertsModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert(
-                "First Time in \(coordinator.handoffIntro?.appName ?? "the Emulator")",
+                "First Time in \(coordinator.handoffIntro?.appName ?? "the emulator")",
                 isPresented: Binding(
                     get: { coordinator.handoffIntro != nil },
                     set: { if !$0 { coordinator.cancelHandoffIntro() } }

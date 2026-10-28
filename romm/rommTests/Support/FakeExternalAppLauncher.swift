@@ -10,6 +10,7 @@ final class FakeExternalAppLauncher: PExternalAppLauncher, @unchecked Sendable {
     var openAppStorePageResult = true
 
     private(set) var launchedGameIdentifiers: [String] = []
+    private(set) var launchedPlatformSlugs: [String] = []
     private(set) var openCallCount = 0
 
     @MainActor func isInstalled(_ emulator: any PExternalEmulator) -> Bool {
@@ -18,6 +19,7 @@ final class FakeExternalAppLauncher: PExternalAppLauncher, @unchecked Sendable {
 
     @MainActor func launch(_ emulator: any PExternalEmulator, gameIdentifier: String, platformSlug: String) async -> Bool {
         launchedGameIdentifiers.append(gameIdentifier)
+        launchedPlatformSlugs.append(platformSlug)
         return launchResult
     }
 

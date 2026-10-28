@@ -149,16 +149,8 @@ final class ExternalPlayCoordinator {
         guard let confirmation = relaunchConfirmation else { return }
         relaunchConfirmation = nil
         handoffStore.markHandedOff(romId: confirmation.romId, to: confirmation.targetID)
-        let target = confirmation.targetID.emulator
-        guard installedOrError(target) else { return }
-        guard let resolved = downloadedOrError(romId: confirmation.romId, target: target) else { return }
-        // Set synchronously, before the Task even gets scheduled, so a Play tap
-        // landing in the gap before it runs sees the guard in `play()` and backs
-        // off instead of running alongside this.
-        isLaunching = true
-        Task { [weak self] in
-            defer { self?.isLaunching = false }
-            await self?.relaunch(romId: confirmation.romId, resolved: resolved, target: target)
+        launchInBackground(romId: confirmation.romId, targetID: confirmation.targetID) { coordinator, resolved, target in
+            await coordinator.relaunch(romId: confirmation.romId, resolved: resolved, target: target)
         }
     }
 
@@ -166,13 +158,8 @@ final class ExternalPlayCoordinator {
     func copyToTargetAgain() {
         guard let confirmation = relaunchConfirmation else { return }
         relaunchConfirmation = nil
-        let target = confirmation.targetID.emulator
-        guard installedOrError(target) else { return }
-        guard let resolved = downloadedOrError(romId: confirmation.romId, target: target) else { return }
-        isLaunching = true
-        Task { [weak self] in
-            defer { self?.isLaunching = false }
-            await self?.handOver(romId: confirmation.romId, resolved: resolved, target: target)
+        launchInBackground(romId: confirmation.romId, targetID: confirmation.targetID) { coordinator, resolved, target in
+            await coordinator.handOver(romId: confirmation.romId, resolved: resolved, target: target)
         }
     }
 
@@ -182,13 +169,8 @@ final class ExternalPlayCoordinator {
         guard let intro = handoffIntro else { return }
         handoffIntro = nil
         handoffStore.markHandoffIntroSeen(for: intro.targetID)
-        let target = intro.targetID.emulator
-        guard installedOrError(target) else { return }
-        guard let resolved = downloadedOrError(romId: intro.romId, target: target) else { return }
-        isLaunching = true
-        Task { [weak self] in
-            defer { self?.isLaunching = false }
-            await self?.handOver(romId: intro.romId, resolved: resolved, target: target)
+        launchInBackground(romId: intro.romId, targetID: intro.targetID) { coordinator, resolved, target in
+            await coordinator.handOver(romId: intro.romId, resolved: resolved, target: target)
         }
     }
 
@@ -201,6 +183,27 @@ final class ExternalPlayCoordinator {
     /// Dismisses the relaunch confirmation without doing anything.
     func cancelRelaunchConfirmation() {
         relaunchConfirmation = nil
+    }
+
+    /// Runs a launch step that an alert button kicked off, once the target is
+    /// installed and the ROM is on disk.
+    private func launchInBackground(
+        romId: Int,
+        targetID: ExternalEmulatorID,
+        _ step: @escaping (ExternalPlayCoordinator, ResolvedDownloadedROM, any PExternalEmulator) async -> Void
+    ) {
+        let target = targetID.emulator
+        guard installedOrError(target) else { return }
+        guard let resolved = downloadedOrError(romId: romId, target: target) else { return }
+        // Set synchronously, before the Task even gets scheduled, so a Play tap
+        // landing in the gap before it runs sees the guard in `play()` and backs
+        // off instead of running alongside this.
+        isLaunching = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.isLaunching = false }
+            await step(self, resolved, target)
+        }
     }
 
     /// Records that an "Open in" menu actually delivered the ROM, so the next Play

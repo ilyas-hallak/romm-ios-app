@@ -30,10 +30,9 @@ struct RetroArchExternalEmulator: PExternalEmulator {
     /// knows the ROM, which the App Store build does not ship.
     ///
     /// Started by path alone, RetroArch takes the first core that claims the
-    /// extension, e.g. a DS core for `gba` or an Amiga core for `chd`. So
-    /// where the core is known, the
-    /// `topshelf` link names it. `~` is RetroArch's home directory, `:` its
-    /// app bundle.
+    /// extension, e.g. a DS core for `gba` or an Amiga core for `chd`. So where
+    /// the core is known, the `topshelf` link names it. `~` is RetroArch's home
+    /// directory, `:` its app bundle.
     func launchURL(gameIdentifier: String, platformSlug: String) -> URL? {
         guard !gameIdentifier.isEmpty else { return nil }
         let romPath = "~/Documents/RetroArch/downloads/\(gameIdentifier)"

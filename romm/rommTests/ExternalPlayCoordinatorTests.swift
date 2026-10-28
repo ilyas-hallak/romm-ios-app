@@ -174,6 +174,7 @@ struct ExternalPlayCoordinatorTests {
         #expect(handoffStore.handedOff.contains(1))
         await waitUntil { !coordinator.isLaunching }
         #expect(launcher.launchedGameIdentifiers == ["manic-id-1"])
+        #expect(launcher.launchedPlatformSlugs == ["gba"])
         #expect(coordinator.errorMessage == nil)
         #expect(coordinator.pasteboardHandoff == nil)
     }

@@ -16,6 +16,20 @@ struct RetroArchExternalEmulatorTests {
                 + "&core_path=:/Frameworks/mgba.libretro.framework/mgba.libretro")
     }
 
+    /// Every system the built-in engines know gets the core RetroArch ships for it.
+    @Test(arguments: [
+        ("gba", "mgba"),
+        ("snes", "snes9x"),
+        ("nes", "fceumm"),
+        ("gbc", "gambatte"),
+        ("n64", "mupen64plus_next"),
+        ("nds", "melondsds"),
+        ("genesis", "genesis_plus_gx")
+    ])
+    func coreNameForEachBuiltInSystem(platformSlug: String, core: String) {
+        #expect(RetroArchExternalEmulator.coreName(forPlatformSlug: platformSlug) == core)
+    }
+
     /// RetroArch turns `_` into `.` when it packs a core into a framework.
     @Test func coreFrameworkNameFollowsRetroArchsPackaging() throws {
         let url = try #require(retroarch.launchURL(gameIdentifier: "Game.z64", platformSlug: "n64"))
@@ -50,6 +64,12 @@ struct RetroArchExternalEmulatorTests {
     @Test func launchURLFallsBackToThePathForOtherSystems() {
         let url = retroarch.launchURL(gameIdentifier: "sf2 (World).zip", platformSlug: "arcade")
         #expect(url?.absoluteString == "retroarch://game/~/Documents/RetroArch/downloads/sf2%20(World).zip")
+    }
+
+    /// `#` would start a fragment and cut the path short.
+    @Test func launchURLFallbackEscapesAHash() {
+        let url = retroarch.launchURL(gameIdentifier: "sf2 #1.zip", platformSlug: "arcade")
+        #expect(url?.absoluteString == "retroarch://game/~/Documents/RetroArch/downloads/sf2%20%231.zip")
     }
 
     @Test func launchURLIsNilWithoutAnIdentifier() {
