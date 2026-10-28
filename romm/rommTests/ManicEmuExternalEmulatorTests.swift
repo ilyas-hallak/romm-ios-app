@@ -12,20 +12,20 @@ struct ManicEmuExternalEmulatorTests {
     /// reads the last path component as a game id.
     @Test func launchURLUsesTheSharedGameHost() {
         let id = "8957039215404510875"
-        #expect(manic.launchURL(gameIdentifier: id)?.absoluteString == "manicemu://game/\(id)")
+        #expect(manic.launchURL(gameIdentifier: id, platformSlug: "gba")?.absoluteString == "manicemu://game/\(id)")
     }
 
     /// A host Manic reserves for one of its own handoff targets would be parsed as
     /// that instead of as a game, so the identifier must never end up there.
     @Test(arguments: ["xenios", "dukex", "armsx2", "atariemulator"])
     func launchURLDoesNotCollideWithManicsReservedHosts(reserved: String) {
-        let url = manic.launchURL(gameIdentifier: "123")
+        let url = manic.launchURL(gameIdentifier: "123", platformSlug: "gba")
         #expect(url?.host == "game")
         #expect(url?.host != reserved)
     }
 
     @Test func launchURLIsNilWithoutAnIdentifier() {
-        #expect(manic.launchURL(gameIdentifier: "") == nil)
+        #expect(manic.launchURL(gameIdentifier: "", platformSlug: "gba") == nil)
     }
 
     @Test func probeURLIsTheBareScheme() {

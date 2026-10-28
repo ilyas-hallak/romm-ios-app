@@ -16,7 +16,7 @@ final class FakeExternalAppLauncher: PExternalAppLauncher, @unchecked Sendable {
         installed
     }
 
-    @MainActor func launch(_ emulator: any PExternalEmulator, gameIdentifier: String) async -> Bool {
+    @MainActor func launch(_ emulator: any PExternalEmulator, gameIdentifier: String, platformSlug: String) async -> Bool {
         launchedGameIdentifiers.append(gameIdentifier)
         return launchResult
     }

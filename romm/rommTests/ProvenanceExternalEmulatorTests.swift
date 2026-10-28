@@ -12,12 +12,12 @@ struct ProvenanceExternalEmulatorTests {
     /// built differently from the others.
     @Test func launchURLPutsTheMD5InTheQuery() {
         let md5 = "900150983cd24fb0d6963f7d28e17f72"
-        #expect(provenance.launchURL(gameIdentifier: md5)?.absoluteString
+        #expect(provenance.launchURL(gameIdentifier: md5, platformSlug: "gba")?.absoluteString
                 == "provenance://open?md5=\(md5)")
     }
 
     @Test func launchURLIsNilWithoutAnIdentifier() {
-        #expect(provenance.launchURL(gameIdentifier: "") == nil)
+        #expect(provenance.launchURL(gameIdentifier: "", platformSlug: "gba") == nil)
     }
 
     @Test func probeURLIsTheBareScheme() {

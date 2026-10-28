@@ -53,7 +53,7 @@ protocol PExternalEmulator: Sendable {
     /// import needs more said about it.
     var handoffExplanation: String { get }
     /// Deep link that boots a ROM the target app has already imported.
-    func launchURL(gameIdentifier: String) -> URL?
+    func launchURL(gameIdentifier: String, platformSlug: String) -> URL?
 }
 
 extension PExternalEmulator {
@@ -87,7 +87,7 @@ extension PExternalEmulator {
 
     /// Every supported app resolves a game as `<scheme>://game/<identifier>`, they
     /// only disagree on what the identifier is.
-    func launchURL(gameIdentifier: String) -> URL? {
+    func launchURL(gameIdentifier: String, platformSlug: String) -> URL? {
         guard !gameIdentifier.isEmpty else { return nil }
         var components = URLComponents()
         components.scheme = urlScheme

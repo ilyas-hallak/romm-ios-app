@@ -45,7 +45,7 @@ struct ProvenanceExternalEmulator: PExternalEmulator {
     ///
     /// Lower case hex is correct even though Provenance stores the hash upper
     /// case: it upper-cases the incoming value before looking the game up.
-    func launchURL(gameIdentifier: String) -> URL? {
+    func launchURL(gameIdentifier: String, platformSlug: String) -> URL? {
         guard !gameIdentifier.isEmpty else { return nil }
         var components = URLComponents()
         components.scheme = urlScheme

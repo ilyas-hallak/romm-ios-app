@@ -6,26 +6,45 @@ struct RetroArchExternalEmulatorTests {
 
     private let retroarch = RetroArchExternalEmulator()
 
-    /// A bare file name only resolves against RetroArch's playlists, and the App
-    /// Store build has no content database to put an import there. A path
-    /// starting with `~` is resolved against its home directory instead, where
-    /// the import always lands (#229).
-    @Test func launchURLPointsAtTheImportedFile() {
-        let url = retroarch.launchURL(gameIdentifier: "Sonic.md")
-        #expect(url?.absoluteString == "retroarch://game/~/Documents/RetroArch/downloads/Sonic.md")
+    /// Started by path alone, RetroArch takes the first core that claims the
+    /// extension, and a DS core claims `gba`. The `topshelf` link names the
+    /// core instead (#229).
+    @Test func launchURLNamesTheCoreForAKnownSystem() throws {
+        let url = try #require(retroarch.launchURL(gameIdentifier: "Game.gba", platformSlug: "gba"))
+        #expect(url.absoluteString == "retroarch://topshelf"
+                + "?path=~/Documents/RetroArch/downloads/Game.gba"
+                + "&core_path=:/Frameworks/mgba.libretro.framework/mgba.libretro")
     }
 
-    /// File names routinely contain spaces, brackets and hashes, all of which
-    /// break a URL that is glued together as a string.
-    @Test func launchURLEscapesSpecialCharacters() {
-        let url = retroarch.launchURL(gameIdentifier: "Super Mario 64 (USA) #1.z64")
-        #expect(url?.absoluteString
-                == "retroarch://game/~/Documents/RetroArch/downloads/Super%20Mario%2064%20(USA)%20%231.z64")
-        #expect(url?.path == "/~/Documents/RetroArch/downloads/Super Mario 64 (USA) #1.z64")
+    /// RetroArch turns `_` into `.` when it packs a core into a framework.
+    @Test func coreFrameworkNameFollowsRetroArchsPackaging() throws {
+        let url = try #require(retroarch.launchURL(gameIdentifier: "Game.z64", platformSlug: "n64"))
+        #expect(queryValue("core_path", in: url)
+                == ":/Frameworks/mupen64plus.next.libretro.framework/mupen64plus.next.libretro")
+    }
+
+    /// File names routinely contain spaces, brackets, `&` and `+`, which must
+    /// come back out of the query unchanged.
+    @Test func launchURLKeepsSpecialCharactersInTheFileName() throws {
+        let name = "Mario & Luigi + (USA) #1.gba"
+        let url = try #require(retroarch.launchURL(gameIdentifier: name, platformSlug: "gba"))
+        #expect(queryValue("path", in: url) == "~/Documents/RetroArch/downloads/\(name)")
+    }
+
+    /// Without a known core RetroArch has to pick one itself, from the file it
+    /// finds at the path.
+    @Test func launchURLFallsBackToThePathForOtherSystems() {
+        let url = retroarch.launchURL(gameIdentifier: "sf2 (World).zip", platformSlug: "arcade")
+        #expect(url?.absoluteString == "retroarch://game/~/Documents/RetroArch/downloads/sf2%20(World).zip")
     }
 
     @Test func launchURLIsNilWithoutAnIdentifier() {
-        #expect(retroarch.launchURL(gameIdentifier: "") == nil)
+        #expect(retroarch.launchURL(gameIdentifier: "", platformSlug: "gba") == nil)
+    }
+
+    private func queryValue(_ name: String, in url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == name }?.value
     }
 
     @Test func probeURLIsTheBareScheme() {

@@ -5,7 +5,7 @@ protocol PExternalAppLauncher: AnyObject {
     /// Whether the app is installed. Requires its scheme in `LSApplicationQueriesSchemes`.
     @MainActor func isInstalled(_ emulator: any PExternalEmulator) -> Bool
     /// Boots a ROM the app has already imported. False when the app refused the link.
-    @MainActor func launch(_ emulator: any PExternalEmulator, gameIdentifier: String) async -> Bool
+    @MainActor func launch(_ emulator: any PExternalEmulator, gameIdentifier: String, platformSlug: String) async -> Bool
     /// Brings the app to the front without addressing a game, for a handoff the
     /// user has to finish over there.
     @MainActor func open(_ emulator: any PExternalEmulator) async -> Bool

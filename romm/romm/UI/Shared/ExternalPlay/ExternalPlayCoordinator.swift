@@ -255,7 +255,11 @@ final class ExternalPlayCoordinator {
         target: any PExternalEmulator
     ) async -> Bool {
         guard let identifier = try? await gameIdentifier(for: resolved, emulator: target),
-              await externalAppLauncher.launch(target, gameIdentifier: identifier) else {
+              await externalAppLauncher.launch(
+                target,
+                gameIdentifier: identifier,
+                platformSlug: resolved.rom.platformSlug
+              ) else {
             logger.info("\(target.displayName) rejected the deep link, handing the ROM over again")
             return false
         }
