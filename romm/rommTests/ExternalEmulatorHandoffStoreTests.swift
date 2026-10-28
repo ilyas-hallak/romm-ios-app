@@ -7,6 +7,15 @@ struct ExternalEmulatorHandoffStoreTests {
         UserDefaults(suiteName: "test.\(UUID().uuidString)")!
     }
 
+    @Test func remembersTheHandoffIntroPerTarget() {
+        let defaults = makeDefaults()
+        UserDefaultsExternalEmulatorHandoffStore(userDefaults: defaults).markHandoffIntroSeen(for: .retroarch)
+
+        let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: defaults)
+        #expect(store.hasSeenHandoffIntro(for: .retroarch))
+        #expect(!store.hasSeenHandoffIntro(for: .delta))
+    }
+
     @Test func nothingIsHandedOffInitially() {
         let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: makeDefaults())
         #expect(!store.hasHandedOff(romId: 1, to: .retroarch))

@@ -9,6 +9,7 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
     /// so installations from before the identifier cache keep their handoff state.
     private let identifierKeyPrefix = "externalEmulator.gameIdentifier."
     private let pasteboardCopyKeyPrefix = "externalEmulator.pasteboardCopy."
+    private let handoffIntroKeyPrefix = "externalEmulator.handoffIntroSeen."
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
@@ -56,6 +57,14 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
         var identifiers = gameIdentifiers(for: kind)
         identifiers[String(romId)] = identifier
         userDefaults.set(identifiers, forKey: identifierKey(for: kind))
+    }
+
+    func hasSeenHandoffIntro(for target: ExternalEmulatorID) -> Bool {
+        userDefaults.bool(forKey: handoffIntroKeyPrefix + target.rawValue)
+    }
+
+    func markHandoffIntroSeen(for target: ExternalEmulatorID) {
+        userDefaults.set(true, forKey: handoffIntroKeyPrefix + target.rawValue)
     }
 
     // MARK: - Private

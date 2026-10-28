@@ -18,6 +18,15 @@ struct PasteboardRelaunchConfirmation: Identifiable, Equatable {
     let appName: String
 }
 
+/// A first handoff to a target that takes ROMs from the "Open in" menu, held
+/// back until the user has read that this Play only copies the game over.
+struct ExternalHandoffIntro: Identifiable, Equatable {
+    let id = UUID()
+    let romId: Int
+    let targetID: ExternalEmulatorID
+    let appName: String
+}
+
 /// Routes a Play tap to the external emulator app the user picked, from any
 /// screen that offers Play.
 ///
@@ -41,6 +50,9 @@ final class ExternalPlayCoordinator {
     /// Set when a ROM already went to this target's pasteboard once, asking the
     /// user whether to deep link in or copy it over again.
     var relaunchConfirmation: PasteboardRelaunchConfirmation?
+    /// Set before the first "Open in" menu for a target, explaining that this
+    /// Play only copies the game and the next one starts it.
+    var handoffIntro: ExternalHandoffIntro?
     /// Surfaced by the host screen; nil while nothing went wrong.
     var errorMessage: String?
     /// True while a ROM is being unpacked, hashed or handed over.
@@ -164,6 +176,28 @@ final class ExternalPlayCoordinator {
         }
     }
 
+    /// The user read the intro, so hand the ROM over and never show it again
+    /// for this target.
+    func continueAfterHandoffIntro() {
+        guard let intro = handoffIntro else { return }
+        handoffIntro = nil
+        handoffStore.markHandoffIntroSeen(for: intro.targetID)
+        let target = intro.targetID.emulator
+        guard installedOrError(target) else { return }
+        guard let resolved = downloadedOrError(romId: intro.romId, target: target) else { return }
+        isLaunching = true
+        Task { [weak self] in
+            defer { self?.isLaunching = false }
+            await self?.handOver(romId: intro.romId, resolved: resolved, target: target)
+        }
+    }
+
+    /// Dismisses the intro without handing anything over. It shows again on
+    /// the next Play.
+    func cancelHandoffIntro() {
+        handoffIntro = nil
+    }
+
     /// Dismisses the relaunch confirmation without doing anything.
     func cancelRelaunchConfirmation() {
         relaunchConfirmation = nil
@@ -275,6 +309,12 @@ final class ExternalPlayCoordinator {
         resolved: ResolvedDownloadedROM,
         target: any PExternalEmulator
     ) async {
+        // Nothing starts after the menu, so without a word up front the first
+        // Play looks broken. The pasteboard route explains itself afterwards.
+        if target.romDelivery == .openInMenu && !handoffStore.hasSeenHandoffIntro(for: target.id) {
+            handoffIntro = ExternalHandoffIntro(romId: romId, targetID: target.id, appName: target.displayName)
+            return
+        }
         do {
             let handoff = try await resolveExternalGameIdentifierUseCase.execute(
                 rom: resolved.rom,

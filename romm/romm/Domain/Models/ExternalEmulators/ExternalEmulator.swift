@@ -79,7 +79,7 @@ extension PExternalEmulator {
     var handoffExplanation: String {
         switch romDelivery {
         case .openInMenu:
-            return String(localized: "The first time you play a game, pick \(displayName) from the share sheet that appears. After that it opens there straight away.")
+            return String(localized: "The first time you play a game, pick \(displayName) from the share sheet that appears. That only copies the game over, tap Play again to start it. After that it opens there straight away.")
         case .pasteboard:
             return String(localized: "\(displayName) cannot take games from the share sheet, so the first time you play one it goes to the clipboard instead. Open \(displayName) and paste it to add it to your library. After that it opens there straight away.")
         }

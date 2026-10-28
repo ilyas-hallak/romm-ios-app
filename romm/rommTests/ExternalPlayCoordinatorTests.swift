@@ -264,4 +264,66 @@ struct ExternalPlayCoordinatorTests {
         #expect(launcher.launchedGameIdentifiers.isEmpty)
         #expect(launcher.openCallCount == 0)
     }
+
+    // MARK: - Handoff intro
+
+    private func makeRetroArchCoordinator(
+        handoffStore: FakeHandoffStore
+    ) -> (ExternalPlayCoordinator, DownloadedROM) {
+        let localROMs = FakeLocalROMs()
+        let rom = localROMs.addRealGBARom(id: 8)
+        let coordinator = makeCoordinator(
+            localROMs: localROMs, handoffStore: handoffStore, launcher: FakeExternalAppLauncher()
+        )
+        coordinator.overrideTarget(.external(.retroarch))
+        return (coordinator, rom)
+    }
+
+    /// Nothing starts after the "Open in" menu, so the first Play has to say up
+    /// front that it only copies the game over.
+    @Test func firstHandoffToAnOpenInTargetShowsTheIntroInsteadOfTheMenu() async {
+        let (coordinator, rom) = makeRetroArchCoordinator(handoffStore: FakeHandoffStore())
+
+        _ = await coordinator.play(romId: rom.id)
+
+        #expect(coordinator.handoffIntro?.romId == rom.id)
+        #expect(coordinator.handoffIntro?.targetID == .retroarch)
+        #expect(coordinator.openInItem == nil)
+    }
+
+    @Test func continueAfterHandoffIntroRemembersItAndOpensTheMenu() async {
+        let handoffStore = FakeHandoffStore()
+        let (coordinator, rom) = makeRetroArchCoordinator(handoffStore: handoffStore)
+        _ = await coordinator.play(romId: rom.id)
+
+        coordinator.continueAfterHandoffIntro()
+        await waitUntil { coordinator.openInItem != nil }
+
+        #expect(coordinator.handoffIntro == nil)
+        #expect(coordinator.openInItem != nil)
+        #expect(handoffStore.seenHandoffIntros == [.retroarch])
+    }
+
+    @Test func handoffIntroShowsOnlyOncePerTarget() async {
+        let handoffStore = FakeHandoffStore()
+        handoffStore.markHandoffIntroSeen(for: .retroarch)
+        let (coordinator, rom) = makeRetroArchCoordinator(handoffStore: handoffStore)
+
+        _ = await coordinator.play(romId: rom.id)
+
+        #expect(coordinator.handoffIntro == nil)
+        #expect(coordinator.openInItem != nil)
+    }
+
+    @Test func cancelHandoffIntroHandsNothingOverAndAsksAgainNextTime() async {
+        let handoffStore = FakeHandoffStore()
+        let (coordinator, rom) = makeRetroArchCoordinator(handoffStore: handoffStore)
+        _ = await coordinator.play(romId: rom.id)
+
+        coordinator.cancelHandoffIntro()
+
+        #expect(coordinator.handoffIntro == nil)
+        #expect(coordinator.openInItem == nil)
+        #expect(handoffStore.seenHandoffIntros.isEmpty)
+    }
 }
