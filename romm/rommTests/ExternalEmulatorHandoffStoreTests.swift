@@ -7,6 +7,20 @@ struct ExternalEmulatorHandoffStoreTests {
         UserDefaults(suiteName: "test.\(UUID().uuidString)")!
     }
 
+    /// RetroArch handoffs before #229 never reached its library, so a Play
+    /// after the update has to hand the ROM over again instead of deep linking
+    /// into nothing.
+    @Test func dropsRetroArchHandoffsFromBeforeTheImportFix() {
+        let defaults = makeDefaults()
+        defaults.set([3], forKey: "externalEmulator.handoff.retroarch")
+        defaults.set([3], forKey: "externalEmulator.handoff.delta")
+
+        let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: defaults)
+
+        #expect(!store.hasHandedOff(romId: 3, to: .retroarch))
+        #expect(store.hasHandedOff(romId: 3, to: .delta))
+    }
+
     @Test func remembersTheHandoffIntroPerTarget() {
         let defaults = makeDefaults()
         UserDefaultsExternalEmulatorHandoffStore(userDefaults: defaults).markHandoffIntroSeen(for: .retroarch)
@@ -108,12 +122,12 @@ struct ExternalEmulatorHandoffStoreTests {
     /// before it keep the handoffs they already made.
     @Test func readsHandoffStateWrittenBeforeTheIdentifierCacheExisted() {
         let defaults = makeDefaults()
-        defaults.set([4, 5], forKey: "externalEmulator.handoff.retroarch")
+        defaults.set([4, 5], forKey: "externalEmulator.handoff.delta")
 
         let store = UserDefaultsExternalEmulatorHandoffStore(userDefaults: defaults)
 
-        #expect(store.hasHandedOff(romId: 4, to: .retroarch))
-        #expect(store.hasHandedOff(romId: 5, to: .retroarch))
+        #expect(store.hasHandedOff(romId: 4, to: .delta))
+        #expect(store.hasHandedOff(romId: 5, to: .delta))
     }
 
     // MARK: - Pasteboard copy state

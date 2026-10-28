@@ -30,7 +30,8 @@ struct RetroArchExternalEmulator: PExternalEmulator {
     /// knows the ROM, which the App Store build does not ship.
     ///
     /// Started by path alone, RetroArch takes the first core that claims the
-    /// extension, e.g. a DS core for `gba`. So where the core is known, the
+    /// extension, e.g. a DS core for `gba` or an Amiga core for `chd`. So
+    /// where the core is known, the
     /// `topshelf` link names it. `~` is RetroArch's home directory, `:` its
     /// app bundle.
     func launchURL(gameIdentifier: String, platformSlug: String) -> URL? {
@@ -38,7 +39,7 @@ struct RetroArchExternalEmulator: PExternalEmulator {
         let romPath = "~/Documents/RetroArch/downloads/\(gameIdentifier)"
         var components = URLComponents()
         components.scheme = urlScheme
-        guard let core = PlatformSlugToGameType.map(platformSlug).map(Self.coreName) else {
+        guard let core = Self.coreName(forPlatformSlug: platformSlug) else {
             components.host = "game"
             components.path = "/\(romPath)"
             return components.url
@@ -52,9 +53,37 @@ struct RetroArchExternalEmulator: PExternalEmulator {
         return components.url
     }
 
-    /// The core RetroArch ships for each system, by the name of its
-    /// `<name>_libretro` library.
-    static func coreName(for gameType: DeltaGameType) -> String {
+    /// The core RetroArch's App Store build ships for a system, by the name of
+    /// its `<name>_libretro` library. The list is `appstore_cores` in
+    /// RetroArch's `pkg/apple/update-cores.sh`.
+    static func coreName(forPlatformSlug platformSlug: String) -> String? {
+        if let gameType = PlatformSlugToGameType.map(platformSlug) {
+            return coreName(for: gameType)
+        }
+        return discCores[platformSlug.lowercased()]
+    }
+
+    /// Disc systems with a core that runs without a separate BIOS where there
+    /// is a choice. Dreamcast is missing, its core is not in the App Store build.
+    private static let discCores: [String: String] = [
+        "ps": "pcsx_rearmed",
+        "psx": "pcsx_rearmed",
+        "ps1": "pcsx_rearmed",
+        "playstation": "pcsx_rearmed",
+        "sony-playstation": "pcsx_rearmed",
+        "segacd": "genesis_plus_gx",
+        "sega-cd": "genesis_plus_gx",
+        "mega-cd": "genesis_plus_gx",
+        "megacd": "genesis_plus_gx",
+        "saturn": "yabause",
+        "sega-saturn": "yabause",
+        "pc-engine-cd": "mednafen_pce_fast",
+        "pce-cd": "mednafen_pce_fast",
+        "turbografx-cd": "mednafen_pce_fast",
+        "turbografx-16-slash-pc-engine-cd": "mednafen_pce_fast"
+    ]
+
+    private static func coreName(for gameType: DeltaGameType) -> String {
         switch gameType {
         case .gba: return "mgba"
         case .snes: return "snes9x"

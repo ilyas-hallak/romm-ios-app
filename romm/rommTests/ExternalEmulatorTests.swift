@@ -31,6 +31,20 @@ struct RetroArchExternalEmulatorTests {
         #expect(queryValue("path", in: url) == "~/Documents/RetroArch/downloads/\(name)")
     }
 
+    /// Disc systems have no built-in engine, and a dozen cores claim `chd` or
+    /// `cue`, the Amiga one first.
+    @Test(arguments: [
+        ("ps", "pcsx.rearmed.libretro"),
+        ("psx", "pcsx.rearmed.libretro"),
+        ("segacd", "genesis.plus.gx.libretro"),
+        ("saturn", "yabause.libretro"),
+        ("pc-engine-cd", "mednafen.pce.fast.libretro")
+    ])
+    func launchURLNamesTheCoreForADiscSystem(platformSlug: String, framework: String) throws {
+        let url = try #require(retroarch.launchURL(gameIdentifier: "Game.chd", platformSlug: platformSlug))
+        #expect(queryValue("core_path", in: url) == ":/Frameworks/\(framework).framework/\(framework)")
+    }
+
     /// Without a known core RetroArch has to pick one itself, from the file it
     /// finds at the path.
     @Test func launchURLFallsBackToThePathForOtherSystems() {

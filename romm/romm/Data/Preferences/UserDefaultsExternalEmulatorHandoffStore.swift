@@ -69,8 +69,10 @@ final class UserDefaultsExternalEmulatorHandoffStore: PExternalEmulatorHandoffSt
 
     // MARK: - Private
 
+    /// RetroArch handoffs before #229 were reported as sent but never reached
+    /// its library, so its state starts over under a new key.
     private func key(for target: ExternalEmulatorID) -> String {
-        keyPrefix + target.rawValue
+        target == .retroarch ? keyPrefix + target.rawValue + ".v2" : keyPrefix + target.rawValue
     }
 
     private func pasteboardCopyKey(for target: ExternalEmulatorID) -> String {
