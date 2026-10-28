@@ -49,10 +49,18 @@ struct HeartbeatRepositoryTests {
     @Test func laterPatchOfMaxMinorIsCompatible() {
         let repo = HeartbeatRepository(apiClient: FakeAPIClient())
         let (major, minor) = Self.majorMinor(of: repo.maxSupportedServerVersion)
+        #expect(repo.isVersionCompatible("\(major).\(minor).0") == true)
         #expect(repo.isVersionCompatible("\(major).\(minor).1") == true)
         #expect(repo.isVersionCompatible("\(major).\(minor).9") == true)
         #expect(repo.isVersionCompatible("\(major).\(minor).0-beta") == true)
         #expect(repo.isVersionCompatible("\(major).\(minor).5-rc.1") == true)
+    }
+
+    @Test func plain540IsCompatible() {
+        // The exact report: a server on 5.4.0 showed up as "outside the
+        // supported range" even though maxSupportedServerVersion is 5.4.1.
+        let repo = HeartbeatRepository(apiClient: FakeAPIClient())
+        #expect(repo.isVersionCompatible("5.4.0") == true)
     }
 
     @Test func nextMinorAboveMaxIsNotCompatible() {
