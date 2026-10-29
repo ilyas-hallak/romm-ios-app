@@ -4,6 +4,20 @@ All builds of the RomM iOS app, newest first.
 
 ## Version 1.0
 
+### Build 57 (2026-10-29)
+
+**New**
+- Upload a ROM straight from the app: open it with the app, use the share sheet, or pick "Add ROM" in the account menu. Progress shows in a new Uploads row in the account menu, and it survives a relaunch.
+- Logout now actually signs you out, and asks first whether to keep or delete the downloaded ROMs, including their saves.
+- Error messages that used to fail silently (expired session, server version mismatch) now show up in the app, with a direct path back to signing in.
+- Support for RomM server 5.4.x.
+- RetroArch handoff actually imports the ROM now and Play jumps straight into it, with the right core picked for PS1, Sega CD, Saturn and PC Engine CD. Handoffs that got stuck on older builds get sent again once.
+- Scan the library straight from the app: a button in the account menu shows the latest scan status and lets you start a new one by type and platform.
+
+**Fixed**
+- SFTP: deleting a file no longer creates a folder by mistake, and downloading from an SFTP server actually works now.
+- The account sheet now opens fully instead of stopping halfway, so you don't have to drag it up by hand.
+
 ### Build 56 (2026-10-09)
 
 **New**
