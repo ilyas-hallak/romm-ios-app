@@ -11,8 +11,13 @@ import SwiftUI
 /// these sit next to each other, so the value has to read at a glance without
 /// the card taking over the screen.
 ///
-/// Every tile shares a fixed height, so a one-line label next to a two-line
-/// one doesn't leave the grid looking unevenly sized.
+/// Every tile takes the exact same height and keeps its label to one line.
+/// A `minHeight` and a 2-line label still let a wrapped label grow its own
+/// cell past its one-line row-mate, since `LazyVGrid` does not stretch cells
+/// to match the tallest one in a row, so the longest label ("Identified
+/// platforms") made its tile visibly bigger than the rest. A fixed height
+/// plus `minimumScaleFactor` instead of wrapping is what actually guarantees
+/// all eight read as one even grid.
 struct ScanStatTile: View {
     static let height: CGFloat = 64
 
@@ -38,14 +43,14 @@ struct ScanStatTile: View {
                 Text(label)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
             Spacer(minLength: 0)
         }
         .padding(12)
-        .frame(maxWidth: .infinity, minHeight: Self.height, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
