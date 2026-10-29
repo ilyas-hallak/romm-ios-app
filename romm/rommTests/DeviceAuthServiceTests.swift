@@ -23,6 +23,12 @@ struct DeviceAuthServiceTests {
         #expect(DeviceAuthService.defaultScopes.contains("roms.write"))
     }
 
+    @Test func requestsTheTasksRunScope() {
+        // Without it, a device-flow pairing gets 403 from the scan endpoints
+        // even on an account whose role would otherwise allow it.
+        #expect(DeviceAuthService.defaultScopes.contains("tasks.run"))
+    }
+
     @Test func staysWithinTheServersScopeLimit() {
         #expect((1...22).contains(DeviceAuthService.defaultScopes.count))
     }

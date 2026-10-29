@@ -33,7 +33,8 @@ final class DeviceAuthService {
         "roms.user.write",
         "collections.read",
         "firmware.read",
-        "roms.write"
+        "roms.write",
+        "tasks.run"
     ]
 
     private let deviceIdentifierKey = "auth.clientDeviceIdentifier"
@@ -181,7 +182,11 @@ final class DeviceAuthService {
             if (200...299).contains(http.statusCode) {
                 do {
                     let token = try JSONDecoder().decode(DeviceAuthTokenResponse.self, from: data)
-                    logger.info("Device pairing approved — token received (\(token.scopes.count) scopes)")
+                    // The server intersects the requested scopes with the
+                    // account's role and whatever the user deselected on the
+                    // approval page, so this is the only place that shows what
+                    // the token actually ended up with.
+                    logger.info("Device pairing approved — granted scopes: \(token.scopes.joined(separator: ", "))")
                     return token
                 } catch {
                     logger.error("Failed to decode device/token success: \(error)")

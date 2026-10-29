@@ -8,6 +8,7 @@ enum AccountDestination: Hashable {
     case statistics
     case retroAchievements
     case uploads
+    case libraryScan
 }
 
 /// The account behind the avatar on Home, the way the web app hangs its
@@ -194,6 +195,14 @@ struct AccountSheet: View {
                     Text(appData.currentUser?.linkedRetroAchievementsUsername
                         ?? String(localized: "Not linked"))
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            if appData.currentUser?.hasScope("tasks.run") == true {
+                Button {
+                    select(.libraryScan)
+                } label: {
+                    row(icon: "arrow.triangle.2.circlepath", title: String(localized: "Library Scan"))
                 }
             }
         }

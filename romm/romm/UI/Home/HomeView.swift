@@ -56,6 +56,7 @@ struct HomeView: View {
                 case .statistics: StatsView()
                 case .retroAchievements: RetroAchievementsSettingsView()
                 case .uploads: RomUploadsView()
+                case .libraryScan: LibraryScanView()
                 }
             }
             .fileImporter(
@@ -85,6 +86,7 @@ struct HomeView: View {
             // negotiates on its own, see AccountViewModel.
             .onAppear {
                 accountViewModel.loadRecordedStatus()
+                Task { await accountViewModel.ensureCurrentUserLoaded(in: appData) }
             }
     }
 

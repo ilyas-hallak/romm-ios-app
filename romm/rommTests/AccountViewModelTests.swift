@@ -44,10 +44,14 @@ private final class AccountTestFactory: MockDependencyFactory {
     /// Held as the concrete type so a test can record a run mid-scenario.
     let outcomeStore: InMemorySaveSyncOutcomeStore
 
-    init(previewResult: Result<SyncPreview, Error>, lastRun: SaveSyncOutcome? = nil) {
+    init(
+        previewResult: Result<SyncPreview, Error>,
+        lastRun: SaveSyncOutcome? = nil,
+        authRepository: PAuthRepository? = nil
+    ) {
         self.previewUseCase = FakeSyncPreviewUseCase(result: previewResult)
         self.outcomeStore = InMemorySaveSyncOutcomeStore(outcome: lastRun)
-        super.init(apiClient: FakeAPIClient())
+        super.init(authRepository: authRepository, apiClient: FakeAPIClient())
         saveSyncOutcomeStore = outcomeStore
     }
 
@@ -201,5 +205,38 @@ struct AccountViewModelTests {
 
     private func user(avatarPath: String?, updatedAt: Date? = nil) -> User {
         User(id: 1, username: "ilyas", role: .admin, avatarPath: avatarPath, updatedAt: updatedAt)
+    }
+
+    // MARK: - Recovering a current user the one-shot login fetch lost
+
+    /// `AppViewModel` only fetches the current user once, right after login,
+    /// and swallows a failure there with just a log line, so an account-gated
+    /// row (e.g. the library scan entry) can stay hidden for the rest of the
+    /// session even though the account genuinely has the scope.
+    @Test func fillsInACurrentUserTheLoginFetchNeverGot() async {
+        let authRepository = FakeAuthRepository()
+        authRepository.getCurrentUserResult = .success(
+            User(id: 1, username: "ilyas", role: .admin, oauthScopes: ["tasks.run"])
+        )
+        let factory = AccountTestFactory(previewResult: .success(Self.upToDatePlan), authRepository: authRepository)
+        let viewModel = AccountViewModel(factory: factory, syncSettings: FakeCloudSyncSettings(isEnabled: false))
+        let appData = AppData()
+
+        await viewModel.ensureCurrentUserLoaded(in: appData)
+
+        #expect(appData.currentUser?.hasScope("tasks.run") == true)
+    }
+
+    @Test func leavesAnAlreadyLoadedUserAlone() async {
+        let authRepository = FakeAuthRepository()
+        authRepository.getCurrentUserResult = .success(User(id: 2, username: "someone-else", role: .admin))
+        let factory = AccountTestFactory(previewResult: .success(Self.upToDatePlan), authRepository: authRepository)
+        let viewModel = AccountViewModel(factory: factory, syncSettings: FakeCloudSyncSettings(isEnabled: false))
+        let appData = AppData()
+        appData.updateUser(User(id: 1, username: "ilyas", role: .admin))
+
+        await viewModel.ensureCurrentUserLoaded(in: appData)
+
+        #expect(appData.currentUser?.id == 1)
     }
 }

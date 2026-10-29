@@ -20,6 +20,8 @@ protocol PDependencyFactory {
     var localROMRepository: PLocalROMRepository { get }
     var statsRepository: PStatsRepository { get }
     var heartbeatRepository: PHeartbeatRepository { get }
+    var tasksRepository: PTasksRepository { get }
+    var scanRepository: PScanRepository { get }
     var romUploadRepository: PRomUploadRepository { get }
     var incomingRomFileRepository: PIncomingRomFileRepository { get }
 
@@ -48,6 +50,8 @@ protocol PDependencyFactory {
     func makeGetPlatformsUseCase() -> GetPlatformsUseCase
     func makeAddPlatformUseCase() -> AddPlatformUseCase
     func makeGetStatsUseCase() -> GetStatsUseCase
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase
     func makeCheckServerVersionUseCase() -> CheckServerVersionUseCase
     func makeClearServerVersionUseCase() -> ClearServerVersionUseCase
@@ -211,6 +215,8 @@ class DefaultDependencyFactory: PDependencyFactory {
     lazy var localROMRepository: PLocalROMRepository = LocalROMRepository()
     lazy var statsRepository: PStatsRepository = StatsRepository(apiClient: apiClient)
     lazy var heartbeatRepository: PHeartbeatRepository = HeartbeatRepository(apiClient: apiClient)
+    lazy var tasksRepository: PTasksRepository = TasksRepository(apiClient: apiClient)
+    lazy var scanRepository: PScanRepository = ScanRepository(apiClient: apiClient)
     lazy var romUploadRepository: PRomUploadRepository = RomUploadRepository(
         apiClient: apiClient,
         tokenProvider: tokenProvider,
@@ -309,6 +315,14 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeGetStatsUseCase() -> GetStatsUseCase {
         GetStatsUseCase(statsRepository: statsRepository)
+    }
+
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase {
+        GetLatestLibraryScanUseCase(tasksRepository: tasksRepository)
+    }
+
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase {
+        StartLibraryScanUseCase(scanRepository: scanRepository)
     }
 
     func makeGetHeartbeatUseCase() -> GetHeartbeatUseCase {

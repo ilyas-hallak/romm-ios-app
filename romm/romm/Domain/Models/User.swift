@@ -63,6 +63,14 @@ struct User: Identifiable, Equatable {
 }
 
 extension User {
+    /// Whether the account has the given OAuth scope, e.g. "tasks.run" for
+    /// starting/inspecting server tasks like the library scan.
+    func hasScope(_ scope: String) -> Bool {
+        oauthScopes.contains(scope)
+    }
+}
+
+extension User {
     /// The linked RetroAchievements account, or `nil` when there is none.
     ///
     /// The server column defaults to an empty string rather than NULL, so an

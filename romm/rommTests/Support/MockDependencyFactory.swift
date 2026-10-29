@@ -36,6 +36,7 @@ class MockDependencyFactory: PDependencyFactory {
     )
     lazy var incomingRomFileRepository: PIncomingRomFileRepository = IncomingRomFileRepository()
     var apiClient: PRommAPIClient
+    var tasksRepository: PTasksRepository
     var serverEndpointRepository: PServerEndpointRepository = ServerEndpointRepository(
         userDefaults: UserDefaults(suiteName: "MockDependencyFactory.serverEndpoint")!
     )
@@ -86,6 +87,11 @@ class MockDependencyFactory: PDependencyFactory {
     private let _injectedFileValidationService: PFileValidationService?
     var fileValidationService: PFileValidationService {
         _injectedFileValidationService ?? { fatalError("PFileValidationService was not stubbed") }()
+    }
+
+    private let _injectedScanRepository: PScanRepository?
+    var scanRepository: PScanRepository {
+        _injectedScanRepository ?? { fatalError("PScanRepository was not stubbed") }()
     }
 
     // Unlike the side-effecting dependencies above, `makeSaveSyncRunner()` has
@@ -162,6 +168,7 @@ class MockDependencyFactory: PDependencyFactory {
         fileValidationService: PFileValidationService? = nil,
         transferHistoryRepository: PTransferHistoryRepository? = nil,
         localROMRepository: PLocalROMRepository? = nil,
+        scanRepository: PScanRepository? = nil,
         saveSyncRunner: PSaveSyncRunner? = nil,
         externalEmulatorHandoffStore: PExternalEmulatorHandoffStore? = nil,
         externalAppLauncher: PExternalAppLauncher? = nil
@@ -182,6 +189,7 @@ class MockDependencyFactory: PDependencyFactory {
         self.collectionsRepository = collectionsRepository ?? CollectionsRepository(apiClient: resolvedAPIClient)
         self.statsRepository = statsRepository ?? StatsRepository(apiClient: resolvedAPIClient)
         self.heartbeatRepository = heartbeatRepository ?? HeartbeatRepository(apiClient: resolvedAPIClient)
+        self.tasksRepository = TasksRepository(apiClient: resolvedAPIClient)
 
         // Side-effecting dependencies: kept as injected doubles only. When a
         // test omits one, the corresponding property traps on access instead of
@@ -195,9 +203,18 @@ class MockDependencyFactory: PDependencyFactory {
         _injectedSFTPConnectionManager = sftpConnectionManager
         _injectedTransferHistoryRepository = transferHistoryRepository
         _injectedLocalROMRepository = localROMRepository
+        _injectedScanRepository = scanRepository
         _injectedSaveSyncRunner = saveSyncRunner
     }
-    
+
+    func makeGetLatestLibraryScanUseCase() -> GetLatestLibraryScanUseCase {
+        GetLatestLibraryScanUseCase(tasksRepository: tasksRepository)
+    }
+
+    func makeStartLibraryScanUseCase() -> StartLibraryScanUseCase {
+        StartLibraryScanUseCase(scanRepository: scanRepository)
+    }
+
     func makeGetCurrentUserUseCase() -> GetCurrentUserUseCase {
         GetCurrentUserUseCase(authRepository: authRepository)
     }

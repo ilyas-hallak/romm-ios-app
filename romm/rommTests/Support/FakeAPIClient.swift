@@ -161,6 +161,21 @@ final class FakeAPIClient: PRommAPIClient {
     func deleteStates(ids: [Int]) async throws {}
     func registerDevice(_ body: DeviceRegisterRequest) async throws -> DeviceSchema { fatalError("not used in these tests") }
     func negotiateSync(_ body: SyncNegotiateRequest) async throws -> SyncNegotiateResponse { fatalError("not used in these tests") }
+    /// Controls `getTasksStatus`: nil error returns `tasksStatusToReturn`.
+    var tasksStatusToReturn: [TaskStatusSchema] = []
+    var getTasksStatusError: Error?
+    func getTasksStatus() async throws -> [TaskStatusSchema] {
+        if let getTasksStatusError { throw getTasksStatusError }
+        return tasksStatusToReturn
+    }
+
+    /// Controls `startLibraryScan`: nil succeeds, set to simulate a 409/503 etc.
+    var startLibraryScanError: Error?
+    var startLibraryScanRequests: [ScanStartRequest] = []
+    func startLibraryScan(_ request: ScanStartRequest) async throws {
+        startLibraryScanRequests.append(request)
+        if let startLibraryScanError { throw startLibraryScanError }
+    }
     func completeSyncSession(sessionId: String, operationsCompleted: Int, operationsFailed: Int) async throws {}
     func startRomUpload(platformId: Int, fileName: String, fileSize: Int64, totalChunks: Int) async throws -> String { fatalError("not used in these tests") }
     func uploadRomChunk(uploadId: String, index: Int, fileURL: URL, progressHandler: ((Double) -> Void)?) async throws { fatalError("not used in these tests") }

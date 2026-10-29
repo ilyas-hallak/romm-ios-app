@@ -35,7 +35,7 @@ enum AuthMethod: String, Codable, CaseIterable {
     var description: String {
         switch self {
         case .deviceFlow:
-            return "Approve this device in your browser — no password needed"
+            return "Approve this device in your browser, no password needed"
         case .classic:
             return "Traditional login with username and password"
         case .clientToken:
