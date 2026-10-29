@@ -5,7 +5,8 @@ import Observation
 /// is loaded from, and how saving last went.
 ///
 /// The account itself comes from `AppData`, which already holds the signed in
-/// user, so nothing is fetched twice.
+/// user, so nothing is fetched twice, except the one-shot fetch after login is
+/// never retried if it fails. See ``ensureCurrentUserLoaded(in:)``.
 @Observable
 @MainActor
 final class AccountViewModel {
@@ -18,6 +19,7 @@ final class AccountViewModel {
 
     private let previewUseCase: PSyncPreviewUseCase
     private let getLastRun: PGetLastSaveSyncRunUseCase
+    private let getCurrentUserUseCase: GetCurrentUserUseCase
     private let syncSettings: PCloudSaveSyncSettings
     private let tokenProvider: PTokenProvider
     private let updateStore: AppUpdateStore
@@ -28,9 +30,24 @@ final class AccountViewModel {
     ) {
         self.previewUseCase = factory.makeSyncPreviewUseCase()
         self.getLastRun = factory.makeGetLastSaveSyncRunUseCase()
+        self.getCurrentUserUseCase = factory.makeGetCurrentUserUseCase()
         self.syncSettings = syncSettings
         self.tokenProvider = factory.tokenProvider
         self.updateStore = factory.appUpdateStore
+    }
+
+    /// `AppViewModel` fetches the current user exactly once, right after login,
+    /// and only logs a warning if that single attempt fails, e.g. a transient
+    /// blip right after a fresh device-flow pairing. Nothing retries it after
+    /// that, so account-gated UI like the library scan entry can stay hidden
+    /// for the rest of the session even though the account does have the
+    /// scope. Home calls this on every appearance; it is a no-op once the user
+    /// is actually loaded.
+    func ensureCurrentUserLoaded(in appData: AppData) async {
+        guard appData.currentUser == nil else { return }
+        if let user = try? await getCurrentUserUseCase.execute() {
+            appData.updateUser(user)
+        }
     }
 
     /// The whole version history, for the account's Version History entry.
