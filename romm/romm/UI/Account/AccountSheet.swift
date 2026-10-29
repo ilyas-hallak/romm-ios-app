@@ -33,6 +33,10 @@ struct AccountSheet: View {
 
     @State private var showingHelp = false
     @State private var showingVersionHistory = false
+    // Without a selection binding, a sheet opens at its smallest detent, so
+    // this has to default to .large instead of leaving it up to the user to
+    // drag it open every time.
+    @State private var detent: PresentationDetent = .large
 
     var body: some View {
         NavigationStack {
@@ -55,7 +59,7 @@ struct AccountSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         // The list itself draws no background inside a sheet, so without this
         // the whole of Home blurs through the system's glass surface, hardest
