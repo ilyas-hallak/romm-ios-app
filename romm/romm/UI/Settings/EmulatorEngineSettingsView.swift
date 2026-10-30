@@ -40,6 +40,7 @@ struct EmulatorEngineSettingsView: View {
     @State private var swapFaceButtons: Bool
     @State private var rumbleEnabled: Bool
     @State private var bezelEnabled: Bool
+    @State private var alwaysShowTouchControls: Bool
     #endif
     @State private var installedEmulators: [ExternalEmulatorID] = []
     /// Apps the user has been through the assistant for, the only ones offered
@@ -85,6 +86,7 @@ struct EmulatorEngineSettingsView: View {
         _swapFaceButtons = State(wrappedValue: factory.gamepadFaceButtonPreference.isSwapped)
         _rumbleEnabled = State(wrappedValue: factory.rumblePreference.isEnabled)
         _bezelEnabled = State(wrappedValue: factory.emulatorBezelPreference.isEnabled)
+        _alwaysShowTouchControls = State(wrappedValue: EmulatorControllerState.alwaysShowTouchControls)
         #endif
         _playChoice = State(wrappedValue: PlayChoice(
             engine: factory.enginePreference.current,
@@ -103,12 +105,13 @@ struct EmulatorEngineSettingsView: View {
             #if !APP_STORE
             bezelSection
 
-            Section(footer: Text("When a physical controller is connected, the on-screen buttons hide and you can drag the game to reposition it, handy for gamepad cases that cover part of the screen. Set its size from the in-game menu.")) { EmptyView() }
+            Section(footer: Text("Touch controls hide automatically when a controller is connected, unless Always show touch controls is on. While touch controls are hidden, drag the game to reposition it and adjust its size from the in-game menu.")) { EmptyView() }
 
             Section(
                 header: Text("Controller"),
                 footer: Text("Optional button combination that opens the in-game menu from a physical controller. The on-screen menu button stays available either way.")
             ) {
+                EmulatorTouchControlsToggle(alwaysShowTouchControls: $alwaysShowTouchControls, style: .settings)
                 Picker("Menu shortcut", selection: $menuShortcut) {
                     Text("Off").tag(EmulatorMenuShortcut.none)
                     Text("L3 + R3").tag(EmulatorMenuShortcut.l3r3)
@@ -143,7 +146,7 @@ struct EmulatorEngineSettingsView: View {
         .onAppear {
             refreshInstalledEmulators()
             #if !APP_STORE
-            // The in-game menu writes these two as well, so re-read them.
+            // The in-game menu writes these preferences as well, so re-read them.
             menuShortcut = menuShortcutPreference.current
             swapFaceButtons = faceButtonPreference.isSwapped
             #if DEBUG

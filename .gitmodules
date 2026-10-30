@@ -3,10 +3,10 @@
 	url = https://github.com/rileytestut/DeltaCore.git
 [submodule "Vendor/GBADeltaCore"]
 	path = Vendor/GBADeltaCore
-	url = https://github.com/ilyas-hallak/GBADeltaCore.git
+	url = https://github.com/rileytestut/GBADeltaCore.git
 [submodule "Vendor/SNESDeltaCore"]
 	path = Vendor/SNESDeltaCore
-	url = https://github.com/ilyas-hallak/SNESDeltaCore.git
+	url = https://github.com/rileytestut/SNESDeltaCore.git
 [submodule "Vendor/GPGXDeltaCore"]
 	path = Vendor/GPGXDeltaCore
 	url = https://github.com/rileytestut/GPGXDeltaCore.git

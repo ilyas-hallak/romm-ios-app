@@ -53,6 +53,8 @@ struct NativeEmulatorView: View {
             OrientationLock.set([.portrait, .landscapeLeft, .landscapeRight])
             viewModel.bootstrap(resumeSlot: resumeSlot)
             viewModel.session?.onMenuRequested = { showMenu = true }
+            viewModel.session?.setSceneActive(scenePhase == .active)
+            viewModel.session?.setMenuPresented(showMenu)
             // Set the starting state outright. The `onChange` handlers below
             // only fire on a real transition, so a display that is already
             // active when the game starts would otherwise go unnoticed.
@@ -64,21 +66,15 @@ struct NativeEmulatorView: View {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
-                viewModel.session?.resume()
+                viewModel.session?.setSceneActive(true)
                 // Re-assert the hidden state, a background trip can drop it.
                 viewModel.session?.updatePhoneVideoVisibility()
-            case .inactive, .background: viewModel.session?.pause()
+            case .inactive, .background: viewModel.session?.setSceneActive(false)
             @unknown default: break
             }
         }
         .onChange(of: showMenu) { _, presented in
-            if presented {
-                viewModel.session?.pause()
-                viewModel.session?.beginMenuNavigation()
-            } else {
-                viewModel.session?.endMenuNavigation()
-                viewModel.session?.resume()
-            }
+            viewModel.session?.setMenuPresented(presented)
         }
         .onChange(of: externalDisplay.isActive) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }
         .onChange(of: externalDisplay.isPhoneControllerOnlyEnabled) { _, _ in viewModel.session?.updatePhoneVideoVisibility() }

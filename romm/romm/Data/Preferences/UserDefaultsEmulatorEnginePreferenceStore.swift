@@ -6,17 +6,32 @@ final class UserDefaultsEmulatorEnginePreferenceStore: PEmulatorEnginePreference
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        #if !APP_STORE
+        persistInitialDefaultIfNeeded()
+        #endif
     }
+
+    #if !APP_STORE
+    private func persistInitialDefaultIfNeeded() {
+        guard userDefaults.object(forKey: key) == nil else { return }
+        // These keys predate the Native default. Bootstrap checks them before
+        // onboarding or the changelog can create a fresh install's footprint.
+        let existingInstallKeys = [
+            "setup_configuration_json", "setup_auth_method",
+            "lastSeenChangelogBuild", "auth.clientDeviceIdentifier"
+        ]
+        let isExistingInstall = existingInstallKeys.contains { userDefaults.object(forKey: $0) != nil }
+        let engine: EmulatorEngine = isExistingInstall ? .web : .native
+        userDefaults.set(engine.rawValue, forKey: key)
+    }
+    #endif
 
     var current: EmulatorEngine {
         get {
-            // When the web engine is disabled (distributed builds), the on-device
-            // engine is the only usable default and any previously stored `.web`
-            // is coerced. That is `.native` (DeltaCore, falling back to libretro
-            // per platform) outside the App Store build, and `.auto` inside it,
-            // since libretro is then the only on-device engine there is.
+            // Invalid values retain the on-device fallback. Stored Web choices
+            // are coerced when that engine is unavailable in this build.
             #if !APP_STORE
-            let fallback: EmulatorEngine = AppFeatures.webEmulatorEnabled ? .web : .native
+            let fallback: EmulatorEngine = .native
             #else
             let fallback: EmulatorEngine = AppFeatures.webEmulatorEnabled ? .web : .auto
             #endif

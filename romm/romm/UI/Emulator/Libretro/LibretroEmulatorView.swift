@@ -129,6 +129,7 @@ private struct LibretroMenuSheet: View {
     @SwiftUI.State private var hapticsOnRelease: Bool = HapticsPreferences.onRelease
     @SwiftUI.State private var rumbleIntensity: RumbleIntensity
     @SwiftUI.State private var analogSticks: Bool
+    @SwiftUI.State private var alwaysShowTouchControls = EmulatorControllerState.alwaysShowTouchControls
     @SwiftUI.State private var focus: EmulatorMenuFocus<MenuItem>
 
     // 0-based to match the save-state storage / cloud-sync layer
@@ -341,6 +342,7 @@ private struct LibretroMenuSheet: View {
                 analogSticksControl
             }
             ExternalDisplayControls(onRequestDismiss: onResume)
+            EmulatorTouchControlsToggle(alwaysShowTouchControls: $alwaysShowTouchControls)
             hapticsControls
             if EmulatorControllerState.isConnected {
                 EmulatorControllerControls(
@@ -351,7 +353,10 @@ private struct LibretroMenuSheet: View {
                 }
             }
             if let preference = session?.screenPositionPreference,
-               EmulatorControllerState.isConnected {
+               EmulatorControllerState.shouldHideTouchControls(
+                   isConnected: EmulatorControllerState.isConnected,
+                   alwaysShowTouchControls: alwaysShowTouchControls
+               ) {
                 EmulatorScreenControls(preference: preference) {
                     session?.reloadAspectRatio()
                 }

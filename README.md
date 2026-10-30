@@ -89,7 +89,7 @@ git clone --recurse-submodules https://github.com/ilyas-hallak/romm-ios-app.git
 
 If you already cloned without them, run `git submodule update --init --recursive`.
 Then open `romm/romm.xcodeproj` in Xcode and build.
-The Simulator needs nothing else.
+For Xcode 27.1 and iPhone Duo, follow the [Delta core versions and simulator build notes](docs/delta-core-versions.md), including Git LFS setup for the controller skins.
 
 Questions, ideas or bugs?
 Drop by `#ios-app` on the [RomM Discord](https://discord.gg/wCNJVP86VX) or open an [issue](https://github.com/ilyas-hallak/romm-ios-app/issues).
