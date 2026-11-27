@@ -74,6 +74,7 @@ final class ExternalPlayCoordinator {
     private let handoffStore: PExternalEmulatorHandoffStore
     private let resolveExternalGameIdentifierUseCase: PResolveExternalGameIdentifierUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
+    private let recordLocalLastPlayedUseCase: PRecordLocalLastPlayedUseCase
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.playTargetPreference = factory.playTargetPreference
@@ -83,6 +84,7 @@ final class ExternalPlayCoordinator {
         self.handoffStore = factory.externalEmulatorHandoffStore
         self.resolveExternalGameIdentifierUseCase = factory.makeResolveExternalGameIdentifierUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
+        self.recordLocalLastPlayedUseCase = factory.makeRecordLocalLastPlayedUseCase()
         self.playTarget = factory.playTargetPreference.current
     }
 
@@ -433,14 +435,16 @@ final class ExternalPlayCoordinator {
         pasteboardHandoff = PasteboardHandoffInfo(romName: rom.name, appName: appName)
     }
 
-    /// Reports the ROM as played to the server, best effort.
+    /// Reports the ROM as played to the server, best effort, and stamps the
+    /// local "last played" time so the Downloads sort stays current offline.
     private func markPlayed(romId: Int) {
-        Task { [updateLastPlayedUseCase, logger] in
+        Task { [updateLastPlayedUseCase, recordLocalLastPlayedUseCase, logger] in
             do {
                 try await updateLastPlayedUseCase.execute(romId: romId)
             } catch {
                 logger.warning("Failed to update last_played for ROM \(romId): \(error)")
             }
+            try? recordLocalLastPlayedUseCase.execute(romId: romId)
         }
     }
 }

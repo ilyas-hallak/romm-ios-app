@@ -12,15 +12,42 @@ class LocalDeviceDetailViewModel {
     var totalDownloadedSize: Int64 = 0
     var showingDeleteConfirmation = false
     var romToDelete: DownloadedROM?
+    private(set) var sortOption: DownloadSortOption
 
     private let repository: PLocalROMRepository
     private let getPlatformsUseCase: GetPlatformsUseCase
     private let getLastSyncUseCase: PGetLastSyncUseCase
+    private let getDownloadSortOptionUseCase: PGetDownloadSortOptionUseCase
+    private let saveDownloadSortOptionUseCase: PSaveDownloadSortOptionUseCase
 
     init(factory: PDependencyFactory = DefaultDependencyFactory.shared) {
         self.repository = factory.localROMRepository
         self.getPlatformsUseCase = factory.makeGetPlatformsUseCase()
         self.getLastSyncUseCase = factory.makeGetLastSyncUseCase()
+        self.getDownloadSortOptionUseCase = factory.makeGetDownloadSortOptionUseCase()
+        self.saveDownloadSortOptionUseCase = factory.makeSaveDownloadSortOptionUseCase()
+        self.sortOption = getDownloadSortOptionUseCase.execute()
+    }
+
+    /// Changes how ROMs are ordered within each platform group, persists the
+    /// choice, and re-sorts the already loaded groups without hitting disk again.
+    func updateSortOption(_ option: DownloadSortOption) {
+        sortOption = option
+        saveDownloadSortOptionUseCase.execute(option)
+        romsByPlatform = romsByPlatform.mapValues { option.apply(to: $0) }
+    }
+
+    /// Stamps one ROM's "last played" time in memory and re-sorts its group,
+    /// so a "Last Played" sort reflects a launch right away without
+    /// rescanning the whole downloads folder from disk.
+    func markPlayedLocally(romId: Int, at date: Date = Date()) {
+        for (platform, roms) in romsByPlatform {
+            guard let index = roms.firstIndex(where: { $0.id == romId }) else { continue }
+            var updated = roms
+            updated[index].lastPlayedAt = date
+            romsByPlatform[platform] = sortOption.apply(to: updated)
+            return
+        }
     }
 
     func displayName(forPlatformName platformName: String) -> String {
@@ -55,7 +82,7 @@ class LocalDeviceDetailViewModel {
         error = nil
 
         // Perform FileManager operations in background with higher priority for better responsiveness
-        let result = await Task.detached(priority: .userInitiated) { [repository = self.repository] () -> Result<(roms: [DownloadedROM], byPlatform: [String: [DownloadedROM]], totalSize: Int64), Error> in
+        let result = await Task.detached(priority: .userInitiated) { [repository = self.repository, sortOption = self.sortOption] () -> Result<(roms: [DownloadedROM], byPlatform: [String: [DownloadedROM]], totalSize: Int64), Error> in
             do {
                 // Optimize: Calculate everything in one pass
                 let downloadedROMs = try repository.getAllDownloadedROMs()
@@ -71,6 +98,8 @@ class LocalDeviceDetailViewModel {
                     romsByPlatform[rom.platformName]?.append(rom)
                     totalSize += rom.totalSizeBytes
                 }
+
+                romsByPlatform = romsByPlatform.mapValues { sortOption.apply(to: $0) }
 
                 return .success((downloadedROMs, romsByPlatform, totalSize))
             } catch {

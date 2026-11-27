@@ -102,6 +102,8 @@ protocol PDependencyFactory {
     func makeSaveViewModeUseCase() -> PSaveViewModeUseCase
     func makeGetGroupRomsUseCase() -> PGetGroupRomsUseCase
     func makeSaveGroupRomsUseCase() -> PSaveGroupRomsUseCase
+    func makeGetDownloadSortOptionUseCase() -> PGetDownloadSortOptionUseCase
+    func makeSaveDownloadSortOptionUseCase() -> PSaveDownloadSortOptionUseCase
 
     // Save/State Sync Use Cases
     func makeListServerSavesUseCase() -> PListServerSavesUseCase
@@ -123,6 +125,7 @@ protocol PDependencyFactory {
 
     // Local ROM Use Cases
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase
+    func makeRecordLocalLastPlayedUseCase() -> PRecordLocalLastPlayedUseCase
 
     // Changelog / Update Check
     var appUpdateRepository: PAppUpdateRepository { get }
@@ -502,6 +505,16 @@ class DefaultDependencyFactory: PDependencyFactory {
         SaveGroupRomsUseCase()
     }
 
+    lazy var downloadSortPreferenceRepository: PDownloadSortPreferenceRepository = UserDefaultsDownloadSortPreferenceStore()
+
+    func makeGetDownloadSortOptionUseCase() -> PGetDownloadSortOptionUseCase {
+        GetDownloadSortOptionUseCase(repository: downloadSortPreferenceRepository)
+    }
+
+    func makeSaveDownloadSortOptionUseCase() -> PSaveDownloadSortOptionUseCase {
+        SaveDownloadSortOptionUseCase(repository: downloadSortPreferenceRepository)
+    }
+
     // MARK: - Changelog / Update Check
 
     lazy var appUpdateRepository: PAppUpdateRepository = AppUpdateRepository()
@@ -760,6 +773,10 @@ class DefaultDependencyFactory: PDependencyFactory {
 
     func makeGetROMShareFilesUseCase() -> PGetROMShareFilesUseCase {
         GetROMShareFilesUseCase(localROMRepository: localROMRepository)
+    }
+
+    func makeRecordLocalLastPlayedUseCase() -> PRecordLocalLastPlayedUseCase {
+        RecordLocalLastPlayedUseCase(localROMRepository: localROMRepository)
     }
 
     // MARK: - Local ROM ViewModels

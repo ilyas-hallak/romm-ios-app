@@ -40,6 +40,7 @@ struct PlatformROMsListView: View {
     private let factory: PDependencyFactory
     private let launchUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
+    private let recordLocalLastPlayedUseCase: PRecordLocalLastPlayedUseCase
     private let saveStore: PSaveStore
 
     init(platformName: String, viewModel: LocalDeviceDetailViewModel, onDelete: @escaping (DownloadedROM) -> Void, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
@@ -49,6 +50,7 @@ struct PlatformROMsListView: View {
         self.factory = factory
         self.launchUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
+        self.recordLocalLastPlayedUseCase = factory.makeRecordLocalLastPlayedUseCase()
         self.saveStore = factory.saveStore
         _share = State(initialValue: factory.makeShareROMViewModel())
         _externalPlay = State(initialValue: ExternalPlayCoordinator(factory: factory))
@@ -87,6 +89,11 @@ struct PlatformROMsListView: View {
         }
         .navigationTitle(viewModel.displayName(forPlatformName: platformName))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                sortMenu
+            }
+        }
         .navigationDestination(item: $detailRom) { rom in
             RomDetailView(rom: rom.toRom())
         }
@@ -149,6 +156,25 @@ struct PlatformROMsListView: View {
         .externalPlayHandoff(externalPlay)
     }
 
+    /// The sort applies across every platform, chosen here since this is
+    /// where its effect is actually visible: the platform overview above
+    /// only groups by platform and never reorders within a group.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort by", selection: Binding(
+                get: { viewModel.sortOption },
+                set: { viewModel.updateSortOption($0) }
+            )) {
+                ForEach(DownloadSortOption.allCases) { option in
+                    Text(option.rawValue).tag(option)
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+        .accessibilityLabel("Sort Downloads")
+    }
+
     private func hasSaveGame(romId: Int) -> Bool {
         saveStore.batteryModifiedAt(romId: romId) != nil
     }
@@ -194,8 +220,10 @@ struct PlatformROMsListView: View {
         // Set the slot before the decision so the cover builder reads it.
         pendingResumeSlot = resumeSlot
         launchDecision = decision
-        Task { [updateLastPlayedUseCase] in
+        Task { [updateLastPlayedUseCase, recordLocalLastPlayedUseCase, viewModel] in
             try? await updateLastPlayedUseCase.execute(romId: rom.id)
+            try? recordLocalLastPlayedUseCase.execute(romId: rom.id)
+            await viewModel.markPlayedLocally(romId: rom.id)
         }
     }
 
