@@ -89,6 +89,11 @@ struct PlatformROMsListView: View {
         }
         .navigationTitle(viewModel.displayName(forPlatformName: platformName))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                sortMenu
+            }
+        }
         .navigationDestination(item: $detailRom) { rom in
             RomDetailView(rom: rom.toRom())
         }
@@ -149,6 +154,25 @@ struct PlatformROMsListView: View {
         // would still route to the previous target.
         .onAppear { externalPlay.refreshPlayTarget() }
         .externalPlayHandoff(externalPlay)
+    }
+
+    /// The sort applies across every platform, chosen here since this is
+    /// where its effect is actually visible: the platform overview above
+    /// only groups by platform and never reorders within a group.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort by", selection: Binding(
+                get: { viewModel.sortOption },
+                set: { viewModel.updateSortOption($0) }
+            )) {
+                ForEach(DownloadSortOption.allCases) { option in
+                    Text(option.rawValue).tag(option)
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+        .accessibilityLabel("Sort Downloads")
     }
 
     private func hasSaveGame(romId: Int) -> Bool {
