@@ -37,6 +37,19 @@ class LocalDeviceDetailViewModel {
         romsByPlatform = romsByPlatform.mapValues { option.apply(to: $0) }
     }
 
+    /// Stamps one ROM's "last played" time in memory and re-sorts its group,
+    /// so a "Last Played" sort reflects a launch right away without
+    /// rescanning the whole downloads folder from disk.
+    func markPlayedLocally(romId: Int, at date: Date = Date()) {
+        for (platform, roms) in romsByPlatform {
+            guard let index = roms.firstIndex(where: { $0.id == romId }) else { continue }
+            var updated = roms
+            updated[index].lastPlayedAt = date
+            romsByPlatform[platform] = sortOption.apply(to: updated)
+            return
+        }
+    }
+
     func displayName(forPlatformName platformName: String) -> String {
         if let rom = romsByPlatform[platformName]?.first,
            let name = platformDisplayNamesBySlug[rom.platformSlug] {

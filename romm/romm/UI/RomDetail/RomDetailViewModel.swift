@@ -96,6 +96,7 @@ class RomDetailViewModel {
     private let platformEngineSupport: PPlatformEngineSupport
     private let launchEmulatorUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
+    private let recordLocalLastPlayedUseCase: PRecordLocalLastPlayedUseCase
     private let getDownloadedROMUseCase: PGetDownloadedROMUseCase
     private let getROMShareFilesUseCase: PGetROMShareFilesUseCase
 
@@ -113,6 +114,7 @@ class RomDetailViewModel {
         self.platformEngineSupport = factory.makePlatformEngineSupport()
         self.launchEmulatorUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
+        self.recordLocalLastPlayedUseCase = factory.makeRecordLocalLastPlayedUseCase()
         self.getDownloadedROMUseCase = factory.makeGetDownloadedROMUseCase()
         self.getROMShareFilesUseCase = factory.makeGetROMShareFilesUseCase()
     }
@@ -412,14 +414,16 @@ class RomDetailViewModel {
         markPlayed(romId: rom.id)
     }
 
-    /// Reports the ROM as played to the server, best effort.
+    /// Reports the ROM as played to the server, best effort, and stamps the
+    /// local "last played" time so the Downloads sort stays current offline.
     private func markPlayed(romId: Int) {
-        Task { [updateLastPlayedUseCase, logger] in
+        Task { [updateLastPlayedUseCase, recordLocalLastPlayedUseCase, logger] in
             do {
                 try await updateLastPlayedUseCase.execute(romId: romId)
             } catch {
                 logger.warning("Failed to update last_played for ROM \(romId): \(error)")
             }
+            try? recordLocalLastPlayedUseCase.execute(romId: romId)
         }
     }
 

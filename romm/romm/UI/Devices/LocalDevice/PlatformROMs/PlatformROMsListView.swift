@@ -199,8 +199,7 @@ struct PlatformROMsListView: View {
         Task { [updateLastPlayedUseCase, recordLocalLastPlayedUseCase, viewModel] in
             try? await updateLastPlayedUseCase.execute(romId: rom.id)
             try? recordLocalLastPlayedUseCase.execute(romId: rom.id)
-            // Reloads so a "Last Played" sort reflects this launch immediately.
-            await viewModel.loadDownloadedROMsAsync()
+            await viewModel.markPlayedLocally(romId: rom.id)
         }
     }
 
