@@ -224,13 +224,17 @@ TabView {
 
 ### Standard Build
 ```bash
-xcodebuild -scheme romm -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' build
+xcodebuild -scheme romm -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' IPHONEOS_DEPLOYMENT_TARGET=18.6 build
 ```
 
 ### Clean Build
 ```bash
-xcodebuild -scheme romm -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' clean build
+xcodebuild -scheme romm -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' IPHONEOS_DEPLOYMENT_TARGET=18.6 clean build
 ```
+
+Under Xcode 27, `IPHONEOS_DEPLOYMENT_TARGET=18.6` is required: Xcode 27 raised its own
+minimum to iOS 15.0, above what some of the vendored Delta cores under `Vendor/` are
+pinned to.
 
 ## 🔌 API Spezial-Implementierungen
 

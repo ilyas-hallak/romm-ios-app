@@ -130,10 +130,16 @@ Several of those pin their own `DEVELOPMENT_TEAM`, so a device build needs your 
     -destination 'generic/platform=iOS' \
     -allowProvisioningUpdates \
     DEVELOPMENT_TEAM=YOURTEAMID \
+    IPHONEOS_DEPLOYMENT_TARGET=18.6 \
     build
   ```
 
   `Signing.xcconfig` is still required, it supplies the unique app bundle identifier (`ROMM_BUNDLE_ID_PREFIX`) that no command-line override can set per-target.
+
+  `IPHONEOS_DEPLOYMENT_TARGET=18.6` is required from Xcode 27 on: Xcode 27 raised its own
+  minimum to iOS 15.0, above what some of the vendored Delta cores under `Vendor/` are
+  pinned to, so the app's own minimum has to be passed explicitly for every project in the
+  build.
 
 </details>
 
