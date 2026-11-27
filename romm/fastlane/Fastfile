@@ -37,6 +37,10 @@ SIGNING_TEAM_ID = ENV["IOS_DEVELOPMENT_TEAM"].to_s.strip.then do |team|
   team.empty? ? DEFAULT_DEVELOPMENT_TEAM : team
 end
 
+# Xcode 27 requires at least iOS 15.0, the vendored cores are pinned lower.
+# Passing the app's own minimum to every project avoids forking them.
+IOS_DEPLOYMENT_TARGET = "18.6"
+
 # The directory holding ./build, resolved from this file rather than from the
 # current working directory, which fastlane does not guarantee.
 def project_dir
@@ -169,7 +173,7 @@ def build_and_upload(scheme:, label:, expect_delta_cores:, skip_upload:)
     scheme: scheme,
     export_method: "app-store",
     # Both phases need the team: xcargs covers the archive, teamID the export.
-    xcargs: "CURRENT_PROJECT_VERSION=#{build} DEVELOPMENT_TEAM=#{SIGNING_TEAM_ID}",
+    xcargs: "CURRENT_PROJECT_VERSION=#{build} DEVELOPMENT_TEAM=#{SIGNING_TEAM_ID} IPHONEOS_DEPLOYMENT_TARGET=#{IOS_DEPLOYMENT_TARGET}",
     export_xcargs: prov_args,
     export_options: {
       signingStyle: "automatic",

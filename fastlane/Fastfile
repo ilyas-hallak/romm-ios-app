@@ -15,12 +15,6 @@ SIGNING_TEAM_ID = ENV['IOS_DEVELOPMENT_TEAM'].to_s.strip.then do |team|
   team.empty? ? DEFAULT_DEVELOPMENT_TEAM : team
 end
 
-# Xcode 27 raised its own floor to iOS 15.0, above what the vendored Delta
-# cores under Vendor/ are pinned to. The app's own minimum is 18.6 already,
-# so passing that for every project in the build graph satisfies Xcode
-# without lowering anything or forking the cores.
-IOS_DEPLOYMENT_TARGET = '18.6'
-
 private_lane :resolve_optional_app_store_api_key do
   key_id = ENV['APP_STORE_CONNECT_API_KEY_KEY_ID'].to_s.strip
   issuer_id = ENV['APP_STORE_CONNECT_API_KEY_ISSUER_ID'].to_s.strip
@@ -92,7 +86,7 @@ platform :ios do
       clean: true,
       export_method: 'app-store',
       export_team_id: SIGNING_TEAM_ID,
-      xcargs: "DEVELOPMENT_TEAM=#{SIGNING_TEAM_ID} IPHONEOS_DEPLOYMENT_TARGET=#{IOS_DEPLOYMENT_TARGET}",
+      xcargs: "DEVELOPMENT_TEAM=#{SIGNING_TEAM_ID}",
       output_directory: 'build',
       output_name: 'romm.ipa'
     )
