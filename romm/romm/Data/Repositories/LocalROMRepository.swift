@@ -24,6 +24,14 @@ protocol PLocalROMRepository {
 
     /// Gets the base URL for ROM storage
     var romsBaseURL: URL { get }
+
+    /// Stamps the local "last played" time for sorting downloaded ROMs offline.
+    func recordPlayed(romId: Int) throws
+}
+
+extension PLocalROMRepository {
+    // Test doubles that don't exercise the "last played" sort have nothing to opt into.
+    func recordPlayed(romId: Int) throws {}
 }
 
 class LocalROMRepository: PLocalROMRepository {
@@ -129,7 +137,8 @@ class LocalROMRepository: PLocalROMRepository {
                     md5Hash: file.md5Hash
                 )
             },
-            urlCover: rom.urlCover
+            urlCover: rom.urlCover,
+            lastPlayedAt: rom.lastPlayedAt
         )
 
         // Save metadata to .metadata.json
@@ -156,6 +165,12 @@ class LocalROMRepository: PLocalROMRepository {
 
     func getDownloadedROMsCount() throws -> Int {
         return try getAllDownloadedROMs().count
+    }
+
+    func recordPlayed(romId: Int) throws {
+        guard var rom = try getDownloadedROM(byId: romId) else { return }
+        rom.lastPlayedAt = Date()
+        try saveDownloadedROM(rom)
     }
 
     // MARK: - Private Helper Methods
@@ -227,7 +242,8 @@ class LocalROMRepository: PLocalROMRepository {
             totalSizeBytes: totalSize,
             localDirectory: relativePath,
             files: downloadedFiles,
-            urlCover: metadata.urlCover
+            urlCover: metadata.urlCover,
+            lastPlayedAt: metadata.lastPlayedAt
         )
     }
 

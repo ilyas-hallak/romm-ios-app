@@ -11,6 +11,7 @@ struct DownloadedROM: Identifiable, Codable, Equatable, Hashable {
     let localDirectory: String  // Path relative to ROMs directory
     var files: [DownloadedROMFile]
     let urlCover: String?
+    var lastPlayedAt: Date? = nil
 
     var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: totalSizeBytes, countStyle: .file)
@@ -88,6 +89,7 @@ struct ROMMetadata: Codable {
     let downloadedAt: Date
     let files: [ROMFileMetadata]
     let urlCover: String?
+    var lastPlayedAt: Date? = nil
 }
 
 struct ROMFileMetadata: Codable {

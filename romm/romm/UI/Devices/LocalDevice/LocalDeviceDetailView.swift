@@ -31,6 +31,9 @@ struct LocalDeviceDetailView: View {
                 .accessibilityLabel("Download Queue")
             }
             ToolbarItem(placement: .navigationBarTrailing) {
+                sortMenu
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     showingDeviceManagement = true
                 } label: {
@@ -73,6 +76,22 @@ struct LocalDeviceDetailView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort by", selection: Binding(
+                get: { viewModel.sortOption },
+                set: { viewModel.updateSortOption($0) }
+            )) {
+                ForEach(DownloadSortOption.allCases) { option in
+                    Text(option.rawValue).tag(option)
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+        .accessibilityLabel("Sort Downloads")
     }
 
     private var downloadQueueIcon: some View {

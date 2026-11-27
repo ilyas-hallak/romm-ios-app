@@ -40,6 +40,7 @@ struct PlatformROMsListView: View {
     private let factory: PDependencyFactory
     private let launchUseCase: PLaunchEmulatorUseCase
     private let updateLastPlayedUseCase: PUpdateLastPlayedUseCase
+    private let recordLocalLastPlayedUseCase: PRecordLocalLastPlayedUseCase
     private let saveStore: PSaveStore
 
     init(platformName: String, viewModel: LocalDeviceDetailViewModel, onDelete: @escaping (DownloadedROM) -> Void, factory: PDependencyFactory = DefaultDependencyFactory.shared) {
@@ -49,6 +50,7 @@ struct PlatformROMsListView: View {
         self.factory = factory
         self.launchUseCase = factory.makeLaunchEmulatorUseCase()
         self.updateLastPlayedUseCase = factory.makeUpdateLastPlayedUseCase()
+        self.recordLocalLastPlayedUseCase = factory.makeRecordLocalLastPlayedUseCase()
         self.saveStore = factory.saveStore
         _share = State(initialValue: factory.makeShareROMViewModel())
         _externalPlay = State(initialValue: ExternalPlayCoordinator(factory: factory))
@@ -194,8 +196,11 @@ struct PlatformROMsListView: View {
         // Set the slot before the decision so the cover builder reads it.
         pendingResumeSlot = resumeSlot
         launchDecision = decision
-        Task { [updateLastPlayedUseCase] in
+        Task { [updateLastPlayedUseCase, recordLocalLastPlayedUseCase, viewModel] in
             try? await updateLastPlayedUseCase.execute(romId: rom.id)
+            try? recordLocalLastPlayedUseCase.execute(romId: rom.id)
+            // Reloads so a "Last Played" sort reflects this launch immediately.
+            await viewModel.loadDownloadedROMsAsync()
         }
     }
 

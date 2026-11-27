@@ -437,7 +437,21 @@ class MockDependencyFactory: PDependencyFactory {
     func makeSaveGroupRomsUseCase() -> PSaveGroupRomsUseCase {
         SaveGroupRomsUseCase()
     }
-    
+
+    lazy var downloadSortPreferenceRepository: PDownloadSortPreferenceRepository = UserDefaultsDownloadSortPreferenceStore()
+
+    func makeGetDownloadSortOptionUseCase() -> PGetDownloadSortOptionUseCase {
+        GetDownloadSortOptionUseCase(repository: downloadSortPreferenceRepository)
+    }
+
+    func makeSaveDownloadSortOptionUseCase() -> PSaveDownloadSortOptionUseCase {
+        SaveDownloadSortOptionUseCase(repository: downloadSortPreferenceRepository)
+    }
+
+    func makeRecordLocalLastPlayedUseCase() -> PRecordLocalLastPlayedUseCase {
+        RecordLocalLastPlayedUseCase(localROMRepository: localROMRepository)
+    }
+
     // MARK: - SFTP ViewModels
     
     @MainActor func makeSFTPDevicesViewModel() -> SFTPDevicesViewModel {
